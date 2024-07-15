@@ -2,7 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus } from "lucide-react";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DataTable } from "@/components/data-table";
 import UploadButton from "./Upload-Button";
 import { ColumnDef } from "@tanstack/react-table";
@@ -13,6 +13,38 @@ type DataItem = Record<string, string | number>;
 const MainPage: React.FC = () => {
   const [data, setData] = useState<DataItem[]>([]);
   const [columns, setColumns] = useState<ColumnDef<DataItem>[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const response = await fetch('/api/get-csv-data');
+      if (!response.ok) {
+        throw new Error('Failed to fetch CSV data');
+      }
+      const fetchedData = await response.json();
+      if (fetchedData.length > 0) {
+        const generatedColumns: ColumnDef<DataItem>[] = Object.keys(fetchedData[0]).map((key) => ({
+          accessorKey: key,
+          header: key,
+        }));
+        setColumns(generatedColumns);
+        setData(fetchedData);
+      }
+    } catch (error) {
+      console.error('Error fetching CSV data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch CSV data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const onUpload = async (results: DataItem[]) => {
     if (results.length > 0) {
@@ -32,11 +64,9 @@ const MainPage: React.FC = () => {
           },
           body: JSON.stringify(results),
         });
-
         if (!response.ok) {
           throw new Error('Failed to upload CSV data');
         }
-
         const responseData = await response.json();
         toast({
           title: "Success",
@@ -58,18 +88,16 @@ const MainPage: React.FC = () => {
       <Card className="border-none drop-shadow-sm">
         <CardHeader className="gap-y-2 lg:flex-row lg:items-center lg:justify-between">
           <CardTitle className="text-xl line-clamp-1">
-            Accounts page
+            Data Table
           </CardTitle>
           <div className="flex items-center gap-x-2">
-            {/* <Button size="sm">
-              <Plus className="size-4 mr-2" />
-              Add New
-            </Button> */}
             <UploadButton onUpload={onUpload} />
           </div>
         </CardHeader>
         <CardContent>
-          {data.length > 0 ? (
+          {loading ? (
+            <p>Loading...</p>
+          ) : data.length > 0 ? (
             <DataTable
               columns={columns}
               data={data}
