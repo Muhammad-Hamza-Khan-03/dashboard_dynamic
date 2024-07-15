@@ -8,6 +8,12 @@ const routes = [
         href: "/",
         label: "Overview",
     },
+    
+    {
+        href: "/main",
+        label: "Main"
+    },
+            
     {
         href: "/transactions",
         label:"Transactions"
@@ -24,7 +30,6 @@ const routes = [
         href: "/settings",
         label: "Settings"
     },
-            
 ]
 export const Navigation = () => {
     const pathname=usePathname()
