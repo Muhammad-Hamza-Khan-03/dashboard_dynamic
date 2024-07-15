@@ -32,7 +32,7 @@ function AccountsPage() {
         </CardHeader>
         <CardContent>
           <DataTable
-            filterkey="email"
+            // filterkey="email"
             columns={columns}
             data={data} />
         </CardContent>
