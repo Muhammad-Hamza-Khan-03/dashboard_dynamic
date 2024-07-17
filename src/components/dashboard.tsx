@@ -50,7 +50,7 @@ const Dashboard: React.FC = () => {
       
       {/* Dashboard Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {numericColumns.slice(0, 4).map(column => (
+        {numericColumns.slice(1, 4).map(column => (
           <Card key={column}>
             <CardHeader>
               <CardTitle className="text-sm font-medium">{column}</CardTitle>
@@ -76,7 +76,7 @@ const Dashboard: React.FC = () => {
               <YAxis />
               <Tooltip />
               <Legend />
-              {numericColumns.slice(0, 3).map((column, index) => (
+              {numericColumns.slice(1, 4).map((column, index) => (
                 <Bar key={column} dataKey={column} fill={`hsl(${index * 120}, 70%, 50%)`} />
               ))}
             </BarChart>
@@ -97,7 +97,7 @@ const Dashboard: React.FC = () => {
               <YAxis />
               <Tooltip />
               <Legend />
-              {numericColumns.slice(0, 3).map((column, index) => (
+              {numericColumns.slice(1, 3).map((column, index) => (
                 <Line key={column} type="monotone" dataKey={column} stroke={`hsl(${index * 120}, 70%, 50%)`} />
               ))}
             </LineChart>
