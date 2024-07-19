@@ -12,6 +12,18 @@ const data:Payment[] = [
       amount: 100,
       status: "pending",
       email: "m@example.com",
+  },
+    {
+      id: "728ed52f",
+      amount: 0,
+      status: "pending",
+      email: "m@example.com",
+  },
+      {
+      id: "728ed52f",
+      amount: 10,
+      status: "pending",
+      email: "m@example.com",
     },
 ]
 function AccountsPage() {
@@ -32,7 +44,10 @@ function AccountsPage() {
         </CardHeader>
         <CardContent>
           <DataTable
-            // filterkey="email"
+            onDelete={()=>{} }
+            //disabled implement later
+            disabled={false}
+            filterkey="email"
             columns={columns}
             data={data} />
         </CardContent>

@@ -10,6 +10,7 @@ import {
 } from '@clerk/nextjs'
 
 import "./globals.css";
+import { SheetProvider } from "@/providers/sheet-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -26,21 +27,11 @@ export default function RootLayout({
   return (
     <ClerkProvider>
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+    <SheetProvider />
+        <body className={inter.className}>{children}</body>
+        
       </html>
       </ClerkProvider>
-  //   <ClerkProvider>
-  //   <html lang='en'>
-  //     <body className={inter.className}>
-  //       <SignedOut>
-  //         <SignInButton />
-  //       </SignedOut>
-  //       <SignedIn>
-  //         <UserButton />
-  //       </SignedIn>
-  //       {children}
-  //     </body>
-  //   </html>
-  // </ClerkProvider>
+
   );
 }
