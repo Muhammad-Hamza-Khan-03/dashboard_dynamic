@@ -14,6 +14,7 @@ type DataItem = {
 type Column = {
   accessorKey: string;
   header: string;
+  isNumeric: boolean;
 };
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -31,7 +32,10 @@ const OverviewDashboard: React.FC = () => {
 
   useEffect(() => {
     if (columns.length > 0 && !selectedDataKey) {
-      setSelectedDataKey(columns[0].accessorKey);
+      const firstNumericColumn = columns.find(col => col.isNumeric);
+      if (firstNumericColumn) {
+        setSelectedDataKey(firstNumericColumn.accessorKey);
+      }
     }
   }, [columns]);
 
@@ -40,12 +44,26 @@ const OverviewDashboard: React.FC = () => {
       const response = await fetch("/api/get-csv-data");
       if (!response.ok) throw new Error("Failed to fetch data");
       const fetchedData = await response.json();
-      setData(fetchedData);
       
-      if (fetchedData.length > 0) {
-        const generatedColumns: Column[] = Object.keys(fetchedData[0]).map((key) => ({
+      const processedData = fetchedData.map((item: DataItem) => {
+        const processedItem: DataItem = {};
+        Object.keys(item).forEach(key => {
+          if (key === 'id' || key === 'name' || key === 'species') {
+            processedItem[key] = item[key];
+          } else {
+            processedItem[key] = parseFloat(item[key]);
+          }
+        });
+        return processedItem;
+      });
+      
+      setData(processedData);
+      
+      if (processedData.length > 0) {
+        const generatedColumns: Column[] = Object.keys(processedData[0]).map((key) => ({
           accessorKey: key,
           header: key,
+          isNumeric: typeof processedData[0][key] === 'number'
         }));
         setColumns(generatedColumns);
       }
@@ -89,28 +107,29 @@ const OverviewDashboard: React.FC = () => {
               onChange={(e) => setSelectedDataKey(e.target.value)}
               className="border p-2 rounded"
             >
-              {columns.map((column) => (
+              {columns.filter(col => col.isNumeric).map((column) => (
                 <option key={column.accessorKey} value={column.accessorKey}>
                   {column.header}
                 </option>
               ))}
             </select>
           </div>
-          {/* <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%">
             {selectedChartType === 'bar' && (
               <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
+                <XAxis dataKey="id" />
                 <YAxis />
                 <Tooltip />
                 <Legend />
                 <Bar dataKey={selectedDataKey} fill="#8884d8" />
               </BarChart>
-            )}
+            )} 
+            
             {selectedChartType === 'line' && (
               <LineChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
+                <XAxis dataKey="id" />
                 <YAxis />
                 <Tooltip />
                 <Legend />
@@ -122,7 +141,7 @@ const OverviewDashboard: React.FC = () => {
                 <Pie
                   data={data}
                   dataKey={selectedDataKey}
-                  nameKey="name"
+                  nameKey="id"
                   cx="50%"
                   cy="50%"
                   outerRadius={80}
@@ -137,7 +156,7 @@ const OverviewDashboard: React.FC = () => {
                 <Legend />
               </PieChart>
             )}
-          </ResponsiveContainer> */}
+          </ResponsiveContainer>
         </CardContent>
       </Card>
       <Card>
@@ -146,12 +165,9 @@ const OverviewDashboard: React.FC = () => {
         </CardHeader>
         <CardContent>
           <p>Total Records: {data.length}</p>
-          {columns.map((column) => {
-            if (typeof data[0]?.[column.accessorKey] === 'number') {
-              const avg = data.reduce((sum, item) => sum + item[column.accessorKey], 0) / data.length;
-              return <p key={column.accessorKey}>Average {column.header}: {avg.toFixed(2)}</p>;
-            }
-            return null;
+          {columns.filter(col => col.isNumeric).map((column) => {
+            const avg = data.reduce((sum, item) => sum + item[column.accessorKey], 0) / data.length;
+            return <p key={column.accessorKey}>Average {column.header}: {avg.toFixed(2)}</p>;
           })}
         </CardContent>
       </Card>

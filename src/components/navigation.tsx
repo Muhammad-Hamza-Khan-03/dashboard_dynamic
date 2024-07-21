@@ -10,35 +10,32 @@ const routes = [
     },
     
     {
-        href: "/main",
-        label: "Main"
+        href: "/upload",
+        label: "Upload"
     },
             
     {
-        href: "/transactions",
-        label:"Transactions"
+        href: "/overview",
+        label:"Overview"
     },
     {
         href: "/accounts",
         label: "Accounts"
     },
     {
-        href: "/categories",
-        label: "Categories"
+        href: "/multiple",
+        label: "Multiple_Dashboards"
     },
     {
         href: "/settings",
         label: "Settings"
     },
     {
-        href: "/overview",
-        label: "overview"
-    },
+        href: "/custom_layout",
+        label:"Custom Layouts"
+    }
    
-    {
-        href: "/multiple",
-        label: "Multi_Dashboard"
-    },
+   
 ]
 export const Navigation = () => {
     const pathname=usePathname()

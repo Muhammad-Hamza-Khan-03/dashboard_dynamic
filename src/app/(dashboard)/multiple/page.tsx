@@ -1,3 +1,4 @@
+"use client"
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,10 +34,23 @@ const MultiDashboardPage: React.FC = () => {
       const response = await fetch("/api/get-csv-data");
       if (!response.ok) throw new Error("Failed to fetch data");
       const fetchedData = await response.json();
-      setData(fetchedData);
-      
-      if (fetchedData.length > 0) {
-        const generatedColumns: Column[] = Object.keys(fetchedData[0]).map((key) => ({
+
+      const processedData = fetchedData.map((item: DataItem) => {
+        const processedItem: DataItem = {};
+        Object.keys(item).forEach(key => {
+          if (key === 'id' || key === 'name' || key === 'species') {
+            processedItem[key] = item[key];
+          } else {
+            processedItem[key] = parseFloat(item[key]);
+          }
+        });
+        return processedItem;
+      });
+
+      setData(processedData);
+
+      if (processedData.length > 0) {
+        const generatedColumns: Column[] = Object.keys(processedData[0]).map((key) => ({
           accessorKey: key,
           header: key,
         }));
@@ -234,65 +248,40 @@ const MultiDashboardPage: React.FC = () => {
     </div>
   );
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <Loader2 className="mr-2 h-16 w-16 animate-spin" />
-        <p>Loading data...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-red-500">Error</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>{error}</p>
-            <Button onClick={fetchData} className="mt-4">Retry</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (data.length === 0) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <Card>
-          <CardHeader>
-            <CardTitle>No Data Available</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>There is no data to display. Please upload a CSV file or check your data source.</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-4 max-w-screen-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Multi-Dashboard Overview</h1>
-      <Tabs defaultValue="overview">
-        <TabsList className="mb-4">
-          <TabsTrigger value="overview"><BarChartIcon className="mr-2" />Overview</TabsTrigger>
-          <TabsTrigger value="trends"><TrendingUp className="mr-2" />Trends</TabsTrigger>
-          <TabsTrigger value="insights"><PieChartIcon className="mr-2" />Insights</TabsTrigger>
-        </TabsList>
-        <TabsContent value="overview">
-          <Overview />
-        </TabsContent>
-        <TabsContent value="trends">
-          <Trends />
-        </TabsContent>
-        <TabsContent value="insights">
-          <Insights />
-        </TabsContent>
-      </Tabs>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-8">Data Dashboard</h1>
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="animate-spin mr-2" />
+          Loading data...
+        </div>
+      ) : error ? (
+        <div className="text-red-500">{error}</div>
+      ) : (
+        <Tabs defaultValue="overview">
+          <TabsList>
+            <TabsTrigger value="overview">
+              <TrendingUp className="mr-2 h-4 w-4" /> Overview
+            </TabsTrigger>
+            <TabsTrigger value="trends">
+              <BarChartIcon className="mr-2 h-4 w-4" /> Trends
+            </TabsTrigger>
+            <TabsTrigger value="insights">
+              <PieChartIcon className="mr-2 h-4 w-4" /> Insights
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="overview">
+            <Overview />
+          </TabsContent>
+          <TabsContent value="trends">
+            <Trends />
+          </TabsContent>
+          <TabsContent value="insights">
+            <Insights />
+          </TabsContent>
+        </Tabs>
+      )}
     </div>
   );
 };
