@@ -6,7 +6,7 @@ import NavButton from "./nav-button";
 const routes = [
     {
         href: "/",
-        label: "Overview",
+        label: "Home",
     },
     
     {
@@ -29,6 +29,15 @@ const routes = [
     {
         href: "/settings",
         label: "Settings"
+    },
+    {
+        href: "/overview",
+        label: "overview"
+    },
+   
+    {
+        href: "/multiple",
+        label: "Multi_Dashboard"
     },
 ]
 export const Navigation = () => {
