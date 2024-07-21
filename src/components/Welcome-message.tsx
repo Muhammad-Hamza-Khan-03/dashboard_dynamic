@@ -10,7 +10,7 @@ function WelcomeMsg() {
               Welcome Back{isLoaded ? ",":" "}{user?.firstName} 
           </h2>
           <p className='text-sm lg:text-base text-[#89b6fd]'>
-              This is your Overview
+              Great to see you back!
           </p>
     </div>
   )
