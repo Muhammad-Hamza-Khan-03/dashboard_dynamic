@@ -13,6 +13,7 @@ type DataItem = {
 type Column = {
   accessorKey: string;
   header: string;
+  isNumeric: boolean;
 };
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -22,6 +23,7 @@ const MultiDashboardPage: React.FC = () => {
   const [columns, setColumns] = useState<Column[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCategoricalColumn, setSelectedCategoricalColumn] = useState<string>('');
 
   useEffect(() => {
     fetchData();
@@ -38,10 +40,11 @@ const MultiDashboardPage: React.FC = () => {
       const processedData = fetchedData.map((item: DataItem) => {
         const processedItem: DataItem = {};
         Object.keys(item).forEach(key => {
-          if (key === 'id' || key === 'name' || key === 'species') {
-            processedItem[key] = item[key];
+          const value = item[key];
+          if (typeof value === 'string' && !isNaN(Number(value))) {
+            processedItem[key] = parseFloat(value);
           } else {
-            processedItem[key] = parseFloat(item[key]);
+            processedItem[key] = value;
           }
         });
         return processedItem;
@@ -53,8 +56,14 @@ const MultiDashboardPage: React.FC = () => {
         const generatedColumns: Column[] = Object.keys(processedData[0]).map((key) => ({
           accessorKey: key,
           header: key,
+          isNumeric: typeof processedData[0][key] === 'number'
         }));
         setColumns(generatedColumns);
+
+        const firstCategoricalColumn = generatedColumns.find(col => !col.isNumeric);
+        if (firstCategoricalColumn) {
+          setSelectedCategoricalColumn(firstCategoricalColumn.accessorKey);
+        }
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -64,10 +73,21 @@ const MultiDashboardPage: React.FC = () => {
     }
   };
 
-  const getNumericColumns = () => columns.filter(col => typeof data[0]?.[col.accessorKey] === 'number');
+  const getNumericColumns = () => columns.filter(col => col.isNumeric);
+  const getCategoricalColumns = () => columns.filter(col => !col.isNumeric);
 
   const calculateAverage = (column: string) => {
-    return data.reduce((sum, item) => sum + item[column], 0) / data.length;
+    const validValues = data.map(item => item[column]).filter(value => !isNaN(value));
+    return validValues.reduce((sum, value) => sum + value, 0) / validValues.length;
+  };
+
+  const getCategoricalData = () => {
+    const categoryCounts: { [key: string]: number } = {};
+    data.forEach(item => {
+      const category = item[selectedCategoricalColumn];
+      categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+    });
+    return Object.entries(categoryCounts).map(([name, value]) => ({ name, value }));
   };
 
   const Overview = () => (
@@ -118,16 +138,46 @@ const MultiDashboardPage: React.FC = () => {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Quick Stats</CardTitle>
+          <CardTitle>Categorical Distribution</CardTitle>
         </CardHeader>
-        <CardContent>
-          <ul>
-            {columns.slice(0, 5).map((column) => (
-              <li key={column.accessorKey} className="mb-2">
-                <strong>{column.header}:</strong> {data[0]?.[column.accessorKey]}
-              </li>
-            ))}
-          </ul>
+        <CardContent className="h-64">
+          {getCategoricalColumns().length > 0 ? (
+            <>
+              <select
+                value={selectedCategoricalColumn}
+                onChange={(e) => setSelectedCategoricalColumn(e.target.value)}
+                className="mb-2 p-2 border rounded"
+              >
+                {getCategoricalColumns().map(column => (
+                  <option key={column.accessorKey} value={column.accessorKey}>
+                    {column.header}
+                  </option>
+                ))}
+              </select>
+              <ResponsiveContainer width="100%" height="90%">
+                <PieChart>
+                  <Pie
+                    data={getCategoricalData()}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    label
+                  >
+                    {getCategoricalData().map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </>
+          ) : (
+            <p>No categorical data available for chart</p>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -184,7 +234,7 @@ const MultiDashboardPage: React.FC = () => {
             {getNumericColumns().slice(0, 3).map(column => {
               const firstValue = data[0]?.[column.accessorKey] || 0;
               const lastValue = data[data.length - 1]?.[column.accessorKey] || 0;
-              const growthRate = ((lastValue - firstValue) / firstValue) * 100;
+              const growthRate = firstValue !== 0 ? ((lastValue - firstValue) / firstValue) * 100 : 0;
               return (
                 <li key={column.accessorKey} className="mb-2">
                   <strong>{column.header}:</strong> {growthRate.toFixed(2)}%

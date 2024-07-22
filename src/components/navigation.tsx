@@ -23,18 +23,13 @@ const routes = [
         label: "Accounts"
     },
     {
-        href: "/multiple",
-        label: "Multiple_Dashboards"
+        href: "/custom_layout",
+        label:"Custom Layouts"
     },
     {
         href: "/settings",
         label: "Settings"
     },
-    {
-        href: "/custom_layout",
-        label:"Custom Layouts"
-    }
-   
    
 ]
 export const Navigation = () => {

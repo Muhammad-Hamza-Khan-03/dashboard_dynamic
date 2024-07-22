@@ -46,7 +46,7 @@ function AccountsPage() {
           <DataTable
             onDelete={()=>{} }
             //disabled implement later
-            disabled={false}
+            
             filterkey="email"
             columns={columns}
             data={data} />

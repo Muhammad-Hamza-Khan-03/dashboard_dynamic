@@ -25,16 +25,21 @@ const OverviewDashboard: React.FC = () => {
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
   const [selectedChartType, setSelectedChartType] = useState<'bar' | 'line' | 'pie'>('bar');
   const [selectedDataKey, setSelectedDataKey] = useState<string>('');
+  const [categoricalKey, setCategoricalKey] = useState<string>('');
 
   useEffect(() => {
     fetchData();
   }, []);
 
   useEffect(() => {
-    if (columns.length > 0 && !selectedDataKey) {
+    if (columns.length > 0) {
       const firstNumericColumn = columns.find(col => col.isNumeric);
-      if (firstNumericColumn) {
+      const firstCategoricalColumn = columns.find(col => !col.isNumeric);
+      if (firstNumericColumn && !selectedDataKey) {
         setSelectedDataKey(firstNumericColumn.accessorKey);
+      }
+      if (firstCategoricalColumn && !categoricalKey) {
+        setCategoricalKey(firstCategoricalColumn.accessorKey);
       }
     }
   }, [columns]);
@@ -48,10 +53,11 @@ const OverviewDashboard: React.FC = () => {
       const processedData = fetchedData.map((item: DataItem) => {
         const processedItem: DataItem = {};
         Object.keys(item).forEach(key => {
-          if (key === 'id' || key === 'name' || key === 'species') {
-            processedItem[key] = item[key];
+          const value = item[key];
+          if (typeof value === 'string' && !isNaN(Number(value))) {
+            processedItem[key] = parseFloat(value);
           } else {
-            processedItem[key] = parseFloat(item[key]);
+            processedItem[key] = value;
           }
         });
         return processedItem;
@@ -102,23 +108,36 @@ const OverviewDashboard: React.FC = () => {
                 <PieChartIcon className="mr-2 h-4 w-4" /> Pie
               </Button>
             </div>
-            <select
-              value={selectedDataKey}
-              onChange={(e) => setSelectedDataKey(e.target.value)}
-              className="border p-2 rounded"
-            >
-              {columns.filter(col => col.isNumeric).map((column) => (
-                <option key={column.accessorKey} value={column.accessorKey}>
-                  {column.header}
-                </option>
-              ))}
-            </select>
+            <div>
+              <select
+                value={selectedDataKey}
+                onChange={(e) => setSelectedDataKey(e.target.value)}
+                className="border p-2 rounded mr-2"
+              >
+                {columns.filter(col => col.isNumeric).map((column) => (
+                  <option key={column.accessorKey} value={column.accessorKey}>
+                    {column.header}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={categoricalKey}
+                onChange={(e) => setCategoricalKey(e.target.value)}
+                className="border p-2 rounded"
+              >
+                {columns.filter(col => !col.isNumeric).map((column) => (
+                  <option key={column.accessorKey} value={column.accessorKey}>
+                    {column.header}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <ResponsiveContainer width="100%" height="100%">
             {selectedChartType === 'bar' && (
               <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="id" />
+                <XAxis dataKey={categoricalKey} />
                 <YAxis />
                 <Tooltip />
                 <Legend />
@@ -129,7 +148,7 @@ const OverviewDashboard: React.FC = () => {
             {selectedChartType === 'line' && (
               <LineChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="id" />
+                <XAxis dataKey={categoricalKey} />
                 <YAxis />
                 <Tooltip />
                 <Legend />
@@ -141,7 +160,7 @@ const OverviewDashboard: React.FC = () => {
                 <Pie
                   data={data}
                   dataKey={selectedDataKey}
-                  nameKey="id"
+                  nameKey={categoricalKey}
                   cx="50%"
                   cy="50%"
                   outerRadius={80}
@@ -166,7 +185,8 @@ const OverviewDashboard: React.FC = () => {
         <CardContent>
           <p>Total Records: {data.length}</p>
           {columns.filter(col => col.isNumeric).map((column) => {
-            const avg = data.reduce((sum, item) => sum + item[column.accessorKey], 0) / data.length;
+            const validValues = data.map(item => item[column.accessorKey]).filter(value => !isNaN(value));
+            const avg = validValues.reduce((sum, value) => sum + value, 0) / validValues.length;
             return <p key={column.accessorKey}>Average {column.header}: {avg.toFixed(2)}</p>;
           })}
         </CardContent>
