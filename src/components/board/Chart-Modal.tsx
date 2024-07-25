@@ -1,6 +1,6 @@
 "use client"
 import Modal from "./modal";
-import {Months,expenses } from "./Chart-data";
+import {Months,expenses,sidebarData } from "./Chart-data";
 import React, { useState } from 'react'
 
 import {
@@ -20,7 +20,9 @@ ChartJS.register(CategoryScale,LinearScale,PointElement,LineElement)
 const chartOptions = {
     Responsive: true,
     plugins: {
-        legend: false
+        legend: {
+            display: false
+        }
     },
     scales: {
         x: {
@@ -30,8 +32,8 @@ const chartOptions = {
 
         },
         y: {
-            min: 2000,
-            max: 4000,
+            min: 20,
+            max: 400,
             ticks: {
                 stepSize: 500,
                 callback: (value: any) => Number(value) / 1000 + 'k',
@@ -73,12 +75,13 @@ const ChartModal = () => {
             </button>
             <Modal isOpen={showModal}
                 onDismiss={closeModalHandler}
-                title="Chart Modal">
+                title="Chart Modal"
+            sidebarColumns={sidebarData}>
                 
-                <div className="my-4 w-[800px] max-w-full">
+                <div className="my-4 w-full max-h-full">
                     {/* package:chart.js react-chartjs-2 */}
                     <Line
-                        // options={chartOptions}
+                        options={chartOptions}
                         data={chartData} />
                     
 </div>
