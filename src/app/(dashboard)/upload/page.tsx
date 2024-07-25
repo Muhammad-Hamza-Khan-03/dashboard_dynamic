@@ -8,7 +8,7 @@ import UploadButton from "./Upload-Button";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "@/components/ui/use-toast";
 
-const MainPage: React.FC = () => {
+const Upload_CSV: React.FC = () => {
   const [data, setData] = useState<any[]>([]);
   const [columns, setColumns] = useState<ColumnDef<any>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -186,4 +186,4 @@ const getColumnNames = (columns: ColumnDef<any, any>[]): string[] => {
   );
 };
 
-export default MainPage;
+export default Upload_CSV;

@@ -13,7 +13,10 @@ const routes = [
         href: "/upload",
         label: "Upload"
     },
-            
+    {
+        href: "/board",
+        label:"board"
+    },        
     {
         href: "/overview",
         label:"Overview"
@@ -30,6 +33,7 @@ const routes = [
         href: "/settings",
         label: "Settings"
     },
+
    
 ]
 export const Navigation = () => {
