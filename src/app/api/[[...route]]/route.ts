@@ -1,42 +1,23 @@
-import {z} from 'zod'
 import { Hono } from 'hono'
 import { handle } from 'hono/vercel'
-import { zValidator } from '@hono/zod-validator'
 export const runtime = 'edge'
-import { getAuth,clerkMiddleware } from '@hono/clerk-auth'
+import accounts from './accounts'
+import { HTTPException } from 'hono/http-exception';
 
 const app = new Hono().basePath('/api');
 
-// app.get(/route,middleware,c)=>{}
-let csvData: any[] = [];
+app.onError((err, c) => {
 
-app.post('/upload-csv', async (c) => {
-  const data = await c.req.json();
-  csvData = data;
-  return c.json({ message: 'Data received' });
-});
+  if (err instanceof HTTPException){
+  return err.getResponse();
+}
+return c.json({ error: "Internal error" }, 500); 
 
-app.get('/get-csv-data', (c) => {
-  return c.json(csvData);
-});
-
-export default app;
-
-app
-    .get(
-    "/hello",
-    clerkMiddleware(),
-     (c) => {
-         const auth = getAuth(c);
-         if (!auth?.userId)
-         {
-             return c.json({error:"Unauthorized"})
-    }
-         return c.json({
-             message: "Hello world",
-             userId:auth.userId,
-        })
 })
+const routes= app
+  .route("/accounts", accounts)
 
 export const GET = handle(app)
 export const POST = handle(app)
+
+export type AppType = typeof routes;
