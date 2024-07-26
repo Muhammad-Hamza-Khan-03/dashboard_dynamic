@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import React, { useState } from 'react';
 import Drag_Modal from "./D-Modal";
 import { BarChart as BarChartIcon, LineChart as LineChartIcon, PieChart as PieChartIcon } from 'lucide-react';
@@ -18,7 +18,8 @@ import {
 } from 'recharts';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { DragDropContext, Droppable, Draggable, DropResult, DraggableLocation } from 'react-beautiful-dnd';
+import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
+import { sortableKeyboardCoordinates, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
 // Chart type options
 const chartTypes = [
@@ -50,27 +51,15 @@ const DragChartModal = () => {
     const [yAxis, setYAxis] = useState('expense');
 
     const openModal = () => {
-        console.log("MoDEL OPENED")
+        console.log("Modal Opened");
         setIsModalOpen(true);
-    }
+    };
 
     const closeModal = () => setIsModalOpen(false);
 
-    const handleChartTypeChange = (type: string) => setChartType(type);
+    const handleChartTypeChange = (type: React.SetStateAction<string>) => setChartType(type);
 
-    const onDragEnd = (result:DropResult) => {
-        if (!result.destination) return;
-
-        const { destination, draggableId } = result;
-
-        if (destination.droppableId === 'x-axis') {
-            setXAxis(draggableId);
-        } else if (destination.droppableId === 'y-axis') {
-            setYAxis(draggableId);
-        }
-    };
-
-    const handleColumnClick = (columnId: string) => {
+    const handleColumnClick = (columnId: React.SetStateAction<string>) => {
         if (columnId === xAxis) {
             setXAxis('');
         } else if (columnId === yAxis) {
@@ -84,7 +73,7 @@ const DragChartModal = () => {
 
     const renderChart = () => {
         const ChartComponent = chartType === 'line' ? LineChart : chartType === 'bar' ? BarChart : PieChart;
-        
+
         return (
             <ResponsiveContainer width="100%" height={400}>
                 <ChartComponent data={sampleData}>
@@ -92,7 +81,7 @@ const DragChartModal = () => {
                         <>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey={xAxis} />
-                            <YAxis dataKey={yAxis} />
+                            <YAxis />
                             <Tooltip />
                         </>
                     )}
@@ -109,6 +98,67 @@ const DragChartModal = () => {
             </ResponsiveContainer>
         );
     };
+const Column = ({ column }:any) => {
+    const { attributes, listeners, setNodeRef, transform } = useDraggable({
+        id: column.id,
+    });
+
+    const style = {
+        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+        transition: transform ? 'transform 0.2s ease' : undefined, // Optional: Add smooth transition for when dragging stops
+    };
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={style}
+            {...listeners}
+            {...attributes}
+            className={`bg-white p-2 mb-2 rounded shadow cursor-pointer ${
+                column.id === xAxis || column.id === yAxis ? 'ring-2 ring-blue-500' : ''
+            }`}
+            onClick={() => handleColumnClick(column.id)}
+        >
+            {column.label}
+        </div>
+    );
+};
+
+    type dropcontainer = {
+        id: number,
+        children?:React.ReactNode
+}
+    const DroppableContainer = ({ id, children }:dropcontainer) => {
+        const { isOver, setNodeRef } = useDroppable({
+            id: id.toString(), // Ensure id is a string
+        });
+
+        const style = {
+            backgroundColor: isOver ? 'lightblue' : 'white',
+            padding: '0.5rem',
+            borderRadius: '0.375rem',
+            minHeight: '40px',
+            marginBottom: '1rem',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+        };
+
+        return (
+            <div ref={setNodeRef} style={style}>
+                {children}
+            </div>
+        );
+    };
+
+    const handleDragEnd = (event:any) => {
+        const { active, over } = event;
+        if (!over) return;
+
+        if (over.id === '1') { // x-axis
+            setXAxis(active.id);
+        } else if (over.id === '2') { // y-axis
+            setYAxis(active.id);
+        }
+    };
 
     return (
         <div>
@@ -119,83 +169,47 @@ const DragChartModal = () => {
                 title="Interactive Chart Builder"
             >
                 <div className="flex h-full">
-                    <div className="w-1/4 p-4 bg-gray-100 flex flex-col">
-                        <h3 className="font-bold mb-4">Chart Type</h3>
-                        <div className="grid grid-cols-3 gap-2 mb-6">
-                            {chartTypes.map(({ type, icon: Icon, label }) => (
-                                <Card 
-                                    key={type} 
-                                    className={`cursor-pointer transition-all ${chartType === type ? 'ring-2 ring-blue-500' : ''}`}
-                                    onClick={() => handleChartTypeChange(type)}
-                                >
-                                    <CardContent className="flex flex-col items-center justify-center p-2">
-                                        <Icon className="h-6 w-6 mb-1" />
-                                        <span className="text-xs">{label}</span>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                        <h3 className="font-bold mb-2">Columns</h3>
-                        <DragDropContext onDragEnd={onDragEnd}>
-                            <div className="mb-4">
-                                {columns.map((column, index) => (
-                                    <Draggable key={column.id} draggableId={column.id} index={index}>
-                                        {(provided) => (
-                                            <div
-                                                ref={provided.innerRef}
-                                                {...provided.draggableProps}
-                                                {...provided.dragHandleProps}
-                                                className={`bg-white p-2 mb-2 rounded shadow cursor-pointer ${
-                                                    column.id === xAxis || column.id === yAxis ? 'ring-2 ring-blue-500' : ''
-                                                }`}
-                                                onClick={() => handleColumnClick(column.id)}
-                                            >
-                                                {column.label}
-                                            </div>
-                                        )}
-                                    </Draggable>
+                    <DndContext onDragEnd={handleDragEnd}>
+                        <div className="w-1/4 p-4 bg-gray-100 flex flex-col">
+                            <h3 className="font-bold mb-4">Chart Type</h3>
+                            <div className="grid grid-cols-3 gap-2 mb-6">
+                                {chartTypes.map(({ type, icon: Icon, label }) => (
+                                    <Card
+                                        key={type}
+                                        className={`cursor-pointer transition-all ${chartType === type ? 'ring-2 ring-blue-500' : ''}`}
+                                        onClick={() => handleChartTypeChange(type)}
+                                    >
+                                        <CardContent className="flex flex-col items-center justify-center p-2">
+                                            <Icon className="h-6 w-6 mb-1" />
+                                            <span className="text-xs">{label}</span>
+                                        </CardContent>
+                                    </Card>
                                 ))}
                             </div>
+                            <h3 className="font-bold mb-2">Columns</h3>
+                            <SortableContext items={columns.map(column => column.id)} strategy={verticalListSortingStrategy}>
+                                {columns.map(column => (
+                                    <Column key={column.id} column={column} />
+                                ))}
+                            </SortableContext>
                             <div className="mt-auto">
                                 <h3 className="font-bold mb-2">Axes</h3>
-                                <Droppable droppableId="x-axis">
-                                    {(provided, snapshot) => (
-                                        <div 
-                                            {...provided.droppableProps} 
-                                            ref={provided.innerRef} 
-                                            className={`bg-white p-2 mb-2 rounded shadow min-h-[40px] ${
-                                                snapshot.isDraggingOver ? 'bg-blue-100' : ''
-                                            }`}
-                                        >
-                                            X-Axis: {xAxis || 'Drop here'}
-                                            {provided.placeholder}
-                                        </div>
-                                    )}
-                                </Droppable>
-                                <Droppable droppableId="y-axis">
-                                    {(provided, snapshot) => (
-                                        <div 
-                                            {...provided.droppableProps} 
-                                            ref={provided.innerRef} 
-                                            className={`bg-white p-2 rounded shadow min-h-[40px] ${
-                                                snapshot.isDraggingOver ? 'bg-blue-100' : ''
-                                            }`}
-                                        >
-                                            Y-Axis: {yAxis || 'Drop here'}
-                                            {provided.placeholder}
-                                        </div>
-                                    )}
-                                </Droppable>
+                                <DroppableContainer id={1}>
+                                    X-Axis: {xAxis || 'Drop here'}
+                                </DroppableContainer>
+                                <DroppableContainer id={2}>
+                                    Y-Axis: {yAxis || 'Drop here'}
+                                </DroppableContainer>
                             </div>
-                        </DragDropContext>
-                    </div>
-                    <div className="w-3/4 p-4">
-                        {renderChart()}
-                    </div>
+                        </div>
+                        <div className="w-3/4 p-4">
+                            {renderChart()}
+                        </div>
+                    </DndContext>
                 </div>
             </Drag_Modal>
         </div>
     );
-}
+};
 
 export default DragChartModal;
