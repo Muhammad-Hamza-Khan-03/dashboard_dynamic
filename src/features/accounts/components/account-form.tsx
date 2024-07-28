@@ -65,11 +65,11 @@ export const AccountForm = ({
                     )} />
                 
                 <Button className="w-full" disabled={disabled}>
-                    {id ?"Svae changes":"Create account"}
+                    {id ?"Save changes":"Create account"}
 
                 </Button>
 
-                {!!id && (<Button  //conditional render
+                {!!id && (<Button  //conditional render if id is present in form
                     type="button"
                     disabled={disabled}
                     onClick={handleDelete}
