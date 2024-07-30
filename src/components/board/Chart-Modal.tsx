@@ -194,7 +194,7 @@ const ChartModal = () => {
             <Modal
                 isOpen={showModal}
                 onDismiss={closeModal}
-                title="Chart Modal"
+                
                 sidebarColumns={columns.map(col => col.header)}
                 chartType={chartType}
                 onChartTypeChange={handleChartTypeChange}

@@ -162,11 +162,11 @@ const Column = ({ column }:any) => {
 
     return (
         <div>
-            <Button onClick={openModal}>Show Drag Chart Modal</Button>
+            <Button onClick={openModal}>Show Drag Chart</Button>
             <Drag_Modal
                 isOpen={isModalOpen}
                 onDismiss={closeModal}
-                title="Interactive Chart Builder"
+               
             >
                 <div className="flex h-full">
                     <DndContext onDragEnd={handleDragEnd}>
