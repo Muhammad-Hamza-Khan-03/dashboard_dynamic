@@ -1,4 +1,4 @@
-// stores/modalStore.ts
+
 import { create } from 'zustand';
 
 type ModalState = {
