@@ -1,9 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
 import Modal from "./modal";
-import { sidebarData } from "./Chart-data";
-import { useModalStore } from '@/features/chart-modal/hooks/useChartModal';
-
 import {
     LineChart,
     Line,
@@ -28,6 +25,7 @@ import {
     ResponsiveContainer,
     Legend,
 } from 'recharts';
+import { useModalStore } from '@/features/chart-modal/hooks/useChartModal';
 
 interface DataItem {
     [key: string]: string | number;
@@ -43,6 +41,7 @@ const ChartModal = () => {
     const { showModal, chartType, openModal, closeModal, setChartType } = useModalStore();
     const [data, setData] = useState<DataItem[]>([]);
     const [columns, setColumns] = useState<Column[]>([]);
+    const [selectedColumns, setSelectedColumns] = useState<string[]>([]); // Track selected columns
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -92,24 +91,31 @@ const ChartModal = () => {
         setChartType(event.target.value);
     };
 
+    const handleColumnSelect = (column: string) => {
+        setSelectedColumns(prev => 
+            prev.includes(column) ? prev.filter(col => col !== column) : [...prev, column]
+        );
+    };
+
+    const chartColor = "#ca3a12"; // Define a single color for all charts
+
     const renderChart = () => {
-        if (loading) return <div>Loading...</div>;
-        if (error) return <div>Error: {error}</div>;
-        if (data.length === 0) return <div>No data available</div>;
+        if (loading) return <div className="text-center">Loading...</div>;
+        if (error) return <div className="text-center text-red-600">Error: {error}</div>;
+        if (data.length === 0) return <div className="text-center">No data available</div>;
 
-        const numericColumns = columns.filter(col => col.isNumeric);
-        if (numericColumns.length === 0) return <div>No numeric data available for charting</div>;
+        const xAxisKey = selectedColumns[0]; // Use the first selected column as x-axis
+        const dataKeys = selectedColumns.slice(1); // Use the remaining columns for y-axis
 
-        const xAxisKey = columns[0].accessorKey; // Assuming the first column is suitable for x-axis
-        const dataKey = numericColumns[0].accessorKey; // Using the first numeric column for y-axis
-
-        const getRandomColor = () => `#${Math.floor(Math.random() * 16777215).toString(16)}`;
+        if (dataKeys.length === 0) return <div className="text-center">No numeric data selected for charting</div>;
 
         switch (chartType) {
             case "line":
                 return (
-                    <LineChart data={data}>
-                        <Line type="monotone" dataKey={dataKey} stroke="#ca3a12" />
+                    <LineChart data={data} width={600} height={400}>
+                        {dataKeys.map(key => (
+                            <Line key={key} type="monotone" dataKey={key} stroke={chartColor} />
+                        ))}
                         <CartesianGrid stroke="#ccc" />
                         <XAxis dataKey={xAxisKey} />
                         <YAxis />
@@ -119,8 +125,10 @@ const ChartModal = () => {
                 );
             case "bar":
                 return (
-                    <BarChart data={data}>
-                        <Bar dataKey={dataKey} fill="#ca3a12" />
+                    <BarChart data={data} width={600} height={400}>
+                        {dataKeys.map(key => (
+                            <Bar key={key} dataKey={key} fill={chartColor} />
+                        ))}
                         <CartesianGrid stroke="#ccc" />
                         <XAxis dataKey={xAxisKey} />
                         <YAxis />
@@ -130,10 +138,10 @@ const ChartModal = () => {
                 );
             case "pie":
                 return (
-                    <PieChart>
-                        <Pie data={data} dataKey={dataKey} nameKey={xAxisKey} cx="50%" cy="50%" outerRadius={100} fill="#ca3a12">
+                    <PieChart width={600} height={400}>
+                        <Pie data={data} dataKey={dataKeys[0]} nameKey={xAxisKey} cx="50%" cy="50%" outerRadius={100} fill={chartColor}>
                             {data.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={getRandomColor()} />
+                                <Cell key={`cell-${index}`} fill={chartColor} />
                             ))}
                         </Pie>
                         <Tooltip />
@@ -142,40 +150,48 @@ const ChartModal = () => {
                 );
             case "scatter":
                 return (
-                    <ScatterChart>
+                    <ScatterChart width={600} height={400}>
                         <CartesianGrid />
                         <XAxis dataKey={xAxisKey} type="number" />
-                        <YAxis dataKey={dataKey} type="number" />
-                        <Scatter name={dataKey} data={data} fill="#ca3a12" />
+                        {dataKeys.map(key => (
+                            <Scatter key={key} name={key} data={data} fill={chartColor} />
+                        ))}
+                        <YAxis type="number" />
                         <Tooltip cursor={{ strokeDasharray: '3 3' }} />
                         <Legend />
                     </ScatterChart>
                 );
             case "area":
                 return (
-                    <AreaChart data={data}>
+                    <AreaChart data={data} width={600} height={400}>
+                        {dataKeys.map(key => (
+                            <Area key={key} type="monotone" dataKey={key} stroke={chartColor} fill={chartColor} fillOpacity={0.3} />
+                        ))}
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey={xAxisKey} />
                         <YAxis />
                         <Tooltip />
-                        <Area type="monotone" dataKey={dataKey} stroke="#ca3a12" fill="#ca3a12" fillOpacity={0.3} />
                         <Legend />
                     </AreaChart>
                 );
             case "radar":
                 return (
-                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data}>
+                    <RadarChart cx="50%" cy="50%" outerRadius="80%" width={600} height={400} data={data}>
                         <PolarGrid />
                         <PolarAngleAxis dataKey={xAxisKey} />
                         <PolarRadiusAxis />
-                        <Radar name={dataKey} dataKey={dataKey} stroke="#ca3a12" fill="#ca3a12" fillOpacity={0.6} />
+                        {dataKeys.map(key => (
+                            <Radar key={key} name={key} dataKey={key} stroke={chartColor} fill={chartColor} fillOpacity={0.6} />
+                        ))}
                         <Legend />
                     </RadarChart>
                 );
             default:
                 return (
-                    <LineChart data={data}>
-                        <Line type="monotone" dataKey={dataKey} stroke="#ca3a12" />
+                    <LineChart data={data} width={600} height={400}>
+                        {dataKeys.map(key => (
+                            <Line key={key} type="monotone" dataKey={key} stroke={chartColor} />
+                        ))}
                         <CartesianGrid stroke="#ccc" />
                         <XAxis dataKey={xAxisKey} />
                         <YAxis />
@@ -188,18 +204,19 @@ const ChartModal = () => {
 
     return (
         <div>
-            <button className="px-4 py-2 bg-blue-900 text-white rounded-lg" onClick={openModal}>
-                Show Chart Modal
+            <button className="px-4 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-700" onClick={openModal}>
+                Simple Chart
             </button>
             <Modal
                 isOpen={showModal}
                 onDismiss={closeModal}
-                
                 sidebarColumns={columns.map(col => col.header)}
+                selectedColumns={selectedColumns}
+                onColumnSelect={handleColumnSelect}
                 chartType={chartType}
                 onChartTypeChange={handleChartTypeChange}
             >
-                <div className="my-4 w-full h-full">
+                <div className="my-4 w-full h-full overflow-hidden">
                     <ResponsiveContainer width="100%" height="100%">
                         {renderChart()}
                     </ResponsiveContainer>
@@ -207,6 +224,6 @@ const ChartModal = () => {
             </Modal>
         </div>
     );
-}
+};
 
 export default ChartModal;

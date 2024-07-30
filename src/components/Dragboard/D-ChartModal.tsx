@@ -162,7 +162,7 @@ const Column = ({ column }:any) => {
 
     return (
         <div>
-            <Button onClick={openModal}>Show Drag Chart</Button>
+            <Button onClick={openModal}>Dragable Chart</Button>
             <Drag_Modal
                 isOpen={isModalOpen}
                 onDismiss={closeModal}

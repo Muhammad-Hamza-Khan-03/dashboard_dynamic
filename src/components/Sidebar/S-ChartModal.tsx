@@ -96,7 +96,7 @@ const S_ChartModal = () => {
 
     return (
         <div>
-            <Button onClick={openModalHandler}>Show Chart Modal</Button>
+            <Button onClick={openModalHandler}>Side Chart</Button>
             <Modal
                 isOpen={showModal}
                 onDismiss={closeModalHandler}
