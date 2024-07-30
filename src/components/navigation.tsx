@@ -21,10 +21,7 @@ const routes = [
         href: "/overview",
         label:"Overview"
     },
-    {
-        href: "/accounts",
-        label: "Accounts"
-    },
+   
     {
         href: "/custom_layout",
         label:"Custom Layouts"

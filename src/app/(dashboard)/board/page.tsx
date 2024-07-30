@@ -1,7 +1,9 @@
 import ChartModal from '@/components/board/Chart-Modal'
 import DragChartModal from '@/components/Dragboard/D-ChartModal'
+import BarChart from '@/components/json-chart/barchart'
 import S_ChartModal from '@/components/Sidebar/S-ChartModal'
 import React from 'react'
+
 
 const Board_Main = () => {
   return (
@@ -12,6 +14,18 @@ const Board_Main = () => {
         <S_ChartModal />
         <DragChartModal />
       </div>
+    
+
+      
+   <div>
+        <h1>Bar Chart Example</h1>
+        <BarChart />
+      
+      <footer>
+        <p>Powered by Next.js and Plotly</p>
+      </footer>
+    </div >
+      
     </div>
   )
 }

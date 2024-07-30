@@ -6,6 +6,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { LineChart, Line } from 'recharts';
 import { PieChart, Pie, Cell } from 'recharts';
 import { Grid, List, BarChart as BarChartIcon, PieChart as PieChartIcon } from 'lucide-react';
+import { DataTable } from '@/components/data-table';
+import { ColumnDef } from '@tanstack/react-table';
 
 type DataItem = {
   [key: string]: any;
@@ -15,7 +17,7 @@ type Column = {
   accessorKey: string;
   header: string;
   isNumeric: boolean;
-};
+}; 
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
@@ -26,7 +28,7 @@ const OverviewDashboard: React.FC = () => {
   const [selectedChartType, setSelectedChartType] = useState<'bar' | 'line' | 'pie'>('bar');
   const [selectedDataKey, setSelectedDataKey] = useState<string>('');
   const [categoricalKey, setCategoricalKey] = useState<string>('');
-
+const [filterKey, setFilterKey] = useState("");
   useEffect(() => {
     fetchData();
   }, []);
@@ -101,12 +103,12 @@ const OverviewDashboard: React.FC = () => {
               >
                 <LineChart className="mr-2 h-4 w-4" /> Line
               </Button>
-              <Button
+              {/* <Button
                 onClick={() => setSelectedChartType('pie')}
                 variant={selectedChartType === 'pie' ? 'default' : 'outline'}
               >
                 <PieChartIcon className="mr-2 h-4 w-4" /> Pie
-              </Button>
+              </Button> */}
             </div>
             <div>
               <select
@@ -155,7 +157,7 @@ const OverviewDashboard: React.FC = () => {
                 <Line type="monotone" dataKey={selectedDataKey} stroke="#8884d8" />
               </LineChart>
             )}
-            {selectedChartType === 'pie' && (
+            {/* {selectedChartType === 'pie' && (
               <PieChart>
                 <Pie
                   data={data}
@@ -174,7 +176,7 @@ const OverviewDashboard: React.FC = () => {
                 <Tooltip />
                 <Legend />
               </PieChart>
-            )}
+            )} */}
           </ResponsiveContainer>
         </CardContent>
       </Card>
@@ -238,6 +240,22 @@ const OverviewDashboard: React.FC = () => {
     </Card>
   );
 
+  const getColumnNames = (columns: ColumnDef<any, any>[]): string[] => {
+  return columns.map((column) => {
+    if ('accessorKey' in column) {
+      return column.accessorKey as string;
+    }
+    if ('id' in column && typeof column.id === 'string') {
+      return column.id;
+    }
+    if ('header' in column && typeof column.header === 'string') {
+      return column.header;
+    }
+    // If none of the above, return undefined
+    return undefined;
+  }).filter((name): name is string => name !== undefined);
+  };
+   const columnNames = getColumnNames(columns);
   return (
     <div className="max-w-screen-2xl mx-auto w-full pb-10 space-y-4">
       <div className="flex justify-end space-x-2">
@@ -248,7 +266,22 @@ const OverviewDashboard: React.FC = () => {
           <List className="mr-2 h-4 w-4" /> List
         </Button>
       </div>
-      {layout === 'grid' ? <GridLayout /> : <ListView />}
+      {layout === 'grid' ? <GridLayout /> : 
+        <>
+      <select value={filterKey} onChange={(e) => setFilterKey(e.target.value)}>
+                  {columnNames.map(name =>
+                  (
+                    <option key={name} value={name}>{name}</option>
+                  )
+                  )}
+                </select>
+
+                <DataTable
+                  columns={columns}
+                  data={data}
+                  onDelete={() => { } }
+            filterkey={filterKey} />
+                  </>}
     </div>
   );
 };

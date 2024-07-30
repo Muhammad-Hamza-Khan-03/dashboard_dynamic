@@ -10,7 +10,6 @@ import {
 } from '@clerk/nextjs'
 
 import "./globals.css";
-import { SheetProvider } from "@/providers/sheet-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -27,7 +26,6 @@ export default function RootLayout({
   return (
     <ClerkProvider>
     <html lang="en">
-    <SheetProvider />
         <body className={inter.className}>{children}</body>
         
       </html>
