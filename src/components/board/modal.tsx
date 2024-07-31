@@ -33,9 +33,7 @@ const Modal = ({ isOpen, title = "My modal", onDismiss, children, sidebarColumns
                             <option value="line">Line Chart</option>
                             <option value="bar">Bar Chart</option>
                             <option value="pie">Pie Chart</option>
-                            <option value="scatter">Scatter Chart</option>
-                            <option value="area">Area Chart</option>
-                            <option value="radar">Radar Chart</option>
+                            
                         </select>
                     </div>
                     <div className="mb-4">

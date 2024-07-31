@@ -19,7 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
-import { sortableKeyboardCoordinates, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
 // Chart type options
 const chartTypes = [
@@ -57,9 +57,9 @@ const DragChartModal = () => {
 
     const closeModal = () => setIsModalOpen(false);
 
-    const handleChartTypeChange = (type: React.SetStateAction<string>) => setChartType(type);
+    const handleChartTypeChange = (type: string) => setChartType(type);
 
-    const handleColumnClick = (columnId: React.SetStateAction<string>) => {
+    const handleColumnClick = (columnId: string) => {
         if (columnId === xAxis) {
             setXAxis('');
         } else if (columnId === yAxis) {
@@ -98,39 +98,41 @@ const DragChartModal = () => {
             </ResponsiveContainer>
         );
     };
-const Column = ({ column }:any) => {
-    const { attributes, listeners, setNodeRef, transform } = useDraggable({
-        id: column.id,
-    });
 
-    const style = {
-        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-        transition: transform ? 'transform 0.2s ease' : undefined, // Optional: Add smooth transition for when dragging stops
+    const Column = ({ column }: { column: { id: string; label: string } }) => {
+        const { attributes, listeners, setNodeRef, transform } = useDraggable({
+            id: column.id,
+        });
+
+        const style = {
+            transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+            transition: transform ? 'transform 0.2s ease' : undefined,
+        };
+
+        return (
+            <div
+                ref={setNodeRef}
+                style={style}
+                {...listeners}
+                {...attributes}
+                className={`bg-white p-2 mb-2 rounded shadow cursor-pointer ${
+                    column.id === xAxis || column.id === yAxis ? 'ring-2 ring-blue-500' : ''
+                }`}
+                onClick={() => handleColumnClick(column.id)}
+            >
+                {column.label}
+            </div>
+        );
     };
 
-    return (
-        <div
-            ref={setNodeRef}
-            style={style}
-            {...listeners}
-            {...attributes}
-            className={`bg-white p-2 mb-2 rounded shadow cursor-pointer ${
-                column.id === xAxis || column.id === yAxis ? 'ring-2 ring-blue-500' : ''
-            }`}
-            onClick={() => handleColumnClick(column.id)}
-        >
-            {column.label}
-        </div>
-    );
-};
+    type DropContainerProps = {
+        id: number;
+        children?: React.ReactNode;
+    };
 
-    type dropcontainer = {
-        id: number,
-        children?:React.ReactNode
-}
-    const DroppableContainer = ({ id, children }:dropcontainer) => {
+    const DroppableContainer = ({ id, children }: DropContainerProps) => {
         const { isOver, setNodeRef } = useDroppable({
-            id: id.toString(), // Ensure id is a string
+            id: id.toString(),
         });
 
         const style = {
@@ -149,7 +151,7 @@ const Column = ({ column }:any) => {
         );
     };
 
-    const handleDragEnd = (event:any) => {
+    const handleDragEnd = (event: any) => {
         const { active, over } = event;
         if (!over) return;
 
@@ -162,11 +164,10 @@ const Column = ({ column }:any) => {
 
     return (
         <div>
-            <Button onClick={openModal}>Dragable Chart</Button>
+            <Button onClick={openModal}>Draggable Chart</Button>
             <Drag_Modal
                 isOpen={isModalOpen}
                 onDismiss={closeModal}
-               
             >
                 <div className="flex h-full">
                     <DndContext onDragEnd={handleDragEnd}>

@@ -9,7 +9,7 @@ type ModalState = {
     setChartType: (type: string) => void;
 };
 
-export const useModalStore = create<ModalState>((set) => ({
+export const useModalSheet = create<ModalState>((set) => ({
     showModal: false,
     chartType: 'line',
     openModal: () => set({ showModal: true }),

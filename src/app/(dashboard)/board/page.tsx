@@ -18,7 +18,7 @@ const Board_Main = () => {
        </div>
       <div className='w-3/4 p-4'>
         <h2 className='text-xl font-semibold mb-4 text-center'>Select</h2>
-        {/* Place the content of the selected modal here */}
+        
       </div>
     </div>
       

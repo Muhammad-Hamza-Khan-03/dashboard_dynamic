@@ -25,66 +25,28 @@ import {
     ResponsiveContainer,
     Legend,
 } from 'recharts';
-import { useModalStore } from '@/features/chart-modal/hooks/useChartModal';
-
-interface DataItem {
-    [key: string]: string | number;
-}
-
-interface Column {
-    accessorKey: string;
-    header: string;
-    isNumeric: boolean;
-}
+import { useModalSheet } from '@/features/chart-modal/hooks/useChartModal-sheet';
+import { fetchData } from './fetchDataUtils'; // Import the utility function
+import { Button } from '../ui/button';
 
 const ChartModal = () => {
-    const { showModal, chartType, openModal, closeModal, setChartType } = useModalStore();
-    const [data, setData] = useState<DataItem[]>([]);
-    const [columns, setColumns] = useState<Column[]>([]);
-    const [selectedColumns, setSelectedColumns] = useState<string[]>([]); // Track selected columns
+    const { showModal, chartType, openModal, closeModal, setChartType } = useModalSheet();
+    const [data, setData] = useState<any[]>([]);
+    const [columns, setColumns] = useState<any[]>([]);
+    const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchData = async () => {
-        try {
-            setLoading(true);
-            const response = await fetch("/api/get-csv-data");
-            if (!response.ok) throw new Error("Failed to fetch data");
-            const fetchedData = await response.json();
-            
-            const processedData = fetchedData.map((item: DataItem) => {
-                const processedItem: DataItem = {};
-                Object.keys(item).forEach(key => {
-                    const value = item[key];
-                    if (typeof value === 'string' && !isNaN(Number(value))) {
-                        processedItem[key] = parseFloat(value);
-                    } else {
-                        processedItem[key] = value;
-                    }
-                });
-                return processedItem;
-            });
-            
-            setData(processedData);
-            
-            if (processedData.length > 0) {
-                const generatedColumns: Column[] = Object.keys(processedData[0]).map((key) => ({
-                    accessorKey: key,
-                    header: key,
-                    isNumeric: typeof processedData[0][key] === 'number'
-                }));
-                setColumns(generatedColumns);
-            }
-            setLoading(false);
-        } catch (error) {
-            console.error("Error fetching data:", error);
-            setError("Failed to fetch data");
-            setLoading(false);
-        }
-    };
-
     useEffect(() => {
-        fetchData();
+        const loadData = async () => {
+            const result = await fetchData();
+            setData(result.data);
+            setColumns(result.columns);
+            setError(result.error);
+            setLoading(false);
+        };
+
+        loadData();
     }, []);
 
     const handleChartTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -107,7 +69,7 @@ const ChartModal = () => {
         const xAxisKey = selectedColumns[0]; // Use the first selected column as x-axis
         const dataKeys = selectedColumns.slice(1); // Use the remaining columns for y-axis
 
-        if (dataKeys.length === 0) return <div className="text-center">No numeric data selected for charting</div>;
+        if (dataKeys.length === 0) return <div className="text-center">Select a column</div>;
 
         switch (chartType) {
             case "line":
@@ -148,44 +110,7 @@ const ChartModal = () => {
                         <Legend />
                     </PieChart>
                 );
-            case "scatter":
-                return (
-                    <ScatterChart width={600} height={400}>
-                        <CartesianGrid />
-                        <XAxis dataKey={xAxisKey} type="number" />
-                        {dataKeys.map(key => (
-                            <Scatter key={key} name={key} data={data} fill={chartColor} />
-                        ))}
-                        <YAxis type="number" />
-                        <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                        <Legend />
-                    </ScatterChart>
-                );
-            case "area":
-                return (
-                    <AreaChart data={data} width={600} height={400}>
-                        {dataKeys.map(key => (
-                            <Area key={key} type="monotone" dataKey={key} stroke={chartColor} fill={chartColor} fillOpacity={0.3} />
-                        ))}
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey={xAxisKey} />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                    </AreaChart>
-                );
-            case "radar":
-                return (
-                    <RadarChart cx="50%" cy="50%" outerRadius="80%" width={600} height={400} data={data}>
-                        <PolarGrid />
-                        <PolarAngleAxis dataKey={xAxisKey} />
-                        <PolarRadiusAxis />
-                        {dataKeys.map(key => (
-                            <Radar key={key} name={key} dataKey={key} stroke={chartColor} fill={chartColor} fillOpacity={0.6} />
-                        ))}
-                        <Legend />
-                    </RadarChart>
-                );
+            
             default:
                 return (
                     <LineChart data={data} width={600} height={400}>
@@ -204,9 +129,9 @@ const ChartModal = () => {
 
     return (
         <div>
-            <button className="px-4 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-700" onClick={openModal}>
+            <Button className="px-4 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-700" onClick={openModal}>
                 Simple Chart
-            </button>
+            </Button>
             <Modal
                 isOpen={showModal}
                 onDismiss={closeModal}

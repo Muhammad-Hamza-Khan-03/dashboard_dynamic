@@ -7,8 +7,8 @@ import { DataTable } from "@/components/data-table";
 import UploadButton from "./Upload-Button";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "@/components/ui/use-toast";
-
 const Upload_CSV: React.FC = () => {
+  
   const [data, setData] = useState<any[]>([]);
   const [columns, setColumns] = useState<ColumnDef<any>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,7 +156,9 @@ const getColumnNames = (columns: ColumnDef<any, any>[]): string[] => {
             <UploadButton onUpload={onUpload} />
             <Button variant="destructive" onClick={handleDelete}>Delete Selected</Button>
           </div>
+  
         </CardHeader>
+  
         <CardContent>
 
           {loading ? (
@@ -186,4 +188,4 @@ const getColumnNames = (columns: ColumnDef<any, any>[]): string[] => {
   );
 };
 
-export default Upload_CSV;
+export default Upload_CSV; 
