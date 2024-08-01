@@ -82,14 +82,14 @@ const UploadButton: React.FC<Props> = ({ onUpload }) => {
                 onChange={handleFileChange} 
                 style={{ display: 'none' }}
             />
-            <Button
+            {/* <Button
                 size="sm"
                 className="w-full lg:w-auto"
                 onClick={handleButtonClick}
             >
                 <Upload className="size-4 mr-2" />
                 Import
-            </Button>
+            </Button> */}
         </div>
     );
 };

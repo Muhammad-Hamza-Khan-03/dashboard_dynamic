@@ -11,16 +11,13 @@ const routes = [
     
     {
         href: "/upload",
-        label: "Upload"
+        label: "Data Table"
     },
     {
         href: "/csvupload",
-        label: "db-sql-upload"
+        label: "Upload file"
     },
-    {
-        href: "/csvview",
-        label: "db-sql-view"
-    },
+    
     
     {
         href: "/board",

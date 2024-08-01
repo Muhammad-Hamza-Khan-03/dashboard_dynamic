@@ -38,7 +38,7 @@ def upload_file(user_id):
         app.logger.warning("No selected file")
         return 'No selected file', 400
     
-    if file and file.filename.endswith('.csv'):
+    if file and file.filename.endswith('.csv') or file.filename.endswith('.xlsx'):
         try:
             content = file.read()
             conn = sqlite3.connect('user_csvs.db')
@@ -90,6 +90,21 @@ def get_file(user_id, filename):
     except Exception as e:
         app.logger.error(f"Error retrieving file: {str(e)}")
         return str(e), 500
-
+@app.route('/delete_file/<user_id>/<filename>', methods=['DELETE'])
+def delete_file(user_id, filename):
+    try:
+        conn = sqlite3.connect('user_csvs.db')
+        c = conn.cursor()
+        c.execute("DELETE FROM csv_files WHERE user_id = ? AND filename = ?", (user_id, filename))
+        conn.commit()
+        if c.rowcount == 0:
+            conn.close()
+            return "File not found", 404
+        conn.close()
+        app.logger.info(f"File '{filename}' deleted successfully for user '{user_id}'")
+        return 'File deleted successfully', 200
+    except Exception as e:
+        app.logger.error(f"Error deleting file: {str(e)}")
+        return f'Error deleting file: {str(e)}', 500
 if __name__ == '__main__':
     app.run(debug=True,port=5000)
