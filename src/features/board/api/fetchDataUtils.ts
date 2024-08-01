@@ -1,5 +1,3 @@
-// src/utils/fetchDataUtils.ts
-
 interface DataItem {
     [key: string]: string | number;
 }

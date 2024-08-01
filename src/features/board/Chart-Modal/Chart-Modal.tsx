@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useState } from 'react';
 import Modal from "./modal";
+import { useModalSheet } from '@/features/board/Chart-Modal/useChartModal-sheet';
+import { fetchData } from '../api/fetchDataUtils'; // Import the utility function
+import { Button } from '../../../components/ui/button';
 import {
     LineChart,
     Line,
@@ -8,15 +11,6 @@ import {
     Bar,
     PieChart,
     Pie,
-    ScatterChart,
-    Scatter,
-    AreaChart,
-    Area,
-    RadarChart,
-    Radar,
-    PolarGrid,
-    PolarAngleAxis,
-    PolarRadiusAxis,
     Cell,
     CartesianGrid,
     XAxis,
@@ -25,9 +19,6 @@ import {
     ResponsiveContainer,
     Legend,
 } from 'recharts';
-import { useModalSheet } from '@/features/chart-modal/hooks/useChartModal-sheet';
-import { fetchData } from './fetchDataUtils'; // Import the utility function
-import { Button } from '../ui/button';
 
 const ChartModal = () => {
     const { showModal, chartType, openModal, closeModal, setChartType } = useModalSheet();
