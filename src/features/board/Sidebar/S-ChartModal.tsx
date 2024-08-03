@@ -1,4 +1,3 @@
-// S_ChartModal.tsx
 "use client"
 import React, { useState, useEffect } from 'react';
 import Modal from "./S-Modal";
@@ -20,8 +19,6 @@ import {
     Tooltip,
     ResponsiveContainer,
 } from 'recharts';
-import { fetchData } from '@/features/board/api/fetchDataUtils';
-
 
 interface DataItem {
     [key: string]: string | number;
@@ -33,39 +30,43 @@ interface Column {
     isNumeric: boolean;
 }
 
-// Chart type options
+interface S_ChartModalProps {
+    data: any[];
+    columns: Column[];
+    selectedColumns: string[];
+    setSelectedColumns: React.Dispatch<React.SetStateAction<string[]>>;
+}
+
 export const chartTypes = [
     { type: 'line', icon: LineChartIcon, label: 'Line Chart' },
     { type: 'bar', icon: BarChartIcon, label: 'Bar Chart' },
     { type: 'pie', icon: PieChartIcon, label: 'Pie Chart' },
 ];
 
-const S_ChartModal = () => {
+const S_ChartModal: React.FC<S_ChartModalProps> = ({ data, columns, selectedColumns, setSelectedColumns }) => {
     const [showModal, setShowModal] = useState(false);
     const [chartType, setChartType] = useState("line");
-    const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
-    const [data, setData] = useState<DataItem[]>([]);
-    const [columns, setColumns] = useState<Column[]>([]);
     const [error, setError] = useState<string | null>(null);
+    const [localSelectedColumns, setLocalSelectedColumns] = useState<string[]>([]);
 
     useEffect(() => {
-        const fetchDataAsync = async () => {
-            const { data, columns, error } = await fetchData();
-            setData(data);
-            setColumns(columns);
-            setError(error);
-        };
-
-        fetchDataAsync();
-    }, []);
+        // Initialize local state with the first column (usually the x-axis)
+        if (columns.length > 0 && localSelectedColumns.length === 0) {
+            setLocalSelectedColumns([columns[0].accessorKey]);
+        }
+    }, [columns]);
 
     const openModalHandler = () => setShowModal(true);
-    const closeModalHandler = () => setShowModal(false);
+    const closeModalHandler = () => {
+        setShowModal(false);
+        // Update the parent component's state when closing the modal
+        setSelectedColumns(localSelectedColumns);
+    };
 
     const handleChartTypeChange = (type: string) => setChartType(type);
 
     const handleColumnToggle = (column: string) => {
-        setSelectedColumns(prev =>
+        setLocalSelectedColumns(prev =>
             prev.includes(column)
                 ? prev.filter(c => c !== column)
                 : [...prev, column]
@@ -81,19 +82,19 @@ const S_ChartModal = () => {
                     {chartType !== 'pie' && (
                         <>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey={columns[0]?.accessorKey} />
+                            <XAxis dataKey={localSelectedColumns[0]} />
                             <YAxis />
                             <Tooltip />
                         </>
                     )}
-                    {selectedColumns.map((column, index) => {
+                    {localSelectedColumns.slice(1).map((column, index) => {
                         if (chartType === 'line') {
                             return <Line key={column} type="monotone" dataKey={column} stroke={`hsl(${index * 60}, 70%, 50%)`} />;
                         } else if (chartType === 'bar') {
                             return <Bar key={column} dataKey={column} fill={`hsl(${index * 60}, 70%, 50%)`} />;
                         } else {
                             return (
-                                <Pie key={column} data={data} dataKey={column} nameKey={columns[0]?.accessorKey} cx="50%" cy="50%" outerRadius={80} label>
+                                <Pie key={column} data={data} dataKey={column} nameKey={localSelectedColumns[0]} cx="50%" cy="50%" outerRadius={80} label>
                                     {data.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={`hsl(${index * 30}, 70%, 50%)`} />
                                     ))}
@@ -123,6 +124,9 @@ const S_ChartModal = () => {
                             key={type}
                             className={`cursor-pointer transition-all ${chartType === type ? 'ring-2 ring-blue-500' : ''}`}
                             onClick={() => handleChartTypeChange(type)}
+                            style={{ transition: 'transform 0.2s ease, box-shadow 0.2s ease' }}
+                            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = 'none')}
                         >
                             <CardContent className="flex flex-col items-center justify-center p-4">
                                 <Icon className="h-12 w-12 mb-2" />
@@ -132,11 +136,11 @@ const S_ChartModal = () => {
                     ))}
                 </div>
                 <div className="flex space-x-4 mb-6">
-                    {columns.map(column => (
+                    {columns.map((column) => (
                         <div key={column.accessorKey} className="flex items-center space-x-2">
                             <Checkbox
                                 id={column.accessorKey}
-                                checked={selectedColumns.includes(column.accessorKey)}
+                                checked={localSelectedColumns.includes(column.accessorKey)}
                                 onCheckedChange={() => handleColumnToggle(column.accessorKey)}
                             />
                             <label htmlFor={column.accessorKey}>{column.header}</label>

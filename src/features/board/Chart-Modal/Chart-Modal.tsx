@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import Modal from "./modal";
 import { useModalSheet } from '@/features/board/Chart-Modal/useChartModal-sheet';
-import { fetchData } from '../api/fetchDataUtils'; // Import the utility function
 import { Button } from '../../../components/ui/button';
 import {
     LineChart,
@@ -20,25 +19,17 @@ import {
     Legend,
 } from 'recharts';
 
-const ChartModal = () => {
+interface ChartModalProps {
+    data: any[];
+    columns: any[];
+    selectedColumns: string[];
+    setSelectedColumns: React.Dispatch<React.SetStateAction<string[]>>;
+}
+
+const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns, setSelectedColumns }) => {
     const { showModal, chartType, openModal, closeModal, setChartType } = useModalSheet();
-    const [data, setData] = useState<any[]>([]);
-    const [columns, setColumns] = useState<any[]>([]);
-    const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        const loadData = async () => {
-            const result = await fetchData();
-            setData(result.data);
-            setColumns(result.columns);
-            setError(result.error);
-            setLoading(false);
-        };
-
-        loadData();
-    }, []);
 
     const handleChartTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
         setChartType(event.target.value);
