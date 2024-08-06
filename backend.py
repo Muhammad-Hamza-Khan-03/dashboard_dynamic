@@ -106,5 +106,48 @@ def delete_file(user_id, filename):
     except Exception as e:
         app.logger.error(f"Error deleting file: {str(e)}")
         return f'Error deleting file: {str(e)}', 500
+
+@app.route('/update_blob/<user_id>/<filename>', methods=['POST'])
+def update_blob(user_id, filename):
+    app.logger.info(f"Received update blob request for user: {user_id}, file: {filename}")
+    
+    try:
+        data = request.json
+        new_content = data.get('newContent', [])
+        
+        if not new_content:
+            return jsonify({"error": "No content to update"}), 400
+        
+        # Convert the new content to CSV format
+        output = io.BytesIO()
+        csv_writer = csv.writer(io.TextIOWrapper(output, encoding='utf-8'))
+        headers = new_content[0].keys() if new_content else []
+        csv_writer.writerow(headers)
+        for row in new_content:
+            csv_writer.writerow(row.values())
+        
+        # Get the binary content
+        output.seek(0)
+        updated_content = output.getvalue()
+        
+        conn = sqlite3.connect('user_csvs.db')
+        c = conn.cursor()
+        
+        # Update the database with the new content
+        c.execute("UPDATE csv_files SET content = ? WHERE user_id = ? AND filename = ?",
+                  (sqlite3.Binary(updated_content), user_id, filename))
+        conn.commit()
+        conn.close()
+        
+        app.logger.info(f"Successfully updated the blob content for file '{filename}' for user '{user_id}'")
+        return jsonify({"message": "Successfully updated the blob content"}), 200
+    
+    except sqlite3.Error as db_error:
+        app.logger.error(f"Database error: {str(db_error)}")
+        return jsonify({"error": "Database error: " + str(db_error)}), 500
+    except Exception as e:
+        app.logger.error(f"Error updating blob content: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    
 if __name__ == '__main__':
     app.run(debug=True,port=5000)

@@ -14,7 +14,7 @@ export const handleUseCSV = async (
   setError: (error: string | null) => void,
   onUpload: (data: FileData[]) => void,
   sheetNumber?: number
-) => {
+) => { 
   setLoading(true);
   setError(null);
 
