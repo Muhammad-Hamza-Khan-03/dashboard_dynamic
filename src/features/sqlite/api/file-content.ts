@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { toast } from "@/components/ui/use-toast";
 
-interface FileData {
+export interface FileData {
   [key: string]: unknown;
 }
 
