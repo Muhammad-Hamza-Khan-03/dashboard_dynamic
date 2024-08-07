@@ -362,7 +362,6 @@ class DataExplorerProAPI:
             'describe': df.describe().to_dict(),
             'correlation': df.corr(numeric_only=True).to_dict()
         }
-
         return jsonify(stats)
 
     def download_csv(self):
