@@ -1388,7 +1388,6 @@ const App: React.FC = () => {
         </Box>
       );
     }
-
     return (
       <code className={className} {...props}>
         {children}
@@ -1400,6 +1399,34 @@ const App: React.FC = () => {
     const currentBranch = branches.find(branch => branch.id === currentBranchId);
     if (!currentBranch) return null;
   
+    const tableStyle: React.CSSProperties = {
+      borderCollapse: 'separate',
+      borderSpacing: 0,
+      width: '100%',
+      margin: '15px 0',
+      backgroundColor: theme.palette.background.paper,
+      color: theme.palette.text.primary,
+      borderRadius: '10px',
+      overflow: 'hidden',
+    };
+  
+    const thStyle: React.CSSProperties = {
+      backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+      color: theme.palette.text.primary,
+      fontWeight: 'bold',
+      textAlign: 'left',
+      padding: '12px 15px',
+      borderBottom: `1px solid ${theme.palette.divider}`,
+    };
+  
+    const tdStyle: React.CSSProperties = {
+      padding: '12px 15px',
+      borderBottom: `1px solid ${theme.palette.divider}`,
+    };
+  
+    const trStyle: React.CSSProperties = {
+      backgroundColor: theme.palette.background.paper,
+    };
     return currentBranch.messages.map((message, messageIndex) => {
       const editedBranches = branches.filter(branch => 
         branch.messages.some(m => m.id === message.id)
@@ -1471,6 +1498,10 @@ const App: React.FC = () => {
                         </Box>
                       );
                     },
+                    table: ({node, ...props}) => <table style={tableStyle} {...props} />,
+                    th: ({node, ...props}) => <th style={thStyle} {...props} />,
+                    td: ({node, ...props}) => <td style={tdStyle} {...props} />,
+                    tr: ({node, ...props}) => <tr style={trStyle} {...props} />,
                   }}
                   remarkPlugins={[remarkGfm]}
                 >
