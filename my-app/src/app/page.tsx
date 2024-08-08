@@ -836,14 +836,14 @@ const App: React.FC = () => {
 
   const SQLStructureVisualization: React.FC<{ dbInfo: DbInfo, darkMode: boolean }> = ({ dbInfo, darkMode }) => {
     const [expandedTables, setExpandedTables] = useState<{ [key: string]: boolean }>({});
-
+  
     const toggleTable = (tableName: string) => {
       setExpandedTables(prev => ({
         ...prev,
         [tableName]: !prev[tableName]
       }));
     };
-
+  
     const handleTableClick = (tableName: string) => {
       setCurrentQuery((prevQuery) => {
         const trimmedPrevQuery = prevQuery.trim();
@@ -856,7 +856,7 @@ const App: React.FC = () => {
         return `${trimmedPrevInput}${separator}${tableName}`;
       });
     };
-
+  
     const handleColumnClick = (columnName: string) => {
       setCurrentQuery((prevQuery) => {
         const trimmedPrevQuery = prevQuery.trim();
@@ -869,114 +869,53 @@ const App: React.FC = () => {
         return `${trimmedPrevInput}${separator}${columnName}`;
       });
     };
-
-    const styles = {
-      container: {
-        padding: '16px',
-        fontFamily: 'Arial, sans-serif',
-        color: darkMode ? '#ffffff' : '#000000',
-      },
-      grid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '12px',
-      },
-      card: {
-        border: darkMode ? '1px solid #444' : '1px solid #ddd',
-        borderRadius: '8px',
-        padding: '12px',
-        boxShadow: darkMode ? '0 2px 4px rgba(255, 255, 255, 0.1)' : '0 2px 4px rgba(0, 0, 0, 0.1)',
-        backgroundColor: darkMode ? '#333' : '#f9f9f9',
-      },
-      button: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        width: '100%',
-        background: 'none',
-        border: 'none',
-        fontSize: '16px',
-        fontWeight: '600',
-        cursor: 'pointer',
-        padding: '8px 0',
-        marginBottom: '8px',
-        color: darkMode ? '#ffffff' : '#000000',
-      },
-      icon: {
-        transition: 'transform 0.2s',
-      },
-      columnsContainer: {
-        display: 'flex',
-        flexWrap: 'wrap' as 'wrap',
-        gap: '4px',
-      },
-      columnBox: {
-        backgroundColor: darkMode ? '#555' : '#e0e0e0',
-        borderRadius: '4px',
-        padding: '4px 8px',
-        fontSize: '14px',
-        marginBottom: '4px',
-      },
-      tableButton: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        width: '100%',
-        background: 'none',
-        border: 'none',
-        fontSize: '16px',
-        fontWeight: '600',
-        cursor: 'pointer',
-        padding: '8px 0',
-        marginBottom: '8px',
-        color: darkMode ? '#ffffff' : '#000000',
-      },
-      columnButton: {
-        background: 'none',
-        border: 'none',
-        cursor: 'pointer',
-        fontSize: '14px',
-        padding: '4px 8px',
-        marginBottom: '4px',
-        borderRadius: '4px',
-        color: darkMode ? '#ffffff' : '#000000',
-        '&:hover': {
-          backgroundColor: darkMode ? '#555' : '#e0e0e0',
-        },
-      },
-    };
-
+  
     return (
-      <div style={styles.container}>
-        <div style={styles.grid}>
+      <Box sx={{ padding: 2, fontFamily: 'Arial, sans-serif', color: theme.palette.text.primary }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 2 }}>
           {Object.entries(dbInfo).map(([tableName, tableInfo]) => (
-            <div key={tableName} style={styles.card}>
-              <button
+            <Paper key={tableName} sx={{ p: 2, bgcolor: theme.palette.background.paper, borderRadius: 1 }}>
+              <Button
                 onClick={() => toggleTable(tableName)}
-                style={styles.tableButton}
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  width: '100%',
+                  textTransform: 'none',
+                  fontWeight: 'bold',
+                  color: theme.palette.text.primary,
+                }}
               >
                 <span onClick={(e) => { e.stopPropagation(); handleTableClick(tableName); }}>{tableName}</span>
                 {expandedTables[tableName] ?
-                  <ChevronDown size={20} style={{ ...styles.icon, transform: expandedTables[tableName] ? 'rotate(180deg)' : 'rotate(0deg)' }} /> :
-                  <ChevronRight size={20} style={styles.icon} />}
-              </button>
+                  <ChevronDown size={20} /> :
+                  <ChevronRight size={20} />}
+              </Button>
               {expandedTables[tableName] && (
-                <div style={styles.columnsContainer}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', mt: 1 }}>
                   {tableInfo.columns.map((column, index) => (
-                    <button
+                    <Button
                       key={index}
-                      style={styles.columnButton}
                       onClick={() => handleColumnClick(column)}
+                      sx={{
+                        justifyContent: 'flex-start',
+                        textTransform: 'none',
+                        color: theme.palette.text.secondary,
+                        '&:hover': {
+                          bgcolor: theme.palette.action.hover,
+                        },
+                      }}
                     >
                       {column}
-                    </button>
+                    </Button>
                   ))}
-                </div>
+                </Box>
               )}
-            </div>
+            </Paper>
           ))}
-        </div>
-      </div>
+        </Box>
+      </Box>
     );
   };
 
