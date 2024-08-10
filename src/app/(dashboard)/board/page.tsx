@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import SavedChartModal from '@/features/board/Chart-Modal/SavedChartModal';
 import { toast } from '@/components/ui/use-toast';
+import { useRechartsModalStore } from '@/features/board/recharts-modal/hooks/use-recharts';
+import RechartsModalWrapper from '@/features/board/recharts-modal/components/RechartModalWrapper';
 
 interface FileData {
   [key: string]: unknown;
@@ -36,7 +38,11 @@ const Board_Main = () => {
   const [savedCharts, setSavedCharts] = useState<SavedChart[]>([]);
   const [selectedSavedChart, setSelectedSavedChart] = useState<SavedChart | null>(null);
 
- const handleFileSelection = async (filename: string) => {
+  //////
+  const { openModal: openRechartsModal } = useRechartsModalStore();
+  //////
+  
+  const handleFileSelection = async (filename: string) => {
     if (filename !== selectedFilename) {
       setSelectedFilename(filename);
       setSelectedColumns([]); // Clear selected columns when changing files
@@ -66,10 +72,11 @@ const Board_Main = () => {
     const updatedCharts = [...savedCharts, newChart];
     setSavedCharts(updatedCharts);
     localStorage.setItem('savedCharts', JSON.stringify(updatedCharts));
-  };
-
-  const handleSavedChartClick = (chart: SavedChart) => {
-    setSelectedSavedChart(chart);
+    toast({
+      title: "Chart Saved",
+      description: "Your chart has been successfully saved.",
+      duration: 3000,
+    });
   };
 
   const handleDeleteChart = (chartId: string) => {
@@ -82,7 +89,9 @@ const Board_Main = () => {
       duration: 3000,
     });
   };
-
+  const handleSavedChartClick = (chart: SavedChart) => {
+    setSelectedSavedChart(chart);
+  };
   //group saved charts
 
   const groupedCharts = savedCharts.reduce((acc, chart) => {
@@ -137,6 +146,21 @@ const Board_Main = () => {
             setSelectedColumns={setSelectedColumns}
           />
         </div>
+        
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2 text-green-600">
+            <BarChart2 className="w-5 h-5" />
+            <span className="text-sm font-medium">Pro Chart</span>
+          </div>
+          <RechartsModalWrapper
+            data={fileData}
+            columns={columns}
+          selectedColumns={selectedColumns}
+            setSelectedColumns={setSelectedColumns}
+           onExport={handleExport}
+          />
+        </div>
+        
         <div className="space-y-2">
           <div className="flex items-center space-x-2 text-purple-600">
             <BarChart3 className="w-5 h-5" />
@@ -233,7 +257,11 @@ const Board_Main = () => {
       </div>
  {selectedSavedChart && (
         <SavedChartModal
-          chart={selectedSavedChart}
+          chart={{
+            type: selectedSavedChart.type,
+            data: selectedSavedChart.data,
+            columns: selectedSavedChart.columns,
+          }}
           onClose={() => setSelectedSavedChart(null)}
         />
       )}
