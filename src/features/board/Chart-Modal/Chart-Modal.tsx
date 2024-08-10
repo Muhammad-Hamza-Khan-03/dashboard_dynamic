@@ -24,9 +24,10 @@ interface ChartModalProps {
     columns: any[];
     selectedColumns: string[];
     setSelectedColumns: React.Dispatch<React.SetStateAction<string[]>>;
+    onExport: (chartData: any) => void;
 }
 
-const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns, setSelectedColumns }) => {
+const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns, setSelectedColumns,onExport }) => {
     const { showModal, chartType, openModal, closeModal, setChartType } = useModalSheet();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -40,8 +41,33 @@ const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns,
             prev.includes(column) ? prev.filter(col => col !== column) : [...prev, column]
         );
     };
+    const handleExport = () => {
+        const chartData = {
+            type: chartType,
+            data: data,
+            columns: selectedColumns,
+        };
+        onExport(chartData);
+        closeModal();
+    };    
 
-    const chartColor = "#ca3a12"; // Define a single color for all charts
+        const vibrantColors = [
+        "#FF6B6B", // Bright Red
+        "#4ECDC4", // Turquoise
+        "#45B7D1", // Sky Blue
+        "#FFA07A", // Light Salmon
+        "#98D8C8", // Mint
+        "#F7DC6F", // Yellow
+        "#D98880", // Light Coral
+        "#A569BD", // Light Purple
+        "#5DADE2", // Bright Blue
+        "#45B39D", // Sea Green
+        "#EC7063", // Pastel Red
+        "#5499C7", // Steel Blue
+        "#52BE80", // Nephritis
+        "#EB984E", // Dark Orange
+        "#AF7AC5"  // Amethyst
+    ];
 
     const renderChart = () => {
         if (loading) return <div className="text-center">Loading...</div>;
@@ -53,62 +79,109 @@ const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns,
 
         if (dataKeys.length === 0) return <div className="text-center">Select a column</div>;
 
-        switch (chartType) {
+     
+         const commonProps = {
+            width: 600,
+            height: 400,
+            margin: { top: 20, right: 30, left: 50, bottom: 50 },
+        };
+        
+ switch (chartType) {
             case "line":
                 return (
-                    <LineChart data={data} width={600} height={400}>
-                        {dataKeys.map(key => (
-                            <Line key={key} type="monotone" dataKey={key} stroke={chartColor} />
+                    <LineChart data={data} {...commonProps}>
+                        {dataKeys.map((key, index) => (
+                            <Line 
+                                key={key} 
+                                type="monotone" 
+                                dataKey={key} 
+                                stroke={vibrantColors[index % vibrantColors.length]} 
+                                strokeWidth={2}
+                            />
                         ))}
                         <CartesianGrid stroke="#ccc" />
-                        <XAxis dataKey={xAxisKey} />
-                        <YAxis />
+                        <XAxis 
+                            dataKey={xAxisKey} 
+                            label={{ value: xAxisKey, position: 'insideBottomRight', offset: -10 }}
+                        />
+                        <YAxis 
+                            label={{ value: dataKeys.join(', '), angle: -90, position: 'insideLeft', offset: 20 }}
+                        />
                         <Tooltip />
                         <Legend />
                     </LineChart>
                 );
             case "bar":
                 return (
-                    <BarChart data={data} width={600} height={400}>
-                        {dataKeys.map(key => (
-                            <Bar key={key} dataKey={key} fill={chartColor} />
+                    <BarChart data={data} {...commonProps}>
+                        {dataKeys.map((key, index) => (
+                            <Bar 
+                                key={key} 
+                                dataKey={key} 
+                                fill={vibrantColors[index % vibrantColors.length]}
+                            />
                         ))}
                         <CartesianGrid stroke="#ccc" />
-                        <XAxis dataKey={xAxisKey} />
-                        <YAxis />
+                        <XAxis 
+                            dataKey={xAxisKey} 
+                            label={{ value: xAxisKey, position: 'insideBottomRight', offset: -10 }}
+                        />
+                        <YAxis 
+                            label={{ value: dataKeys.join(', '), angle: -90, position: 'insideLeft', offset: 20 }}
+                        />
                         <Tooltip />
                         <Legend />
                     </BarChart>
                 );
             case "pie":
                 return (
-                    <PieChart width={600} height={400}>
-                        <Pie data={data} dataKey={dataKeys[0]} nameKey={xAxisKey} cx="50%" cy="50%" outerRadius={100} fill={chartColor}>
+                    <PieChart {...commonProps}>
+                        <Pie 
+                            data={data} 
+                            dataKey={dataKeys[0]} 
+                            nameKey={xAxisKey} 
+                            cx="50%" 
+                            cy="50%" 
+                            outerRadius={100} 
+                            label
+                        >
                             {data.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={chartColor} />
+                                <Cell 
+                                    key={`cell-${index}`} 
+                                    fill={vibrantColors[index % vibrantColors.length]} 
+                                />
                             ))}
                         </Pie>
                         <Tooltip />
                         <Legend />
                     </PieChart>
                 );
-            
             default:
                 return (
-                    <LineChart data={data} width={600} height={400}>
-                        {dataKeys.map(key => (
-                            <Line key={key} type="monotone" dataKey={key} stroke={chartColor} />
+                    <LineChart data={data} {...commonProps}>
+                        {dataKeys.map((key, index) => (
+                            <Line 
+                                key={key} 
+                                type="monotone" 
+                                dataKey={key} 
+                                stroke={vibrantColors[index % vibrantColors.length]} 
+                                strokeWidth={2}
+                            />
                         ))}
                         <CartesianGrid stroke="#ccc" />
-                        <XAxis dataKey={xAxisKey} />
-                        <YAxis />
+                        <XAxis 
+                            dataKey={xAxisKey} 
+                            label={{ value: xAxisKey, position: 'insideBottomRight', offset: -10 }}
+                        />
+                        <YAxis 
+                            label={{ value: dataKeys.join(', '), angle: -90, position: 'insideLeft', offset: 20 }}
+                        />
                         <Tooltip />
                         <Legend />
                     </LineChart>
                 );
         }
     };
-
     return (
         <div>
             <Button className="px-4 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-700" onClick={openModal}>
@@ -122,6 +195,7 @@ const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns,
                 onColumnSelect={handleColumnSelect}
                 chartType={chartType}
                 onChartTypeChange={handleChartTypeChange}
+                onExport={handleExport}
             >
                 <div className="my-4 w-full h-full overflow-hidden">
                     <ResponsiveContainer width="100%" height="100%">

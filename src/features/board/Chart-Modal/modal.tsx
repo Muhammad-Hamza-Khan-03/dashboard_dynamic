@@ -1,5 +1,6 @@
 import React, { MouseEventHandler } from 'react';
 import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 type Modal_types = {
     isOpen: boolean,
@@ -11,9 +12,10 @@ type Modal_types = {
     onColumnSelect: (column: string) => void,
     chartType: string,
     onChartTypeChange: (event: React.ChangeEvent<HTMLSelectElement>) => void,
+     onExport: () => void,
 };
 
-const Modal = ({ isOpen, title = "My modal", onDismiss, children, sidebarColumns, selectedColumns, onColumnSelect, chartType, onChartTypeChange }: Modal_types) => {
+const Modal = ({ isOpen, title = "My modal", onDismiss, children, sidebarColumns, selectedColumns, onColumnSelect, chartType, onChartTypeChange,onExport }: Modal_types) => {
     if (!isOpen) {
         return null;
     }
@@ -57,6 +59,9 @@ const Modal = ({ isOpen, title = "My modal", onDismiss, children, sidebarColumns
                     </button>
                     <div className='flex items-center mb-4 border-b border-gray-300'>
                         <h1 className='text-2xl font-bold'>{title}</h1>
+                         <Button onClick={onExport} className="bg-green-500 hover:bg-green-600 text-white">
+                            Export
+                        </Button>
                     </div>
                     <div className='flex-grow flex items-center justify-center overflow-hidden'>
                         {children}

@@ -1,5 +1,5 @@
 'use client'
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Loader, BarChart, BarChart2, BarChart3, FileText, ChevronRight, AlertCircle } from 'lucide-react';
 import ChartModal from '@/features/board/Chart-Modal/Chart-Modal';
@@ -10,11 +10,17 @@ import { handleUseCSV } from '@/features/sqlite/api/file-content';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import SavedChartModal from '@/features/board/Chart-Modal/SavedChartModal';
 
 interface FileData {
   [key: string]: unknown;
 }
-
+interface SavedChart {
+  id: string;
+  type: string;
+  data: any[];
+  columns: string[];
+}
 const Board_Main = () => {
   const { user, isLoaded: userLoaded } = useUser();
   const userId = user?.id;
@@ -25,6 +31,8 @@ const Board_Main = () => {
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
+const [savedCharts, setSavedCharts] = useState<SavedChart[]>([]);
+  const [selectedSavedChart, setSelectedSavedChart] = useState<SavedChart | null>(null);
 
   const handleFileSelection = async (filename: string) => {
     setSelectedFilename(filename);
@@ -35,6 +43,27 @@ const Board_Main = () => {
         setColumns(headers.map(header => ({ header, accessorKey: header, isNumeric: typeof data[0][header] === 'number' })));
       }
     });
+  };
+
+  useEffect(() => {
+    const storedCharts = localStorage.getItem('savedCharts');
+    if (storedCharts) {
+      setSavedCharts(JSON.parse(storedCharts));
+    }
+  }, []);
+
+   const handleExport = (chartData: any) => {
+    const newChart: SavedChart = {
+      id: Date.now().toString(),
+      ...chartData,
+    };
+    const updatedCharts = [...savedCharts, newChart];
+    setSavedCharts(updatedCharts);
+    localStorage.setItem('savedCharts', JSON.stringify(updatedCharts)); //saving to local storage
+  };
+
+  const handleSavedChartClick = (chart: SavedChart) => {
+    setSelectedSavedChart(chart);
   };
 
   if (!userLoaded || !userId) {
@@ -66,6 +95,7 @@ const Board_Main = () => {
             columns={columns}
             selectedColumns={selectedColumns}
             setSelectedColumns={setSelectedColumns}
+            onExport={handleExport}
           />
         </div>
         <div className="space-y-2">
@@ -115,6 +145,33 @@ const Board_Main = () => {
             </Card>
           ))}
         </div>
+        <h2 className='text-xl font-semibold my-4 text-gray-800'>Saved Charts</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {savedCharts.map((chart) => (
+            <Card
+              key={chart.id}
+              className="cursor-pointer transition-all duration-300 hover:shadow-md hover:bg-gray-50"
+              onClick={() => handleSavedChartClick(chart)}
+            >
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-gray-700">{chart.type} Chart</CardTitle>
+                <BarChart className="h-4 w-4 text-blue-500" />
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" size="sm" className="w-full mt-2 group">
+                  View
+                  <ChevronRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        {selectedSavedChart && (
+          <SavedChartModal
+            chart={selectedSavedChart}
+            onClose={() => setSelectedSavedChart(null)}
+          />
+        )}
         {dataLoading && (
           <div className="flex items-center justify-center mt-4 text-gray-600">
             <Loader className="animate-spin w-6 h-6 mr-2" />
