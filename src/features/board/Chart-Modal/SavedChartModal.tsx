@@ -1,20 +1,9 @@
 import React from 'react';
-import {
-    LineChart,
-    Line,
-    BarChart,
-    Bar,
-    PieChart,
-    Pie,
-    Cell,
-    CartesianGrid,
-    XAxis,
-    YAxis,
-    Tooltip,
-    ResponsiveContainer,
-    Legend,
-} from 'recharts';
 import { X } from 'lucide-react';
+import dynamic from 'next/dynamic';
+
+// Import Plotly dynamically to avoid SSR issues
+const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
 
 interface SavedChartModalProps {
     chart: {
@@ -25,120 +14,122 @@ interface SavedChartModalProps {
     onClose: () => void;
 }
 
-
 const SavedChartModal: React.FC<SavedChartModalProps> = ({ chart, onClose }) => {
-    const vibrantColors = [
-        "#FF6B6B", // Bright Red
-        "#4ECDC4", // Turquoise
-        "#45B7D1", // Sky Blue
-        "#FFA07A", // Light Salmon
-        "#98D8C8", // Mint
-        "#F7DC6F", // Yellow
-        "#D98880", // Light Coral
-        "#A569BD", // Light Purple
-        "#5DADE2", // Bright Blue
-        "#45B39D", // Sea Green
-        "#EC7063", // Pastel Red
-        "#5499C7", // Steel Blue
-        "#52BE80", // Nephritis
-        "#EB984E", // Dark Orange
-        "#AF7AC5"  // Amethyst
-    ];
     const renderChart = () => {
         const xAxisKey = chart.columns[0];
         const dataKeys = chart.columns.slice(1);
 
-        const commonProps = {
-            margin: { top: 20, right: 30, left: 50, bottom: 50 },
+        const plotData: any[] = [];
+        const layout: any = {
+            title: `${chart.type.charAt(0).toUpperCase() + chart.type.slice(1)} Chart`,
+            xaxis: { title: xAxisKey },
+            yaxis: { title: dataKeys.join(', ') },
+            autosize: true,
         };
 
         switch (chart.type) {
             case "line":
-                return (
-                    <ResponsiveContainer width="100%" height={400}>
-                        <LineChart data={chart.data} {...commonProps}>
-                            {dataKeys.map((key, index) => (
-                                <Line 
-                                    key={key} 
-                                    type="monotone" 
-                                    dataKey={key} 
-                                    stroke={vibrantColors[index % vibrantColors.length]} 
-                                    strokeWidth={2}
-                                />
-                            ))}
-                            <CartesianGrid stroke="#ccc" />
-                            <XAxis 
-                                dataKey={xAxisKey} 
-                                label={{ value: xAxisKey, position: 'insideBottomRight', offset: -10 }}
-                            />
-                            <YAxis 
-                                label={{ value: dataKeys.join(', '), angle: -90, position: 'insideLeft', offset: 20 }}
-                            />
-                            <Tooltip />
-                            <Legend />
-                        </LineChart>
-                    </ResponsiveContainer>
-                );
+                dataKeys.forEach(key => {
+                    plotData.push({
+                        x: chart.data.map(item => item[xAxisKey]),
+                        y: chart.data.map(item => item[key]),
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: key,
+                    });
+                });
+                break;
             case "bar":
-                return (
-                    <ResponsiveContainer width="100%" height={400}>
-                        <BarChart data={chart.data} {...commonProps}>
-                            {dataKeys.map((key, index) => (
-                                <Bar 
-                                    key={key} 
-                                    dataKey={key} 
-                                    fill={vibrantColors[index % vibrantColors.length]}
-                                />
-                            ))}
-                            <CartesianGrid stroke="#ccc" />
-                            <XAxis 
-                                dataKey={xAxisKey} 
-                                label={{ value: xAxisKey, position: 'insideBottomRight', offset: -10 }}
-                            />
-                            <YAxis 
-                                label={{ value: dataKeys.join(', '), angle: -90, position: 'insideLeft', offset: 20 }}
-                            />
-                            <Tooltip />
-                            <Legend />
-                        </BarChart>
-                    </ResponsiveContainer>
-                );
+                dataKeys.forEach(key => {
+                    plotData.push({
+                        x: chart.data.map(item => item[xAxisKey]),
+                        y: chart.data.map(item => item[key]),
+                        type: 'bar',
+                        name: key,
+                    });
+                });
+                break;
             case "pie":
-                return (
-                    <ResponsiveContainer width="100%" height={400}>
-                        <PieChart {...commonProps}>
-                            <Pie 
-                                data={chart.data} 
-                                dataKey={dataKeys[0]} 
-                                nameKey={xAxisKey} 
-                                cx="50%" 
-                                cy="50%" 
-                                outerRadius={100} 
-                                label
-                            >
-                                {chart.data.map((entry, index) => (
-                                    <Cell 
-                                        key={`cell-${index}`} 
-                                        fill={vibrantColors[index % vibrantColors.length]} 
-                                    />
-                                ))}
-                            </Pie>
-                            <Tooltip />
-                            <Legend />
-                        </PieChart>
-                    </ResponsiveContainer>
-                );
+                plotData.push({
+                    labels: chart.data.map(item => item[xAxisKey]),
+                    values: chart.data.map(item => item[dataKeys[0]]),
+                    type: 'pie',
+                });
+                layout.yaxis = {}; // Remove y-axis for pie chart
+                break;
+            case "segmented":
+                dataKeys.forEach(key => {
+                    plotData.push({
+                        x: chart.data.map(item => item[xAxisKey]),
+                        y: chart.data.map(item => item[key]),
+                        type: 'scatter',
+                        mode: 'none',
+                        fill: 'tonexty',
+                        name: key,
+                    });
+                });
+                break;
+            case "segmented-bar":
+                dataKeys.forEach(key => {
+                    plotData.push({
+                        x: chart.data.map(item => item[xAxisKey]),
+                        y: chart.data.map(item => item[key]),
+                        type: 'bar',
+                        name: key,
+                    });
+                });
+                layout.barmode = 'stack';
+                break;
+            case "histogram":
+                plotData.push({
+                    x: chart.data.map(item => item[dataKeys[0]]),
+                    type: 'histogram',
+                });
+                layout.xaxis.title = dataKeys[0];
+                layout.yaxis.title = 'Frequency';
+                break;
+            case "scatter":
+                plotData.push({
+                    x: chart.data.map(item => item[dataKeys[0]]),
+                    y: chart.data.map(item => item[dataKeys[1]]),
+                    mode: 'markers',
+                    type: 'scatter',
+                    marker: { size: 8 },
+                });
+                layout.xaxis.title = dataKeys[0];
+                layout.yaxis.title = dataKeys[1];
+                break;
+            case "box":
+                dataKeys.forEach(key => {
+                    plotData.push({
+                        y: chart.data.map(item => item[key]),
+                        type: 'box',
+                        name: key,
+                    });
+                });
+                layout.xaxis.title = '';
+                break;
             default:
-                return <div>Unsupported chart type</div>;
+                return <div className="text-center">Unsupported chart type</div>;
         }
+
+        return (
+            <Plot
+                data={plotData}
+                layout={layout}
+                style={{ width: "100%", height: "100%" }}
+                useResizeHandler={true}
+            />
+        );
     };
+
     return (
         <div className='fixed inset-0 bg-black bg-opacity-60 z-60 flex justify-center items-center'>
             <div className='w-4/5 h-4/5 bg-white rounded-lg p-6 flex flex-col relative shadow-lg'>
                 <button className='absolute top-3 right-3 text-2xl text-gray-600 hover:text-gray-900' onClick={onClose}>
                     <X />
                 </button>
-                <h2 className='text-2xl font-bold mb-4'>{chart.type} Chart</h2>
+                <h2 className='text-2xl font-bold mb-4'>{chart.type.charAt(0).toUpperCase() + chart.type.slice(1)} Chart</h2>
                 <div className='flex-grow'>
                     {renderChart()}
                 </div>

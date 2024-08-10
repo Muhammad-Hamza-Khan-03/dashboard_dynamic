@@ -3,21 +3,11 @@ import { useEffect, useState } from 'react';
 import Modal from "./modal";
 import { useModalSheet } from '@/features/board/Chart-Modal/useChartModal-sheet';
 import { Button } from '../../../components/ui/button';
-import {
-    LineChart,
-    Line,
-    BarChart,
-    Bar,
-    PieChart,
-    Pie,
-    Cell,
-    CartesianGrid,
-    XAxis,
-    YAxis,
-    Tooltip,
-    ResponsiveContainer,
-    Legend,
-} from 'recharts';
+import dynamic from 'next/dynamic';
+import { AlertCircle } from 'lucide-react';
+
+// Import Plotly dynamically to avoid SSR issues
+const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
 
 interface ChartModalProps {
     data: any[];
@@ -27,7 +17,7 @@ interface ChartModalProps {
     onExport: (chartData: any) => void;
 }
 
-const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns, setSelectedColumns,onExport }) => {
+const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns, setSelectedColumns, onExport }) => {
     const { showModal, chartType, openModal, closeModal, setChartType } = useModalSheet();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -41,6 +31,7 @@ const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns,
             prev.includes(column) ? prev.filter(col => col !== column) : [...prev, column]
         );
     };
+
     const handleExport = () => {
         const chartData = {
             type: chartType,
@@ -51,159 +42,162 @@ const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns,
         closeModal();
     };    
 
-        const vibrantColors = [
-        "#FF6B6B", // Bright Red
-        "#4ECDC4", // Turquoise
-        "#45B7D1", // Sky Blue
-        "#FFA07A", // Light Salmon
-        "#98D8C8", // Mint
-        "#F7DC6F", // Yellow
-        "#D98880", // Light Coral
-        "#A569BD", // Light Purple
-        "#5DADE2", // Bright Blue
-        "#45B39D", // Sea Green
-        "#EC7063", // Pastel Red
-        "#5499C7", // Steel Blue
-        "#52BE80", // Nephritis
-        "#EB984E", // Dark Orange
-        "#AF7AC5"  // Amethyst
-    ];
-
     const renderChart = () => {
         if (loading) return <div className="text-center">Loading...</div>;
         if (error) return <div className="text-center text-red-600">Error: {error}</div>;
         if (data.length === 0) return <div className="text-center">No data available</div>;
 
-        const xAxisKey = selectedColumns[0]; // Use the first selected column as x-axis
-        const dataKeys = selectedColumns.slice(1); // Use the remaining columns for y-axis
-
-        if (dataKeys.length === 0) return <div className="text-center">Select a column</div>;
-
-     
-         const commonProps = {
-            width: 600,
-            height: 400,
-            margin: { top: 20, right: 30, left: 50, bottom: 50 },
-        };
-        
- switch (chartType) {
-            case "line":
-                return (
-                    <LineChart data={data} {...commonProps}>
-                        {dataKeys.map((key, index) => (
-                            <Line 
-                                key={key} 
-                                type="monotone" 
-                                dataKey={key} 
-                                stroke={vibrantColors[index % vibrantColors.length]} 
-                                strokeWidth={2}
-                            />
-                        ))}
-                        <CartesianGrid stroke="#ccc" />
-                        <XAxis 
-                            dataKey={xAxisKey} 
-                            label={{ value: xAxisKey, position: 'insideBottomRight', offset: -10 }}
-                        />
-                        <YAxis 
-                            label={{ value: dataKeys.join(', '), angle: -90, position: 'insideLeft', offset: 20 }}
-                        />
-                        <Tooltip />
-                        <Legend />
-                    </LineChart>
-                );
-            case "bar":
-                return (
-                    <BarChart data={data} {...commonProps}>
-                        {dataKeys.map((key, index) => (
-                            <Bar 
-                                key={key} 
-                                dataKey={key} 
-                                fill={vibrantColors[index % vibrantColors.length]}
-                            />
-                        ))}
-                        <CartesianGrid stroke="#ccc" />
-                        <XAxis 
-                            dataKey={xAxisKey} 
-                            label={{ value: xAxisKey, position: 'insideBottomRight', offset: -10 }}
-                        />
-                        <YAxis 
-                            label={{ value: dataKeys.join(', '), angle: -90, position: 'insideLeft', offset: 20 }}
-                        />
-                        <Tooltip />
-                        <Legend />
-                    </BarChart>
-                );
-            case "pie":
-                return (
-                    <PieChart {...commonProps}>
-                        <Pie 
-                            data={data} 
-                            dataKey={dataKeys[0]} 
-                            nameKey={xAxisKey} 
-                            cx="50%" 
-                            cy="50%" 
-                            outerRadius={100} 
-                            label
-                        >
-                            {data.map((entry, index) => (
-                                <Cell 
-                                    key={`cell-${index}`} 
-                                    fill={vibrantColors[index % vibrantColors.length]} 
-                                />
-                            ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                    </PieChart>
-                );
-            default:
-                return (
-                    <LineChart data={data} {...commonProps}>
-                        {dataKeys.map((key, index) => (
-                            <Line 
-                                key={key} 
-                                type="monotone" 
-                                dataKey={key} 
-                                stroke={vibrantColors[index % vibrantColors.length]} 
-                                strokeWidth={2}
-                            />
-                        ))}
-                        <CartesianGrid stroke="#ccc" />
-                        <XAxis 
-                            dataKey={xAxisKey} 
-                            label={{ value: xAxisKey, position: 'insideBottomRight', offset: -10 }}
-                        />
-                        <YAxis 
-                            label={{ value: dataKeys.join(', '), angle: -90, position: 'insideLeft', offset: 20 }}
-                        />
-                        <Tooltip />
-                        <Legend />
-                    </LineChart>
-                );
+        if (selectedColumns.length === 0) {
+            return (
+                <div className="flex flex-col items-center justify-center h-full">
+                    <AlertCircle className="w-16 h-16 text-blue-500 mb-4" />
+                    <p className="text-xl font-semibold text-gray-700">Select a column for X-axis</p>
+                    <p className="text-sm text-gray-500 mt-2">Choose a column from the sidebar to start creating your chart</p>
+                </div>
+            );
         }
+
+        if (selectedColumns.length === 1) {
+            return (
+                <div className="flex flex-col items-center justify-center h-full">
+                    <AlertCircle className="w-16 h-16 text-blue-500 mb-4" />
+                    <p className="text-xl font-semibold text-gray-700">Select a column for Y-axis</p>
+                    <p className="text-sm text-gray-500 mt-2">Choose another column to complete your chart</p>
+                </div>
+            );
+        }
+        const xAxisKey = selectedColumns[0];
+        const dataKeys = selectedColumns.slice(1);
+
+        const plotData: any[] = [];
+        const layout: any = {
+            title: `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart`,
+            xaxis: { title: xAxisKey },
+            yaxis: { title: dataKeys.join(', ') },
+            autosize: true,
+        };
+
+        switch (chartType) {
+            case "line":
+                dataKeys.forEach(key => {
+                    plotData.push({
+                        x: data.map(item => item[xAxisKey]),
+                        y: data.map(item => item[key]),
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: key,
+                    });
+                });
+                break;
+            case "bar":
+                dataKeys.forEach(key => {
+                    plotData.push({
+                        x: data.map(item => item[xAxisKey]),
+                        y: data.map(item => item[key]),
+                        type: 'bar',
+                        name: key,
+                    });
+                });
+                break;
+            case "pie":
+                plotData.push({
+                    labels: data.map(item => item[xAxisKey]),
+                    values: data.map(item => item[dataKeys[0]]),
+                    type: 'pie',
+                });
+                layout.yaxis = {}; // Remove y-axis for pie chart
+                break;
+            case "segmented":
+                dataKeys.forEach(key => {
+                    plotData.push({
+                        x: data.map(item => item[xAxisKey]),
+                        y: data.map(item => item[key]),
+                        type: 'scatter',
+                        mode: 'none',
+                        fill: 'tonexty',
+                        name: key,
+                    });
+                });
+                break;
+            case "segmented-bar":
+                dataKeys.forEach(key => {
+                    plotData.push({
+                        x: data.map(item => item[xAxisKey]),
+                        y: data.map(item => item[key]),
+                        type: 'bar',
+                        name: key,
+                    });
+                });
+                layout.barmode = 'stack';
+                break;
+            case "histogram":
+                plotData.push({
+                    x: data.map(item => item[dataKeys[0]]),
+                    type: 'histogram',
+                });
+                layout.xaxis.title = dataKeys[0];
+                layout.yaxis.title = 'Frequency';
+                break;
+            case "scatter":
+                plotData.push({
+                    x: data.map(item => item[dataKeys[0]]),
+                    y: data.map(item => item[dataKeys[1]]),
+                    mode: 'markers',
+                    type: 'scatter',
+                    marker: { size: 8 },
+                });
+                layout.xaxis.title = dataKeys[0];
+                layout.yaxis.title = dataKeys[1];
+                break;
+            case "box":
+                dataKeys.forEach(key => {
+                    plotData.push({
+                        y: data.map(item => item[key]),
+                        type: 'box',
+                        name: key,
+                    });
+                });
+                layout.xaxis.title = '';
+                break;
+            default:
+                return <div className="text-center">Unsupported chart type</div>;
+        }
+
+        return (
+            <Plot
+                data={plotData}
+                layout={layout}
+                style={{ width: "100%", height: "100%" }}
+                useResizeHandler={true}
+            />
+        );
     };
+
     return (
-        <div>
+        <>
             <Button className="px-4 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-700" onClick={openModal}>
                 Simple Chart
             </Button>
-            <Modal
-                isOpen={showModal}
-                onDismiss={closeModal}
-                sidebarColumns={columns.map(col => col.header)}
-                selectedColumns={selectedColumns}
-                onColumnSelect={handleColumnSelect}
-                chartType={chartType}
-                onChartTypeChange={handleChartTypeChange}
-                onExport={handleExport}
-            >
-                <div className="my-4 w-full h-full overflow-hidden">
-                    <ResponsiveContainer width="100%" height="100%">
-                        {renderChart()}
-                    </ResponsiveContainer>
+            {showModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <Modal
+                        isOpen={showModal}
+                        onDismiss={closeModal}
+                        title="Chart Creator"
+                        sidebarColumns={columns.map(col => col.header)}
+                        selectedColumns={selectedColumns}
+                        onColumnSelect={handleColumnSelect}
+                        chartType={chartType}
+                        onChartTypeChange={handleChartTypeChange}
+                        onExport={handleExport}
+                    >
+                        <div className="w-full h-full">
+                            {renderChart()}
+                        </div>
+                    </Modal>
                 </div>
-            </Modal>
-        </div>
+            )}
+        </>
     );
 };
 

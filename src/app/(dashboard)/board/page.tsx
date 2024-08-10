@@ -1,16 +1,17 @@
 'use client'
 import React, { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { Loader, BarChart, BarChart2, BarChart3, FileText, ChevronRight, AlertCircle } from 'lucide-react';
+import { Loader, BarChart, BarChart2, BarChart3, FileText, ChevronRight, AlertCircle, Trash2 } from 'lucide-react';
 import ChartModal from '@/features/board/Chart-Modal/Chart-Modal';
 import DragChartModal from '@/features/board/Dragboard/D-ChartModal';
 import S_ChartModal from '@/features/board/Sidebar/S-ChartModal';
 import useFilesList from '@/features/sqlite/api/file-list';
 import { handleUseCSV } from '@/features/sqlite/api/file-content';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import SavedChartModal from '@/features/board/Chart-Modal/SavedChartModal';
+import { toast } from '@/components/ui/use-toast';
 
 interface FileData {
   [key: string]: unknown;
@@ -20,6 +21,7 @@ interface SavedChart {
   type: string;
   data: any[];
   columns: string[];
+   filename: string;
 }
 const Board_Main = () => {
   const { user, isLoaded: userLoaded } = useUser();
@@ -31,18 +33,21 @@ const Board_Main = () => {
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
-const [savedCharts, setSavedCharts] = useState<SavedChart[]>([]);
+  const [savedCharts, setSavedCharts] = useState<SavedChart[]>([]);
   const [selectedSavedChart, setSelectedSavedChart] = useState<SavedChart | null>(null);
 
-  const handleFileSelection = async (filename: string) => {
-    setSelectedFilename(filename);
-    await handleUseCSV(filename, userId!, setDataLoading, setDataError, (data) => {
-      setFileData(data);
-      if (data.length > 0) {
-        const headers = Object.keys(data[0]);
-        setColumns(headers.map(header => ({ header, accessorKey: header, isNumeric: typeof data[0][header] === 'number' })));
-      }
-    });
+ const handleFileSelection = async (filename: string) => {
+    if (filename !== selectedFilename) {
+      setSelectedFilename(filename);
+      setSelectedColumns([]); // Clear selected columns when changing files
+      await handleUseCSV(filename, userId!, setDataLoading, setDataError, (data) => {
+        setFileData(data);
+        if (data.length > 0) {
+          const headers = Object.keys(data[0]);
+          setColumns(headers.map(header => ({ header, accessorKey: header, isNumeric: typeof data[0][header] === 'number' })));
+        }
+      });
+    }
   };
 
   useEffect(() => {
@@ -52,19 +57,42 @@ const [savedCharts, setSavedCharts] = useState<SavedChart[]>([]);
     }
   }, []);
 
-   const handleExport = (chartData: any) => {
+  const handleExport = (chartData: any) => {
     const newChart: SavedChart = {
       id: Date.now().toString(),
       ...chartData,
+      filename: selectedFilename || 'Unknown File',
     };
     const updatedCharts = [...savedCharts, newChart];
     setSavedCharts(updatedCharts);
-    localStorage.setItem('savedCharts', JSON.stringify(updatedCharts)); //saving to local storage
+    localStorage.setItem('savedCharts', JSON.stringify(updatedCharts));
   };
 
   const handleSavedChartClick = (chart: SavedChart) => {
     setSelectedSavedChart(chart);
   };
+
+  const handleDeleteChart = (chartId: string) => {
+    const updatedCharts = savedCharts.filter(chart => chart.id !== chartId);
+    setSavedCharts(updatedCharts);
+    localStorage.setItem('savedCharts', JSON.stringify(updatedCharts));
+    toast({
+      title: "Chart Deleted",
+      description: "The chart has been successfully removed.",
+      duration: 3000,
+    });
+  };
+
+  //group saved charts
+
+  const groupedCharts = savedCharts.reduce((acc, chart) => {
+    const filename = chart.filename || 'Unknown File';  // Fallback to 'Unknown File' if filename is undefined
+    if (!acc[filename]) {
+      acc[filename] = [];
+    }
+    acc[filename].push(chart);
+    return acc;
+  }, {} as { [key: string]: SavedChart[] });
 
   if (!userLoaded || !userId) {
     return (
@@ -81,7 +109,6 @@ const [savedCharts, setSavedCharts] = useState<SavedChart[]>([]);
       </div>
     );
   }
-
   return (
     <div className='flex bg-white rounded-lg mx-4 p-6 shadow-lg'>
       <div className='w-1/4 flex flex-col gap-y-6 pr-6 border-r border-gray-200'>
@@ -146,32 +173,51 @@ const [savedCharts, setSavedCharts] = useState<SavedChart[]>([]);
           ))}
         </div>
         <h2 className='text-xl font-semibold my-4 text-gray-800'>Saved Charts</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {savedCharts.map((chart) => (
-            <Card
-              key={chart.id}
-              className="cursor-pointer transition-all duration-300 hover:shadow-md hover:bg-gray-50"
-              onClick={() => handleSavedChartClick(chart)}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-gray-700">{chart.type} Chart</CardTitle>
-                <BarChart className="h-4 w-4 text-blue-500" />
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" size="sm" className="w-full mt-2 group">
-                  View
-                  <ChevronRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                </Button>
-              </CardContent>
-            </Card>
+        <ScrollArea className="h-[400px] pr-4">
+          {Object.entries(groupedCharts).map(([filename, charts]) => (
+            <div key={filename} className="mb-6">
+              <h3 className="text-lg font-medium mb-2 text-gray-700">{filename}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {charts.map((chart) => (
+                  <Card
+                    key={chart.id}
+                    className="transition-all duration-300 hover:shadow-md hover:bg-gray-50"
+                  >
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-700">{chart.type} Chart</CardTitle>
+                      <BarChart className="h-4 w-4 text-blue-500" />
+                    </CardHeader>
+                    <CardContent>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full mt-2 group"
+                        onClick={() => handleSavedChartClick(chart)}
+                      >
+                        View
+                        <ChevronRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                      </Button>
+                    </CardContent>
+                    <CardFooter>
+                      <Button 
+                        variant="destructive" 
+                        size="sm" 
+                        className="w-full mt-2 group"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteChart(chart.id);
+                        }}
+                      >
+                        Delete
+                        <Trash2 className="ml-2 h-4 w-4" />
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            </div>
           ))}
-        </div>
-        {selectedSavedChart && (
-          <SavedChartModal
-            chart={selectedSavedChart}
-            onClose={() => setSelectedSavedChart(null)}
-          />
-        )}
+        </ScrollArea>
         {dataLoading && (
           <div className="flex items-center justify-center mt-4 text-gray-600">
             <Loader className="animate-spin w-6 h-6 mr-2" />
@@ -185,6 +231,13 @@ const [savedCharts, setSavedCharts] = useState<SavedChart[]>([]);
           </div>
         )}
       </div>
+ {selectedSavedChart && (
+        <SavedChartModal
+          chart={selectedSavedChart}
+          onClose={() => setSelectedSavedChart(null)}
+        />
+      )}
+    
     </div>
   );
 };
