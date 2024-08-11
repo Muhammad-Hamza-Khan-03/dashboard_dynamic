@@ -139,7 +139,81 @@ class DataExplorerProAPI:
         except Exception as e:
             logging.error(f"Error processing file: {e}")
             return jsonify({'message': f'Error processing file: {str(e)}'}), 500
+
+    def handle_data_cleaning(self, user_input):
+        if not os.path.exists('dataframe.pkl'):
+            return jsonify({'error': 'No dataset has been uploaded for cleaning'}), 400
+
+        df = pd.read_pickle('dataframe.pkl')
+        original_df = df.copy()
+        df_info = f"Column names: {', '.join(df.columns)}\nTotal rows: {len(df)}\nTotal columns: {len(df.columns)}"
         
+        data_cleaning_instructions = f"""You are a data cleaning expert. Analyze the given dataset and provide recommendations for cleaning and preprocessing. Use the following information:
+
+        1. Dataset Overview:
+        {df_info}
+
+        2. Sample Data (first 5 rows):
+        {df.head().to_string()}
+
+        3. Data Types:
+        {df.dtypes.to_string()}
+
+        4. Missing Values:
+        {df.isnull().sum().to_string()}
+
+        5. User Request:
+        {user_input}
+
+        Please provide the following:
+        1. An overview of data quality issues
+        2. Recommendations for handling missing values
+        3. Suggestions for data type conversions if necessary
+        4. Identification of potential outliers or anomalies
+        5. Proposals for feature engineering or data transformations
+        6. Any other relevant data cleaning steps
+
+        Use markdown formatting for better readability and also use the markdown to show the changes in data in table format. Include Python code snippets wrapped in triple backticks for any cleaning operations you recommend.
+        IMPORTANT: Do not include any code that saves or overwrites the dataframe. The system will handle dataset versioning automatically.
+        """
+
+        system_message = SystemMessage(content=data_cleaning_instructions)
+        messages = [system_message, HumanMessage(content=user_input)]
+
+        try:
+            response = self.model(messages)
+            result_output = response.content
+
+            # Extract and execute any Python code snippets
+            code_blocks = re.findall(r'```python(.*?)```', result_output, re.DOTALL)
+            for code_block in code_blocks:
+                try:
+                    exec(code_block, {'df': df, 'pd': pd, 'np': np})
+                except Exception as e:
+                    result_output += f"\n\nError executing code: {str(e)}"
+
+            preview_data = df.head(10).to_dict('records')
+
+            result_output += f"\n\n### Dataset Changes\n"
+            result_output += f"Original rows: {len(original_df)}, Current rows: {len(df)}\n"
+            result_output += f"Original columns: {', '.join(original_df.columns)}\n"
+            result_output += f"Current columns: {', '.join(df.columns)}\n"
+
+            df.to_pickle('dataframe.pkl')
+
+            suggestions = self.generate_suggested_prompts(user_input, df=df, agent_type='data_cleaning')
+            response_json = jsonify({
+                'output': result_output,
+                'preview_data': preview_data,
+                'total_rows': len(df),
+                'suggestions': suggestions,
+                'dataframe_changed': not original_df.equals(df)
+            })
+            logging.debug(f"Data cleaning response: {response_json.get_data(as_text=True)}")
+            return response_json
+        except Exception as e:
+            logging.error(f"Error in data cleaning: {e}")
+            return jsonify({'output': f'Error: {str(e)}'}), 500
     def handle_mermaid_diagram(self, user_input):
         mermaid_instructions = f"""Create a Mermaid diagram based on: "{user_input}".
         Follow these rules:
@@ -244,6 +318,8 @@ class DataExplorerProAPI:
             
         elif agent_type == 'mermaid_diagram':
             return self.handle_mermaid_diagram(user_input)
+        elif agent_type == 'data_cleaning':
+            return self.handle_data_cleaning(user_input)
         elif agent_type == 'business_analytics':
             if not os.path.exists('dataframe.pkl'):
                 return jsonify({'error': 'No dataset has been uploaded for analysis'}), 400
@@ -555,6 +631,21 @@ class DataExplorerProAPI:
         {db_info_str}
 
         SQL follow-up questions:"""
+        elif agent_type == 'data_cleaning':
+            prompt = f"""Based on the following user input and the context of data cleaning, suggest 3 follow-up questions that the user might find interesting or useful for further data preparation. Focus on data quality improvements, handling missing values, data transformations, and feature engineering.
+
+            User input: {user_input}
+
+            Dataset information:
+            Column names: {', '.join(df.columns)}
+            Total rows: {len(df)}
+            Total columns: {len(df.columns)}
+            Missing values: {df.isnull().sum().to_dict()}
+
+            IMPORTANT: Provide ONLY the questions, one per line. Do not include any explanations, numbering, or additional text.
+
+            Suggested questions:"""
+
         elif agent_type == 'business_analytics':
             prompt = f"""Based on the following user input and the context of business analytics, suggest 3 follow-up questions that the user might find interesting or useful for further exploration. Focus on profit/revenue trends, market insights, and potential business strategies.
 
