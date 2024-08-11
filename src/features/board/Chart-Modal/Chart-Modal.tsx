@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from 'react';
+// import { useEffect, useState } from 'react';
 import Modal from "./modal";
 import { useModalSheet } from '@/features/board/Chart-Modal/useChartModal-sheet';
 import { Button } from '../../../components/ui/button';
@@ -19,9 +19,9 @@ interface ChartModalProps {
 
 const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns, setSelectedColumns, onExport }) => {
     const { showModal, chartType, openModal, closeModal, setChartType } = useModalSheet();
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
+    const loading = false;
+    const error = null;
     const handleChartTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
         setChartType(event.target.value);
     };

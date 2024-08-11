@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
+import { useRechartsModalStore } from '../hooks/use-recharts';
 
 interface RechartsModalWrapperProps {
   data: any[];
   columns: any[];
   selectedColumns: string[];
-    setSelectedColumns: React.Dispatch<React.SetStateAction<string[]>>;
-      onExport: (chartData: any) => void;
+  setSelectedColumns: React.Dispatch<React.SetStateAction<string[]>>;
+  onExport: (chartData: any) => void;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
@@ -23,11 +23,8 @@ const RechartsModalWrapper: React.FC<RechartsModalWrapperProps> = ({
     setSelectedColumns,
     onExport
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [chartType, setChartType] = useState('line');
-
-  const openModal = () => setIsOpen(true);
-  const closeModal = () => setIsOpen(false);
+  const {isOpen,chartType,openModal,closeModal,setChartType }  = useRechartsModalStore();
+  
 
   const handleColumnSelect = (column: string) => {
     setSelectedColumns(prev => 
