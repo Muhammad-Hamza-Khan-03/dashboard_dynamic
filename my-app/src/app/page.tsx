@@ -77,6 +77,7 @@ import {
   File,
   Filter,
   FileText,
+  GitBranch,
   HelpCircle,
   Info,
   Layout,
@@ -104,6 +105,8 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { read, utils } from 'xlsx';
 import remarkGfm from 'remark-gfm';
+import mermaid from 'mermaid';
+
 type MessageType = "user" | "ai" | "system";
 
 type Message = {
@@ -215,15 +218,57 @@ const App: React.FC = () => {
   const currentBranch = branches.find(branch => branch.id === currentBranchId);
   const backgroundColors = ['#ffffff', '#000000'];
   const datasetColors = ['#29BDFD', '#00CBBF', '#01C159', '#9DCA1C', '#FFAF00', '#F46920', '#F53255', '#F857C1'];
-
   const [expanded, setExpanded] = useState<string | false>(false);
-
   const defaultIconColor = darkMode ? '#ffffff' : '#000000';
   const customIconColors = useMemo(() => ['#FF5733', '#33FF57', '#3357FF', '#FF33A1', '#33FFA1', '#A133FF', '#FFA133', '#FF3333'], []);
   const iconColors = [defaultIconColor, ...customIconColors];
   const [detailedStats, setDetailedStats] = useState<DetailedStats>({ describe: {}, correlation: {} });
   const [loadingDetailedStats, setLoadingDetailedStats] = useState(true);
+  const [mermaidCode, setMermaidCode] = useState<string>('');
+  const mermaidRef = useRef<HTMLDivElement>(null);
+  const [mermaidError, setMermaidError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (mermaidRef.current && mermaidCode) {
+      // Clear the previous diagram
+      mermaidRef.current.innerHTML = '';
+
+      console.log("Attempting to render Mermaid diagram");
+      console.log("Mermaid code:", mermaidCode);
+
+      mermaid.render('mermaid-diagram', mermaidCode)
+        .then(({ svg }) => {
+          console.log("Mermaid rendering successful");
+          if (mermaidRef.current) {
+            mermaidRef.current.innerHTML = svg;
+          }
+          setMermaidError(null);
+        })
+        .catch((error) => {
+          console.error('Mermaid rendering error:', error);
+          setMermaidError(`Failed to render diagram. Error: ${error.message}\n\nRaw Mermaid code:\n\n${mermaidCode}`);
+        });
+    }
+  }, [mermaidCode]);
+
+
+  // In the JSX:
+  {
+    mermaidCode && (
+      <Box sx={{
+        mt: 2,
+        p: 2,
+        bgcolor: 'background.paper',
+        borderRadius: 2,
+        border: '1px solid #ccc',
+        minHeight: '300px',
+        width: '100%',
+        overflow: 'auto'
+      }}>
+        <div ref={mermaidRef} style={{ width: '100%', height: '100%' }} />
+      </Box>
+    )
+  }
   const fetchDetailedStats = async () => {
     try {
       const response = await fetch('http://localhost:5000/data_stats');
@@ -759,10 +804,91 @@ const App: React.FC = () => {
     reader.readAsArrayBuffer(file as Blob);
   };
 
+  const correctMermaidSyntax = (code: string): string => {
+    let lines = code.split('\n').map(line => line.trim()).filter(line => line);
+    
+    const isQuadrantChart = lines.some(line => 
+        line.toLowerCase().startsWith('quadrantchart') ||
+        line.toLowerCase().startsWith('xaxis') ||
+        line.toLowerCase().startsWith('yaxis') ||
+        line.toLowerCase().startsWith('quadrant')
+    );
+
+    if (isQuadrantChart) {
+        return correctQuadrantChart(lines);
+    } else {
+        return correctFlowchart(lines);
+    }
+};
+
+const correctQuadrantChart = (lines: string[]): string => {
+    let correctedLines = ['quadrantChart'];
+
+    // Helper function to clean labels
+    const cleanLabel = (label: string): string => {
+        return label.replace(/[("')]/g, '').trim();
+    };
+
+    // Process axis lines
+    ['xaxis', 'yaxis'].forEach((axis, index) => {
+        const axisLine = lines.find(line => line.toLowerCase().startsWith(axis));
+        if (axisLine) {
+            const label = cleanLabel(axisLine.substring(axis.length));
+            correctedLines.push(`${index === 0 ? 'x-axis' : 'y-axis'} ${label} --> ${label}`);
+        }
+    });
+
+    // Process quadrant lines
+    let quadrantCount = 0;
+    lines.forEach(line => {
+        if (line.toLowerCase().startsWith('quadrant')) {
+            const label = cleanLabel(line.substring('quadrant'.length));
+            if (label.toLowerCase() !== 'chart' && quadrantCount < 4) {
+                quadrantCount++;
+                correctedLines.push(`quadrant-${quadrantCount} ${label}`);
+            }
+        }
+    });
+
+    // Process data points
+    const dataPointRegex = /^([A-Z])\s*\(\s*"(.*?)"\s*,\s*(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)\s*\)$/;
+    const dataPoints = lines.filter(line => dataPointRegex.test(line));
+    if (dataPoints.length > 0) {
+        const values: [number, number][] = dataPoints.map(line => {
+            const match = line.match(dataPointRegex);
+            return match ? [parseFloat(match[3]), parseFloat(match[5])] : null;
+        }).filter((v): v is [number, number] => v !== null);
+
+        if (values.length > 0) {
+            const xValues = values.map(v => v[0]);
+            const yValues = values.map(v => v[1]);
+            const xMin = Math.min(...xValues);
+            const xMax = Math.max(...xValues);
+            const yMin = Math.min(...yValues);
+            const yMax = Math.max(...yValues);
+
+            dataPoints.forEach((line, index) => {
+                const match = line.match(dataPointRegex);
+                if (match) {
+                    const label = match[1];
+                    const [x, y] = values[index];
+                    const scaledX = (x - xMin) / (xMax - xMin || 1);  // Avoid division by zero
+                    const scaledY = (y - yMin) / (yMax - yMin || 1);  // Avoid division by zero
+                    correctedLines.push(`${label}: [${scaledX.toFixed(2)}, ${scaledY.toFixed(2)}]`);
+                }
+            });
+        }
+    }
+
+    return correctedLines.join('\n');
+};
+
+const correctFlowchart = (lines: string[]): string => {
+    return lines.map(line => line.replace(/(-+>)\|([^|]+)\|>/g, '$1|$2|')).join('\n');
+};
 
   const handleSend = async () => {
     if (!input.trim()) return;
-
     const newMessage: Message = { id: Date.now(), type: 'user', content: input, branchId: currentBranchId };
     setMessages((prev) => [...prev, newMessage]);
     setBranches((branches) => {
@@ -812,6 +938,12 @@ const App: React.FC = () => {
           return updatedBranches;
         });
       }
+      if (data.mermaid) {
+        console.log(data.mermaid);
+        const correctedMermaidCode = correctMermaidSyntax(data.mermaid);
+        console.log(data.correctedMermaidCode);
+        setMermaidCode(correctedMermaidCode);
+      }
       if (data.suggestions) {
         setSuggestedPrompts(data.suggestions);
       }
@@ -836,14 +968,14 @@ const App: React.FC = () => {
 
   const SQLStructureVisualization: React.FC<{ dbInfo: DbInfo, darkMode: boolean }> = ({ dbInfo, darkMode }) => {
     const [expandedTables, setExpandedTables] = useState<{ [key: string]: boolean }>({});
-  
+
     const toggleTable = (tableName: string) => {
       setExpandedTables(prev => ({
         ...prev,
         [tableName]: !prev[tableName]
       }));
     };
-  
+
     const handleTableClick = (tableName: string) => {
       setCurrentQuery((prevQuery) => {
         const trimmedPrevQuery = prevQuery.trim();
@@ -856,7 +988,7 @@ const App: React.FC = () => {
         return `${trimmedPrevInput}${separator}${tableName}`;
       });
     };
-  
+
     const handleColumnClick = (columnName: string) => {
       setCurrentQuery((prevQuery) => {
         const trimmedPrevQuery = prevQuery.trim();
@@ -869,7 +1001,7 @@ const App: React.FC = () => {
         return `${trimmedPrevInput}${separator}${columnName}`;
       });
     };
-  
+
     return (
       <Box sx={{ padding: 2, fontFamily: 'Arial, sans-serif', color: theme.palette.text.primary }}>
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 2 }}>
@@ -1247,11 +1379,11 @@ const App: React.FC = () => {
   };
 
   const handleBranchNavigation = (direction: 'prev' | 'next', messageId: number) => {
-    const editedBranches = branches.filter(branch => 
+    const editedBranches = branches.filter(branch =>
       branch.messages.some(m => m.id === messageId)
     );
     const currentEditIndex = editedBranches.findIndex(branch => branch.id === currentBranchId);
-    
+
     if (direction === 'prev' && currentEditIndex > 0) {
       setCurrentBranchId(editedBranches[currentEditIndex - 1].id);
     } else if (direction === 'next' && currentEditIndex < editedBranches.length - 1) {
@@ -1337,7 +1469,7 @@ const App: React.FC = () => {
   const renderMessages = () => {
     const currentBranch = branches.find(branch => branch.id === currentBranchId);
     if (!currentBranch) return null;
-  
+
     const tableStyle: React.CSSProperties = {
       borderCollapse: 'separate',
       borderSpacing: 0,
@@ -1348,7 +1480,7 @@ const App: React.FC = () => {
       borderRadius: '10px',
       overflow: 'hidden',
     };
-  
+
     const thStyle: React.CSSProperties = {
       backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
       color: theme.palette.text.primary,
@@ -1357,23 +1489,23 @@ const App: React.FC = () => {
       padding: '12px 15px',
       borderBottom: `1px solid ${theme.palette.divider}`,
     };
-  
+
     const tdStyle: React.CSSProperties = {
       padding: '12px 15px',
       borderBottom: `1px solid ${theme.palette.divider}`,
     };
-  
+
     const trStyle: React.CSSProperties = {
       backgroundColor: theme.palette.background.paper,
     };
     return currentBranch.messages.map((message, messageIndex) => {
-      const editedBranches = branches.filter(branch => 
+      const editedBranches = branches.filter(branch =>
         branch.messages.some(m => m.id === message.id)
       );
       const isEdited = editedBranches.length > 1;
       const currentEditIndex = editedBranches.findIndex(branch => branch.id === currentBranchId) + 1;
       const totalEdits = editedBranches.length;
-  
+
       return (
         <Box
           key={messageIndex}
@@ -1413,11 +1545,11 @@ const App: React.FC = () => {
                     code: ({ className, children }) => {
                       const match = /language-(\w+)/.exec(className || '');
                       const [isExpanded, setIsExpanded] = useState(false);
-  
+
                       if (!match) {
                         return <code className={className}>{children}</code>;
                       }
-  
+
                       return (
                         <Box sx={{ width: '100%', mt: 2 }}>
                           <Button
@@ -1437,10 +1569,10 @@ const App: React.FC = () => {
                         </Box>
                       );
                     },
-                    table: ({node, ...props}) => <table style={tableStyle} {...props} />,
-                    th: ({node, ...props}) => <th style={thStyle} {...props} />,
-                    td: ({node, ...props}) => <td style={tdStyle} {...props} />,
-                    tr: ({node, ...props}) => <tr style={trStyle} {...props} />,
+                    table: ({ node, ...props }) => <table style={tableStyle} {...props} />,
+                    th: ({ node, ...props }) => <th style={thStyle} {...props} />,
+                    td: ({ node, ...props }) => <td style={tdStyle} {...props} />,
+                    tr: ({ node, ...props }) => <tr style={trStyle} {...props} />,
                   }}
                   remarkPlugins={[remarkGfm]}
                 >
@@ -1549,7 +1681,6 @@ const App: React.FC = () => {
       </Box>
     );
   };
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -1629,6 +1760,7 @@ const App: React.FC = () => {
                       { value: 'business_analytics', label: 'Business Analytics', icon: <TrendingUp size={24} style={{ color: selectedIconColor }} /> },
                       { value: 'data_cleaning', label: 'Data Cleaning', icon: <Filter size={24} style={{ color: selectedIconColor }} /> },
                       { value: 'research_assistant', label: 'Research Assistant', icon: <FileText size={24} style={{ color: selectedIconColor }} /> },
+                      { value: 'mermaid_diagram', label: 'Mermaid Diagram', icon: <GitBranch size={24} style={{ color: selectedIconColor }} /> },
                     ].find(agent => agent.value === selected);
 
                     return (
@@ -1671,7 +1803,8 @@ const App: React.FC = () => {
                     { value: 'sql', label: 'SQL', icon: <Database size={24} />, description: 'Manage and query your databases efficiently.' },
                     { value: 'business_analytics', label: 'Business Analytics', icon: <TrendingUp size={24} />, description: 'Analyze business metrics and trends.' },
                     { value: 'data_cleaning', label: 'Data Cleaning', icon: <Filter size={24} />, description: 'Clean and preprocess your data for analysis.' },
-                    { value: 'research_assistant', label: 'Research Assistant', icon: <FileText size={24} />, description: "Analyze and answer questions about documents." }
+                    { value: 'research_assistant', label: 'Research Assistant', icon: <FileText size={24} />, description: "Analyze and answer questions about documents." },
+                    { value: 'mermaid_diagram', label: 'Mermaid Diagram', icon: <GitBranch size={24} style={{ color: selectedIconColor }} />, description: "Create various diagrams using Mermaid syntax" },
                   ].map((agent) => (
                     <MenuItem key={agent.value} value={agent.value}>
                       {agent.icon}
@@ -1787,6 +1920,20 @@ const App: React.FC = () => {
             }}
           >
             <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }} ref={chatContainerRef}>
+              {mermaidCode && (
+                <Box sx={{
+                  mt: 2,
+                  p: 2,
+                  bgcolor: 'background.paper',
+                  borderRadius: 2,
+                  border: '1px solid #ccc',
+                  minHeight: '300px',
+                  width: '100%',
+                  overflow: 'auto'
+                }}>
+                  <div ref={mermaidRef} style={{ width: '100%', height: '100%' }} />
+                </Box>
+              )}
               {file && (
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                   <Typography variant="caption" sx={{ mr: 2 }}>{file.name}</Typography>
@@ -1881,6 +2028,7 @@ const App: React.FC = () => {
                           </label>
                           {file && <Typography variant="caption" sx={{ ml: 1 }}>{file.name}</Typography>}
                         </Box>
+
                       </InputAdornment>
                     ),
                     endAdornment: (

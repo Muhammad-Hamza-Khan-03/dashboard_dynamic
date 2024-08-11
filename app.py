@@ -139,6 +139,63 @@ class DataExplorerProAPI:
         except Exception as e:
             logging.error(f"Error processing file: {e}")
             return jsonify({'message': f'Error processing file: {str(e)}'}), 500
+        
+    def handle_mermaid_diagram(self, user_input):
+        mermaid_instructions = f"""Create a Mermaid diagram based on: "{user_input}".
+        Follow these rules:
+        1. Use Mermaid syntax version 10.9.1.
+        2. Provide only the Mermaid code, no explanations.
+        3. Ensure the diagram is complete and properly formatted.
+        4. Don't use colors or styles unless requested.
+        5. Only create one of these diagram types:
+        - Flowchart: `graph` or `flowchart`
+        - Sequence: `sequenceDiagram`
+        - Class: `classDiagram`
+        - State: `stateDiagram-v2`
+        - Entity Relationship: `erDiagram`
+        - User Journey: `journey`
+        - Gantt: `gantt`
+        - Pie: `pie`
+        - Quadrant: `quadrantChart`
+        - Requirement: `requirementDiagram`
+        - Git: `gitGraph`
+        - C4: `C4Context`, `C4Container`, `C4Component`, or `C4Dynamic`
+        - Mindmap: `mindmap`
+        - Timeline: `timeline`
+        - Zenuml: `zenuml`
+        - Sankey: `sankey-beta`
+        - XYChart: `xychart-beta`
+        - Block: `block`
+        6. Use correct syntax and structure for the chosen diagram type.
+        7. Ensure the diagram will render correctly.
+        8. Don't include any extra text after it. If you have any confusion or less information then make the diagram based on any assumption"""
+
+        system_message = SystemMessage(content=mermaid_instructions)
+        history = self.memory.load_memory_variables({})
+        messages = [system_message] + history.get("history", []) + [HumanMessage(content=user_input)]
+
+        try:
+            response = self.model(messages)
+            mermaid_diagram = response.content.strip()
+            
+            valid_starts = ["graph", "flowchart", "sequenceDiagram", "classDiagram", "stateDiagram-v2", "erDiagram", "journey", "gantt", "pie", "quadrantChart", "requirementDiagram", "gitGraph", "C4Context", "C4Container", "C4Component", "C4Dynamic", "mindmap", "timeline", "zenuml", "sankey-beta", "xychart-beta", "block"]
+            if any(mermaid_diagram.startswith(start) for start in valid_starts):
+                result_output = "Mermaid diagram generated successfully."
+                self.memory.save_context({"input": user_input}, {"output": mermaid_diagram})
+            else:
+                result_output = "Invalid Mermaid diagram. Please try again."
+                mermaid_diagram = None
+
+            suggestions = self.generate_suggested_prompts(user_input, agent_type='mermaid_diagram')
+            
+            return jsonify({
+                'output': result_output,
+                'mermaid': mermaid_diagram,
+                'suggestions': suggestions
+            })
+        except Exception as e:
+            logging.error(f"Error in Mermaid diagram generation: {e}")
+            return jsonify({'output': f'Error: {str(e)}'}), 500
 
     def query_file(self):
         if not os.path.exists('dataframe.pkl') and not self.document_content and 'file' not in request.files:
@@ -184,7 +241,56 @@ class DataExplorerProAPI:
             except Exception as e:
                 logging.error(f"Error getting response from model: {e}")
                 return jsonify({'output': f'Error: {str(e)}'}), 500
+            
+        elif agent_type == 'mermaid_diagram':
+            return self.handle_mermaid_diagram(user_input)
+        elif agent_type == 'business_analytics':
+            if not os.path.exists('dataframe.pkl'):
+                return jsonify({'error': 'No dataset has been uploaded for analysis'}), 400
 
+            df = pd.read_pickle('dataframe.pkl')
+            df_info = f"Column names: {', '.join(df.columns)}\nTotal rows: {len(df)}\nTotal columns: {len(df.columns)}"
+            
+            business_analytics_instructions = f"""You are a business analytics expert. Analyze the given dataset and provide key trends, insights, and focus on profit/revenue trends. Use the following information:
+            1. Dataset Overview:
+            {df_info}
+            2. Sample Data (first 5 rows):
+            {df.head().to_string()}
+            3. User Request:
+            {user_input}
+            Please provide the following:
+            1. An overview of the dataset
+            2. Key trends and insights
+            3. Profit/revenue analysis (if applicable)
+            4. Recommendations based on the data
+            5. Potential areas for further investigation
+
+            Use markdown formatting for better readability. Include relevant statistics and percentages where appropriate.
+            If you need to perform any calculations, use Python code snippets wrapped in triple backticks.
+            """
+
+            system_message = SystemMessage(content=business_analytics_instructions)
+            messages = [system_message, HumanMessage(content=user_input)]
+
+            try:
+                response = self.model(messages)
+                result_output = response.content
+
+                # Extract and execute any Python code snippets
+                code_blocks = re.findall(r'```python(.*?)```', result_output, re.DOTALL)
+                for code_block in code_blocks:
+                    try:
+                        exec(code_block, {'df': df, 'pd': pd, 'np': np})
+                    except Exception as e:
+                        result_output += f"\nError executing code: {str(e)}"
+
+                suggestions = self.generate_suggested_prompts(user_input, df=df, agent_type='business_analytics')
+                response_json = jsonify({'output': result_output, 'suggestions': suggestions})
+                logging.debug(f"Business analytics response: {response_json.get_data(as_text=True)}")
+                return response_json
+            except Exception as e:
+                logging.error(f"Error getting response from model: {e}")
+            return jsonify({'output': f'Error: {str(e)}'}), 500
         elif os.path.exists('dataframe.pkl'):
             df = pd.read_pickle('dataframe.pkl')
             df_5_rows = df.head(2).fillna("NaN")
@@ -255,7 +361,7 @@ class DataExplorerProAPI:
 
                 Please follow the user's instructions to generate the appropriate graph or analysis. Ensure your code is efficient and can handle the full dataset. If the user's request is unclear or could be interpreted in multiple ways, ask for clarification.
 
-                After executing the code, explain your approach and any insights gained from the visualization or analysis. If there are any limitations or potential issues with the requested visualization given the nature of the data, mention them."""
+                After executing the code, explain your approach and any insights gained from the visualization or analysis. Always show the number of rows using markdown table. If there are any limitations or potential issues with the requested visualization given the nature of the data, mention them."""
 
                 instructions = custom_instructions or default_instructions
 
@@ -441,7 +547,7 @@ class DataExplorerProAPI:
         - Incorporates relevant SQL functions or operations
         - Avoids redundancy with the original query
 
-        Format: Present only the questions, one per line, without numbering or explanation.
+        Format: Present only the questions, one per line, without numbering or explanation. Also show any row/s or table using the markdown table.
 
         User input: {user_input}
 
@@ -449,6 +555,19 @@ class DataExplorerProAPI:
         {db_info_str}
 
         SQL follow-up questions:"""
+        elif agent_type == 'business_analytics':
+            prompt = f"""Based on the following user input and the context of business analytics, suggest 3 follow-up questions that the user might find interesting or useful for further exploration. Focus on profit/revenue trends, market insights, and potential business strategies.
+
+            User input: {user_input}
+
+            Dataset information:
+            Column names: {', '.join(df.columns)}
+            Total rows: {len(df)}
+            Total columns: {len(df.columns)}
+
+            IMPORTANT: Provide ONLY the questions, one per line. Do not include any explanations, numbering, or additional text.
+
+            Suggested questions:"""
         else:
             column_names = ', '.join(df.columns) if df is not None else "No columns available"
             df_info = f"Column names: {column_names}\nTotal rows: {len(df) if df is not None else 0}\nTotal columns: {len(df.columns) if df is not None else 0}"
