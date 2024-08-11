@@ -83,7 +83,7 @@ const DataTablePage: React.FC = () => {
     }
   }, [isUserLoaded, user, selectedFile]);
 
-  const fetchFileData = async (filename: string) => {
+ const fetchFileData = async (filename: string) => {
     if (!user?.id) {
       console.error("User ID not available");
       setError("User ID not available");
@@ -92,7 +92,6 @@ const DataTablePage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      console.log("Fetching file data for:", filename);
       await handleUseCSV(
         filename,
         user.id,
@@ -114,7 +113,7 @@ const DataTablePage: React.FC = () => {
   };
 
   const processFetchedData = (fetchedData: FileData[]) => {
-    console.log("Received data:", fetchedData);
+    
     if (fetchedData && fetchedData.length > 0) {
       const generatedColumns: ColumnDef<DataItem, any>[] = Object.keys(fetchedData[0]).map((key) => ({
         accessorKey: key,
@@ -132,7 +131,6 @@ const DataTablePage: React.FC = () => {
           </div>
         ),
       }));
-      console.log("Generated columns:", generatedColumns);
       setColumns(generatedColumns);
       setData(fetchedData);
     } else {
@@ -142,7 +140,7 @@ const DataTablePage: React.FC = () => {
       setError("No data found in the file");
     }
   };
-
+  
   const handleEdit = (index: number, field: string, value: string) => {
     setEditItem({ [field]: value });
     setEditIndex(index);
@@ -162,20 +160,36 @@ const DataTablePage: React.FC = () => {
     setEditField(null);
     setIsSheetOpen(true);
   };
+//save as blob
 
-  const handleSaveItem = () => {
+
+  const handleSaveItem = async () => {
     if (editItem) {
-      setData(prevData => {
-        if (editIndex !== null && editField) {
-          // Update existing item
-          return prevData.map((item, index) =>
-            index === editIndex ? { ...item, [editField]: editItem[editField] } : item
-          );
-        } else {
-          // Add new item
-          return [...prevData, editItem as DataItem];
-        }
-      });
+      let updatedData = [...data];
+      if (editIndex !== null && editField) {
+        // Update existing item
+        updatedData[editIndex] = { ...updatedData[editIndex], [editField]: editItem[editField] };
+      } else {
+        // Add new item
+        updatedData.push(editItem as DataItem);
+      }
+      
+      
+      try {
+        await saveDataToBlob(updatedData);
+        setData(updatedData);
+        toast({
+          title: "Success",
+          description: "Item saved successfully",
+        });
+      } catch (error) {
+        console.error("Failed to save item:", error);
+        toast({
+          title: "Error",
+          description: "Failed to save item. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
     setIsSheetOpen(false);
     setEditItem(null);
@@ -183,6 +197,28 @@ const DataTablePage: React.FC = () => {
     setEditField(null);
   };
 
+  const saveDataToBlob = async (dataToSave: DataItem[]) => {
+    if (!user || !selectedFile) {
+      throw new Error("User not authenticated or no file selected");
+    }
+
+    setLoading(true);
+    try {
+      const response = await axios.post(`http://localhost:5000/update_blob/${user.id}/${selectedFile}`, {
+        newContent: dataToSave,
+      });
+      if (response.status !== 200) {
+        throw new Error(`Server responded with status ${response.status}`);
+      }
+    } catch (error) {
+      console.error("Error updating blob content:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+///
   const handleDelete = () => {
     const selectedIndices = selectedRows.map(row => row.index);
     setData(prevData => prevData.filter((_, index) => !selectedIndices.includes(index)));
@@ -305,7 +341,11 @@ const getTopValues = (values: any[]): { value: any, count: number }[] => {
     setFilterValue("");
     setNumericFilters({});
   };
-
+  const getFilterKey = () => {
+    if (filterColumn) return filterColumn;
+    const firstColumnWithAccessorKey = columns.find(hasAccessorKey);
+    return firstColumnWithAccessorKey ? firstColumnWithAccessorKey.accessorKey : "";
+  };
   if (!isUserLoaded) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -565,11 +605,11 @@ const getTopValues = (values: any[]): { value: any, count: number }[] => {
             <p className="text-red-500">{error}</p>
           ) : filteredData.length > 0 ? (
             <DataTable
-              columns={columns}
-              data={filteredData}
-              filterkey={filterColumn || ""}
-              onRowSelectionChange={setSelectedRows}
-            />
+      columns={columns}
+      data={filteredData}
+      filterkey={getFilterKey()}
+      onRowSelectionChange={setSelectedRows}
+    />
           ) : (
             <p className="text-teal-600">No data available. Please select a file or upload a new one.</p>
           )}

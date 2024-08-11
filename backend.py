@@ -5,6 +5,8 @@ import io
 import csv
 import logging
 
+import pandas as pd
+
 app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.DEBUG)
@@ -79,17 +81,29 @@ def get_file(user_id, filename):
         conn.close()
         
         if result:
-            return send_file(
-                io.BytesIO(result[0]),
-                mimetype='text/csv',
-                as_attachment=True,
-                download_name=filename
-            )
+            content = result[0]
+            
+            if filename.endswith('.xlsx'):
+                # Handle Excel file
+                excel_buffer = io.BytesIO(content)
+                df = pd.read_excel(excel_buffer)
+            else:
+                # Handle CSV file
+                if isinstance(content, bytes):
+                    content = content.decode('utf-8')
+                csv_buffer = io.StringIO(content)
+                df = pd.read_csv(csv_buffer)
+            
+            # Convert DataFrame to JSON
+            json_data = df.to_json(orient='records')
+            
+            return json_data, 200, {'Content-Type': 'application/json'}
         else:
             return "File not found", 404
     except Exception as e:
         app.logger.error(f"Error retrieving file: {str(e)}")
         return str(e), 500
+    
 @app.route('/delete_file/<user_id>/<filename>', methods=['DELETE'])
 def delete_file(user_id, filename):
     try:
@@ -118,33 +132,34 @@ def update_blob(user_id, filename):
         if not new_content:
             return jsonify({"error": "No content to update"}), 400
         
-        # Convert the new content to CSV format
-        output = io.BytesIO()
-        csv_writer = csv.writer(io.TextIOWrapper(output, encoding='utf-8'))
-        headers = new_content[0].keys() if new_content else []
-        csv_writer.writerow(headers)
-        for row in new_content:
-            csv_writer.writerow(row.values())
+        app.logger.info(f"Received new content: {new_content[:5]}...")  # Log first 5 items
         
-        # Get the binary content
-        output.seek(0)
-        updated_content = output.getvalue()
+        # Convert the new content to a pandas DataFrame
+        df = pd.DataFrame(new_content)
+        
+        # Determine file type and save accordingly
+        if filename.endswith('.xlsx'):
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False)
+            content = output.getvalue()
+        else:  # Assume CSV for all other cases
+            csv_buffer = io.StringIO()
+            df.to_csv(csv_buffer, index=False)
+            content = csv_buffer.getvalue().encode()
         
         conn = sqlite3.connect('user_csvs.db')
         c = conn.cursor()
         
         # Update the database with the new content
         c.execute("UPDATE csv_files SET content = ? WHERE user_id = ? AND filename = ?",
-                  (sqlite3.Binary(updated_content), user_id, filename))
+                  (content, user_id, filename))
         conn.commit()
         conn.close()
         
         app.logger.info(f"Successfully updated the blob content for file '{filename}' for user '{user_id}'")
         return jsonify({"message": "Successfully updated the blob content"}), 200
     
-    except sqlite3.Error as db_error:
-        app.logger.error(f"Database error: {str(db_error)}")
-        return jsonify({"error": "Database error: " + str(db_error)}), 500
     except Exception as e:
         app.logger.error(f"Error updating blob content: {str(e)}")
         return jsonify({"error": str(e)}), 500

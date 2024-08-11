@@ -1,5 +1,3 @@
-"use client"
-
 import * as React from 'react'
 import {
   ColumnDef,
@@ -57,7 +55,8 @@ export function DataTable<TData>({
       sorting,
       columnFilters,
       rowSelection,
-    }
+    },
+    enableRowSelection: true,
   })
 
   React.useEffect(() => {
@@ -67,16 +66,18 @@ export function DataTable<TData>({
 
   return (
     <div>
-      <div className="flex items-center py-4">
-        <Input
-          placeholder={`Filter ${filterkey}...`}
-          value={(table.getColumn(filterkey)?.getFilterValue() as string) ?? ""}
-          onChange={(event) =>
-            table.getColumn(filterkey)?.setFilterValue(event.target.value)
-          }
-          className="max-w-sm"
-        />
-      </div>
+      {filterkey && (
+        <div className="flex items-center py-4">
+          <Input
+            placeholder={`Filter ${filterkey}...`}
+            value={(table.getColumn(filterkey)?.getFilterValue() as string) ?? ""}
+            onChange={(event) =>
+              table.getColumn(filterkey)?.setFilterValue(event.target.value)
+            }
+            className="max-w-sm"
+          />
+        </div>
+      )}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
