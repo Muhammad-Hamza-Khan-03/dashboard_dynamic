@@ -1,293 +1,168 @@
 "use client"
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useUser } from '@clerk/nextjs';
 import axios from 'axios';
-import { Upload, FileText, Loader2, Trash, ArrowUpRight, FileSpreadsheet, Files, Database } from 'lucide-react';
+import { X, Upload, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/components/ui/use-toast';
-import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
-interface FileData {
-  [key: string]: unknown;
+interface CSVUploadProps {
+  onUploadSuccess: () => void;
+  triggerButton?: React.ReactNode;
 }
 
-const CSVUpload: React.FC = () => {
-  const [file, setFile] = useState<File | null>(null);
-  const [fileList, setFileList] = useState<string[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+const CSVUpload: React.FC<CSVUploadProps> = ({ onUploadSuccess, triggerButton }) => {
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number[]>([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { user } = useUser();
   const { toast } = useToast();
 
-    useEffect(() => {
-    if (user) {
-      fetchFileList();
-    }
-  }, [user]);
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+    if (e.target.files) {
+      setFiles(Array.from(e.target.files));
     }
   };
 
-  const uploadFile = async () => {
-    if (!file) {
-      setError('Please select a file to upload.');
-      return;
-    }
+  const handleFileRemove = (index: number) => {
+    setFiles(prevFiles => prevFiles.filter((_, i) => i !== index));
+  };
 
-    if (!user) {
-      setError('User not authenticated.');
-      return;
-    }
+  const uploadFiles = async () => {
+    if (files.length === 0 || !user) return;
 
-    const formData = new FormData();
-    formData.append('file', file);
-
-    setLoading(true);
-    setError(null);
+    setUploading(true);
+    setUploadProgress(new Array(files.length).fill(0));
 
     try {
-      await axios.post(`http://localhost:5000/upload/${user.id}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      toast({
-        title: 'Success',
-        description: 'File uploaded successfully!',
-        duration: 3000,
-      });
-      fetchFileList();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append('file', files[i]);
 
-  const fetchFileList = async () => {
-    if (!user) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await axios.get<{ files: string[] }>(`http://localhost:5000/list_files/${user.id}`);
-      setFileList(response.data.files);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteFile = async (filename: string) => {
-    if (!user) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      await axios.delete(`http://localhost:5000/delete_file/${user.id}/${filename}`);
-      toast({
-        title: 'Success',
-        description: 'File deleted successfully!',
-        duration: 3000,
-      });
-      fetchFileList();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUseCSV = async (filename: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await axios.get(`http://localhost:5000/get_file/${user?.id}/${filename}`, {
-        responseType: 'blob'
-      });
-
-      const file = new File([response.data], filename);
-      await processFile(file);
-
-    } catch (err) {
-      console.error("Error processing file:", err);
-      setError('Failed to process CSV data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const processFile = async (uploadedFile: File) => {
-    const fileType = uploadedFile.name.split('.').pop()?.toLowerCase();
-
-    if (fileType === 'csv') {
-      const fileReader = new FileReader();
-
-      fileReader.onload = (e: ProgressEvent<FileReader>) => {
-        const csvData = e.target?.result as string;
-        Papa.parse<FileData>(csvData, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            onUpload(results.data);
-          },
-        });
-      };
-      fileReader.readAsText(uploadedFile);
-    } else if (fileType === 'xlsx') {
-      const fileReader = new FileReader();
-
-      fileReader.onload = (e: ProgressEvent<FileReader>) => {
-        const binaryStr = e.target?.result;
-        const workbook = XLSX.read(binaryStr, { type: 'binary' });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
-
-        if (data.length > 0) {
-          const headers = data[0] as string[];
-          const rows = data.slice(1);
-
-          const processedData = rows.map((row: unknown[]) => {
-            const obj: FileData = {};
-            headers.forEach((header, index) => {
-              obj[header] = row[index];
+        await axios.post(`http://localhost:5000/upload/${user.id}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total ?? 1));
+            setUploadProgress(prevProgress => {
+              const newProgress = [...prevProgress];
+              newProgress[i] = percentCompleted;
+              return newProgress;
             });
-            return obj;
-          });
-
-          onUpload(processedData);
-        } else {
-          console.error('No data found in the Excel file');
-        }
-      };
-      fileReader.readAsBinaryString(uploadedFile);
-    } else {
-      console.error('Unsupported file type');
-    }
-  };
-
-  const onUpload = async (dataToUpload: FileData[]) => {
-    if (dataToUpload.length > 0) {
-      try {
-        const response = await fetch("/api/upload-csv", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
           },
-          body: JSON.stringify(dataToUpload),
         });
-        if (!response.ok) {
-          throw new Error("Failed to upload CSV data");
-        }
-        const responseData = await response.json();
-        toast({
-          title: 'Success',
-          description: responseData.message,
-          duration: 3000,
-        });
-      } catch (error) {
-        console.error("Error uploading CSV data:", error);
-        setError("Failed to upload CSV data");
       }
+
+      toast({
+        title: 'Success',
+        description: 'Files uploaded successfully!',
+        duration: 3000,
+      });
+
+      onUploadSuccess();
+      setFiles([]);
+      setIsDialogOpen(false);
+    } catch (err) {
+      console.error("Error uploading files:", err);
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'An unknown error occurred',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploading(false);
     }
   };
-  return (
-    <div className="max-w-4xl mx-auto p-6 space-y-8">
-      <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-        <Database className="w-8 h-8 mr-2 text-blue-500" />
-        CSV Uploader
-      </h1>
-      
-      <div className="bg-white shadow-md rounded-lg p-6">
-        <div className="flex items-center space-x-4">
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setFiles([]);
+      setUploadProgress([]);
+    }
+  };
+
+  const uploadContent = (
+    <div className="p-4 bg-white rounded-lg">
+      <h2 className="text-lg font-semibold mb-4">Add new files</h2>
+      {files.length === 0 ? (
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
           <Input
             type="file"
-            accept=".csv, .xlsx"
+            accept=".csv,.xlsx"
+            multiple
             onChange={handleFileChange}
-            className="flex-grow"
+            className="hidden"
+            id="file-upload"
           />
-          <Button
-            onClick={uploadFile}
-            disabled={loading}
-            className="flex items-center space-x-2"
-          >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Upload className="w-4 h-4" />
-            )}
-            <span>{loading ? 'Uploading...' : 'Upload'}</span>
+          <label htmlFor="file-upload" className="cursor-pointer">
+            <div className="flex flex-col items-center">
+              <Upload className="w-12 h-12 text-gray-400 mb-2" />
+              <p className="text-sm text-gray-600">Drag & Drop or Choose files to upload</p>
+              <p className="text-xs text-gray-400 mt-1">CSV or XLSX</p>
+            </div>
+          </label>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {files.map((file, index) => (
+            <div key={index} className="bg-gray-100 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center">
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                    <span className="text-green-600 text-xl">✓</span>
+                  </div>
+                  <span className="text-sm font-medium">{file.name}</span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => handleFileRemove(index)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              {uploading && <Progress value={uploadProgress[index]} className="w-full" />}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-4 flex justify-between items-center">
+        <div>
+          <Button variant="outline" className="mr-2" onClick={() => setIsDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={uploadFiles} disabled={files.length === 0 || uploading}>
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {uploading ? 'Uploading...' : 'Import'}
           </Button>
         </div>
-
-        {error && (
-          <Alert variant="destructive" className="mt-4">
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-      </div>
-
-      <div className="bg-white shadow-md rounded-lg p-6">
-        <h2 className="text-2xl font-semibold mb-4 text-gray-800 flex items-center">
-          <FileSpreadsheet className="w-6 h-6 mr-2 text-green-500" />
-          Uploaded Files
-        </h2>
-        {loading ? (
-          <div className="flex items-center justify-center h-32">
-            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-          </div>
-        ) : fileList.length > 0 ? (
-          <ul className="space-y-2">
-            {fileList.map((filename, index) => (
-              <li key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
-                <div className="flex items-center space-x-3">
-                  {filename.endsWith('.csv') ? (
-                    <Files className="w-5 h-5 text-green-500" />
-                  ) : (
-                    <FileSpreadsheet className="w-5 h-5 text-green-500" />
-                  )}
-                  <span className="text-sm font-medium text-gray-700">{filename}</span>
-                </div>
-                <div className="flex space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleUseCSV(filename)}
-                    className="flex items-center space-x-1 text-blue-600"
-                  >
-                    <ArrowUpRight className="w-4 h-4" />
-                    <span>Use File</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => deleteFile(filename)}
-                    className="flex items-center space-x-1 text-red-600"
-                  >
-                    <Trash className="w-4 h-4" />
-                    <span>Delete</span>
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-gray-500 text-center py-8 flex items-center justify-center">
-            <FileText className="w-5 h-5 mr-2 text-gray-400" />
-            No files uploaded yet.
-          </p>
-        )}
       </div>
     </div>
+  );
+
+  return (
+    <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
+      <DialogTrigger asChild>
+        {triggerButton || (
+          <Button className="flex items-center bg-blue-500 text-white hover:bg-blue-600">
+            <Upload className="mr-2 h-4 w-4" />
+            Upload Files
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Upload New Files</DialogTitle>
+        </DialogHeader>
+        {uploadContent}
+      </DialogContent>
+    </Dialog>
   );
 };
 

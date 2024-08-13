@@ -1,12 +1,12 @@
 "use client"
-import React, { useState, useEffect, useMemo, Suspense } from "react";
+import React, { useState, useEffect, useMemo, Suspense, useCallback } from "react";
 import dynamic from 'next/dynamic';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { toast } from "@/components/ui/use-toast";
 import { useUser } from '@clerk/nextjs';
-import { Loader2, PlusCircle, Edit, Save, Trash, Filter, FileIcon, BarChart, RefreshCw } from "lucide-react";
+import { Loader2, PlusCircle, Edit, Save, Trash, Filter, FileIcon, BarChart, RefreshCw, Settings, Trash2, Upload } from "lucide-react";
 import axios from 'axios';
 import { handleUseCSV, FileData } from "@/features/sqlite/api/file-content";
 import useFilesList from "@/features/sqlite/api/file-list";
@@ -27,25 +27,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-// import {
-//   Tabs,
-//   TabsContent,
-//   TabsList,
-//   TabsTrigger,
-// } from "@/components/ui/tabs";
-// import {
-//   Accordion,
-//   AccordionContent,
-//   AccordionItem,
-//   AccordionTrigger,
-// } from "@/components/ui/accordion";
-// import { Slider } from "@/components/ui/slider";
-// import { Progress } from "@/components/ui/progress";
+import CSVUpload from "@/features/sqlite/components/csvupload";
+import FileDelete from "@/features/sqlite/components/file-delete";
+
 
 
 const DataTable = dynamic<DataTableProps<FileData>>(() => 
@@ -59,6 +43,7 @@ interface DataTableProps<TData> {
   data: TData[]
   filterkey: string
   onRowSelectionChange: (rows: Row<TData>[]) => void
+  onReset: () => void
 }
 
 type DataItem = FileData;
@@ -74,13 +59,16 @@ const DataTablePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const { user, isLoaded: isUserLoaded } = useUser();
-  const { fileList, error: fileListError, loading: fileListLoading } = useFilesList(user?.id);
+  const { fileList, error: fileListError, loading: fileListLoading, refetch: refetchFileList } = useFilesList(user?.id);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editItem, setEditItem] = useState<Partial<DataItem> | null>(null);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [editField, setEditField] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<Row<DataItem>[]>([]);
   const [isAnalysisDrawerOpen, setIsAnalysisDrawerOpen] = useState(false);
+  const [tableKey, setTableKey] = useState(0);
+    const [selectedSheet, setSelectedSheet] = useState<number>(0);
+  const [sheetCount, setSheetCount] = useState<number>(1);
 
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
@@ -88,13 +76,9 @@ const DataTablePage: React.FC = () => {
     }
   }, [isUserLoaded, user, fileList, selectedFile]);
 
-  useEffect(() => {
-    if (isUserLoaded && user && selectedFile) {
-      fetchFileData(selectedFile);
-    }
-  }, [isUserLoaded, user, selectedFile]);
-
- const fetchFileData = async (filename: string) => {
+ 
+  
+  const fetchFileData = useCallback(async (filename: string) => {
     if (!user?.id) {
       console.error("User ID not available");
       setError("User ID not available");
@@ -103,13 +87,18 @@ const DataTablePage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      await handleUseCSV(
-        filename,
-        user.id,
-        setLoading,
-        setError,
-        processFetchedData
-      );
+      const response = await axios.get(`http://localhost:5000/get_file/${user.id}/${filename}`, {
+        params: { sheet: selectedSheet },
+      });
+      processFetchedData(response.data);
+      
+      // If it's an Excel file, get the sheet count
+      if (filename.endsWith('.xlsx') || filename.endsWith('.xls')) {
+        const sheetCountResponse = await axios.get(`http://localhost:5000/get_sheet_count/${user.id}/${filename}`);
+        setSheetCount(sheetCountResponse.data.sheet_count);
+      } else {
+        setSheetCount(1);
+      }
     } catch (err) {
       console.error("Error in fetchFileData:", err);
       setError("Failed to process file data");
@@ -121,6 +110,19 @@ const DataTablePage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  }, [user, selectedSheet]);
+   
+  useEffect(() => {
+    if (isUserLoaded && user && selectedFile) {
+      fetchFileData(selectedFile);
+    }
+  }, [isUserLoaded, user, selectedFile, selectedSheet, fetchFileData]);
+
+
+  //////////date functionality here TODO
+    const formatDate = (value: any): string => {
+    
+    return String(value);
   };
 
   const processFetchedData = (fetchedData: FileData[]) => {
@@ -128,18 +130,21 @@ const DataTablePage: React.FC = () => {
       const generatedColumns: ColumnDef<DataItem, any>[] = Object.keys(fetchedData[0]).map((key) => ({
         accessorKey: key,
         header: key,
-        cell: ({ row }) => (
-          <div className="flex items-center justify-between">
-            <span>{String(row.getValue(key))}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleEdit(row.index, key, row.getValue(key) as string)}
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const value = row.getValue(key);
+          return (
+            <div className="flex items-center justify-between">
+              <span>{formatDate(value)}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleEdit(row.index, key, formatDate(value))}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
+          );
+        },
       }));
       setColumns(generatedColumns);
       setData(fetchedData);
@@ -230,7 +235,6 @@ const DataTablePage: React.FC = () => {
     setData(prevData => prevData.filter((_, index) => !selectedIndices.includes(index)));
     setSelectedRows([]);
   };
-
   const handleSave = async () => {
     if (!user || !selectedFile) {
       toast({
@@ -249,13 +253,13 @@ const DataTablePage: React.FC = () => {
       
       toast({
         title: "Success",
-        description: "Data table content updated successfully",
+        description: "Insight Table content updated successfully",
       });
     } catch (error) {
       console.error("Error updating blob content:", error);
       toast({
         title: "Error",
-        description: "Failed to update data table content. Please try again.",
+        description: "Failed to update Insight Table content. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -263,7 +267,29 @@ const DataTablePage: React.FC = () => {
     }
   };
 
+  const handleReset = () => {
+    setTableKey(prevKey => prevKey + 1);
+    toast({
+      title: "Reset",
+      description: "All filters and sorting have been reset.",
+    });
+  };
+  
+//csv uploadings
+    
+  const handleUploadSuccess = useCallback(() => {
+    refetchFileList();
+    toast({
+      title: "Success",
+      description: "File uploaded successfully. The file list has been updated.",
+      duration: 3000,
+    });
+  }, [refetchFileList]);
 
+    const handleDeleteSuccess = useCallback(() => {
+    refetchFileList();
+      }, [refetchFileList]);
+  
   if (!isUserLoaded) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -280,47 +306,84 @@ const DataTablePage: React.FC = () => {
     );
   }
 
+  
   return (
-    <div className="max-w-screen-2xl mx-auto w-full pb-10 bg-gradient-to-br from-indigo-50 to-teal-50 min-h-screen p-6">
-      <Card className="mb-6 bg-white shadow-lg rounded-lg overflow-hidden border-t-4 border-indigo-500">
-        <CardHeader className="bg-indigo-50">
-          <CardTitle className="text-2xl flex items-center text-indigo-700">
+    <div className="max-w-screen-2xl mx-auto w-full pb-10 min-h-screen p-6">
+      <div className="mb-8 flex justify-between items-center">
+        <h1 className="text-3xl font-bold">Data Hub</h1>
+      </div>
+
+        <Card className="mb-6 shadow-lg rounded-lg overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-2xl flex items-center">
             <FileIcon className="mr-2" />
             File Selection
           </CardTitle>
+          <div className="flex items-center space-x-2">
+            <CSVUpload 
+              onUploadSuccess={handleUploadSuccess}
+              triggerButton={
+                <Button className="flex items-center bg-blue-500 text-white hover:bg-blue-600">
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload File
+                </Button>
+              }
+            />
+            <FileDelete 
+              fileList={fileList || []}
+              onDeleteSuccess={handleDeleteSuccess}
+            />
+          </div>
         </CardHeader>
         <CardContent className="p-4">
           {fileListLoading ? (
-            <div className="flex items-center text-indigo-600">
+            <div className="flex items-center text-blue-500">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               <span>Loading files...</span>
             </div>
           ) : fileListError ? (
             <span className="text-red-500">{fileListError}</span>
           ) : fileList && fileList.length > 0 ? (
-            <Select onValueChange={setSelectedFile} value={selectedFile || undefined}>
-              <SelectTrigger className="w-full border-indigo-300 focus:ring-indigo-500">
-                <SelectValue placeholder="Select a file" />
-              </SelectTrigger>
-              <SelectContent>
-                {fileList.map(file => (
-                  <SelectItem key={file} value={file}>
-                    {file}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-4">
+              <Select onValueChange={setSelectedFile} value={selectedFile || undefined}>
+                <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
+                  <SelectValue placeholder="Select a file" />
+                </SelectTrigger>
+                <SelectContent>
+                  {fileList.map(file => (
+                    <SelectItem key={file} value={file}>
+                      {file}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedFile && (selectedFile.endsWith('.xlsx') || selectedFile.endsWith('.xls')) && (
+                <Select onValueChange={(value) => setSelectedSheet(Number(value))} value={selectedSheet.toString()}>
+                  <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
+                    <SelectValue placeholder="Select a sheet" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: sheetCount }, (_, i) => (
+                      <SelectItem key={i} value={i.toString()}>
+                        Sheet {i + 1}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           ) : (
-            <span className="text-indigo-600">No files available</span>
+            <span className="text-blue-500">No files available</span>
           )}
         </CardContent>
       </Card>
 
-      <Card className="bg-white shadow-lg rounded-lg overflow-hidden border-t-4 border-teal-500">
-        <CardHeader className="bg-teal-50 flex flex-row items-center justify-between">
-          <CardTitle className="text-2xl text-teal-700">Data Table</CardTitle>
+
+      <Card className="shadow-lg rounded-lg overflow-hidden bg-white">
+        <CardHeader className="flex flex-row items-center justify-between bg-gray-50">
+          <CardTitle className="text-2xl">Insight Table</CardTitle>
           <div className="flex items-center gap-2">
-            <Button onClick={handleCreate} className="flex items-center bg-teal-500 text-white hover:bg-teal-600">
+            <Button onClick={handleCreate} className="bg-green-500 text-white hover:bg-green-600">
               <PlusCircle className="mr-2 h-4 w-4" />
               Create New
             </Button>
@@ -328,23 +391,30 @@ const DataTablePage: React.FC = () => {
               <Button
                 variant="destructive"
                 onClick={handleDelete}
-                className="flex items-center bg-red-500 hover:bg-red-600"
+                className="bg-red-500 hover:bg-red-600"
               >
-                <Trash className="mr-2 h-4 w-4" />
+                <Trash2 className="mr-2 h-4 w-4" />
                 Delete Selected ({selectedRows.length})
               </Button>
             )}
             <Button
               onClick={handleSave}
-              className="flex items-center bg-indigo-500 text-white hover:bg-indigo-600"
+              className="bg-blue-500 text-white hover:bg-blue-600"
               disabled={loading}
             >
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Data
             </Button>
+            <Button
+              onClick={handleReset}
+              className="bg-yellow-500 text-white hover:bg-yellow-600"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Reset All
+            </Button>
             <Sheet open={isAnalysisDrawerOpen} onOpenChange={setIsAnalysisDrawerOpen}>
               <SheetTrigger asChild>
-                <Button className="flex items-center bg-purple-500 text-white hover:bg-purple-600">
+                <Button className="bg-purple-500 text-white hover:bg-purple-600">
                   <BarChart className="mr-2 h-4 w-4" />
                   Analyze Data
                 </Button>
@@ -359,20 +429,22 @@ const DataTablePage: React.FC = () => {
         <CardContent className="p-4">
           {loading ? (
             <div className="flex justify-center items-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
             </div>
           ) : error ? (
             <p className="text-red-500">{error}</p>
           ) : data.length > 0 ? (
-            <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-teal-500" /></div>}>
+            <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>}>
               <DataTable
-                    columns={columns}
-                    data={data}
-                    onRowSelectionChange={setSelectedRows}
-                    filterkey={""} />
+                key={tableKey}
+                columns={columns}
+                data={data}
+                onRowSelectionChange={setSelectedRows}
+                onReset={handleReset}
+                filterkey={""} />
             </Suspense>
           ) : (
-            <p className="text-teal-600">No data available. Please select a file or upload a new one.</p>
+            <p className="text-blue-500">No data available. Please select a file or upload a new one.</p>
           )}
         </CardContent>
       </Card>
