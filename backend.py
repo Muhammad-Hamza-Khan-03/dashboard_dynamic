@@ -4,7 +4,8 @@ import sqlite3
 import io
 import csv
 import logging
-
+from datetime import datetime, timedelta
+import openpyxl
 import pandas as pd
 
 app = Flask(__name__)
@@ -23,6 +24,12 @@ def init_db():
     conn.close()
 
 init_db()
+
+def excel_date_to_string(excel_date):
+    if isinstance(excel_date, (int, float)):
+        return (datetime(1899, 12, 30) + timedelta(days=excel_date)).strftime('%Y-%m-%d')
+    return excel_date
+
 
 @app.route('/upload/<user_id>', methods=['POST'])
 def upload_file(user_id):
@@ -71,6 +78,31 @@ def list_files(user_id):
         app.logger.error(f"Error listing files: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/get_sheet_count/<user_id>/<filename>', methods=['GET'])
+def get_sheet_count(user_id, filename):
+    try:
+        conn = sqlite3.connect('user_csvs.db')
+        c = conn.cursor()
+        c.execute("SELECT content FROM csv_files WHERE user_id = ? AND filename = ?", (user_id, filename))
+        result = c.fetchone()
+        conn.close()
+        
+        if result:
+            content = result[0]
+            if filename.endswith('.xlsx') or filename.endswith('.xls'):
+                # Read Excel file
+                workbook = openpyxl.load_workbook(io.BytesIO(content))
+                sheet_count = len(workbook.sheetnames)
+                return jsonify({"sheet_count": sheet_count})
+            else:
+                return jsonify({"sheet_count": 1})  # CSV files have only one sheet
+        else:
+            return "File not found", 404
+    except Exception as e:
+        app.logger.error(f"Error getting sheet count: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    
+
 @app.route('/get_file/<user_id>/<filename>', methods=['GET'])
 def get_file(user_id, filename):
     try:
@@ -94,8 +126,13 @@ def get_file(user_id, filename):
                 csv_buffer = io.StringIO(content)
                 df = pd.read_csv(csv_buffer)
             
+            # Convert potential Excel dates to strings
+            for column in df.columns:
+                if df[column].dtype == 'float64' or df[column].dtype == 'int64':
+                    df[column] = df[column].apply(excel_date_to_string)
+            
             # Convert DataFrame to JSON
-            json_data = df.to_json(orient='records')
+            json_data = df.to_json(orient='records', date_format='iso')
             
             return json_data, 200, {'Content-Type': 'application/json'}
         else:
