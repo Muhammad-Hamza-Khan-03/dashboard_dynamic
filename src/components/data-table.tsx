@@ -10,6 +10,7 @@ import {
   getSortedRowModel,
   useReactTable,
   Row,
+  Column,
 } from "@tanstack/react-table"
 
 import {
@@ -23,23 +24,27 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose } from "@/components/ui/sheet"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import { Filter, ArrowUpDown } from 'lucide-react'
 
 interface DataTableProps<TData> {
   columns: ColumnDef<TData, any>[]
   data: TData[]
-  filterkey: string
   onRowSelectionChange: (rows: Row<TData>[]) => void
 }
 
 export function DataTable<TData>({
   columns,
   data,
-  filterkey,
   onRowSelectionChange,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [rowSelection, setRowSelection] = React.useState({})
+  const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
+  const [activeColumn, setActiveColumn] = React.useState<Column<TData, unknown> | null>(null)
 
   const table = useReactTable({
     data,
@@ -64,20 +69,23 @@ export function DataTable<TData>({
     onRowSelectionChange(selectedRows);
   }, [rowSelection, onRowSelectionChange, table]);
 
+  const openFilterPanel = (column: Column<TData, unknown>) => {
+    setActiveColumn(column)
+    setFilterPanelOpen(true)
+  }
+
+  const uniqueValues = React.useMemo(() => {
+    if (!activeColumn) return []
+    return Array.from(new Set(data.map(row => (row as any)[activeColumn.id])))
+  }, [activeColumn, data])
+
+  const isNumericColumn = React.useMemo(() => {
+    if (!activeColumn || uniqueValues.length === 0) return false
+    return typeof uniqueValues[0] === 'number'
+  }, [activeColumn, uniqueValues])
+
   return (
     <div>
-      {filterkey && (
-        <div className="flex items-center py-4">
-          <Input
-            placeholder={`Filter ${filterkey}...`}
-            value={(table.getColumn(filterkey)?.getFilterValue() as string) ?? ""}
-            onChange={(event) =>
-              table.getColumn(filterkey)?.setFilterValue(event.target.value)
-            }
-            className="max-w-sm"
-          />
-        </div>
-      )}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -92,45 +100,43 @@ export function DataTable<TData>({
                 </TableHead>
                 {headerGroup.headers.map((header) => (
                   <TableHead key={header.id}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
+                    <div className="flex items-center justify-between">
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openFilterPanel(header.column)}
+                      >
+                        <Filter className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableHead>
                 ))}
               </TableRow>
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
-                  <TableCell>
-                    <Checkbox
-                      checked={row.getIsSelected()}
-                      onCheckedChange={(value) => row.toggleSelected(!!value)}
-                      aria-label="Select row"
-                    />
-                  </TableCell>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={columns.length + 1} className="h-24 text-center">
-                  No results.
+            {table.getRowModel().rows.map((row) => (
+              <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+                <TableCell>
+                  <Checkbox
+                    checked={row.getIsSelected()}
+                    onCheckedChange={(value) => row.toggleSelected(!!value)}
+                    aria-label="Select row"
+                  />
                 </TableCell>
+                {row.getVisibleCells().map((cell) => (
+                  <TableCell key={cell.id}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                ))}
               </TableRow>
-            )}
+            ))}
           </TableBody>
         </Table>
       </div>
@@ -156,6 +162,83 @@ export function DataTable<TData>({
           Next
         </Button>
       </div>
+
+      <Sheet open={filterPanelOpen} onOpenChange={setFilterPanelOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Filter and Sort</SheetTitle>
+            <SheetDescription>
+              Apply filters and sorting to the {activeColumn?.id} column
+            </SheetDescription>
+          </SheetHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="filter">Filter</Label>
+              {isNumericColumn ? (
+                <div className="flex space-x-2">
+                  <Input
+                    id="min"
+                    placeholder="Min"
+                    type="number"
+                    onChange={(e) => {
+                      activeColumn?.setFilterValue((old: [number, number]) => [Number(e.target.value), old?.[1]])
+                    }}
+                  />
+                  <Input
+                    id="max"
+                    placeholder="Max"
+                    type="number"
+                    onChange={(e) => {
+                      activeColumn?.setFilterValue((old: [number, number]) => [old?.[0], Number(e.target.value)])
+                    }}
+                  />
+                </div>
+              ) : (
+                <Select
+                  onValueChange={(value) => activeColumn?.setFilterValue(value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a value" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueValues.map((value) => (
+                      <SelectItem key={value as string} value={value as string}>
+                        {value as string}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sort">Sort</Label>
+              <Select
+                onValueChange={(value) => {
+                  if (value === 'asc') {
+                    activeColumn?.toggleSorting(false)
+                  } else if (value === 'desc') {
+                    activeColumn?.toggleSorting(true)
+                  } else {
+                    activeColumn?.clearSorting()
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose sort order" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="asc">Ascending</SelectItem>
+                  <SelectItem value="desc">Descending</SelectItem>
+                  <SelectItem value="clear">Clear Sorting</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <SheetClose asChild>
+            <Button type="submit">Apply</Button>
+          </SheetClose>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

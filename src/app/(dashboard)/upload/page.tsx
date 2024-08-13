@@ -1,8 +1,8 @@
 "use client"
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
+import dynamic from 'next/dynamic';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DataTable } from "@/components/data-table";
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { toast } from "@/components/ui/use-toast";
 import { useUser } from '@clerk/nextjs';
@@ -32,20 +32,34 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Slider } from "@/components/ui/slider";
-import { Progress } from "@/components/ui/progress";
+// import {
+//   Tabs,
+//   TabsContent,
+//   TabsList,
+//   TabsTrigger,
+// } from "@/components/ui/tabs";
+// import {
+//   Accordion,
+//   AccordionContent,
+//   AccordionItem,
+//   AccordionTrigger,
+// } from "@/components/ui/accordion";
+// import { Slider } from "@/components/ui/slider";
+// import { Progress } from "@/components/ui/progress";
+
+
+const DataTable = dynamic<DataTableProps<FileData>>(() => 
+  import('@/components/data-table').then((mod) => mod.DataTable), {
+  loading: () => <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-teal-500" /></div>,
+  ssr: false,
+});
+
+interface DataTableProps<TData> {
+  columns: ColumnDef<TData, any>[]
+  data: TData[]
+  filterkey: string
+  onRowSelectionChange: (rows: Row<TData>[]) => void
+}
 
 type DataItem = FileData;
 
@@ -67,9 +81,6 @@ const DataTablePage: React.FC = () => {
   const [editField, setEditField] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<Row<DataItem>[]>([]);
   const [isAnalysisDrawerOpen, setIsAnalysisDrawerOpen] = useState(false);
-  const [filterColumn, setFilterColumn] = useState<string | null>(null);
-  const [filterValue, setFilterValue] = useState<string>("");
-  const [numericFilters, setNumericFilters] = useState<Record<string, { min: number, max: number }>>({});
 
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
@@ -113,7 +124,6 @@ const DataTablePage: React.FC = () => {
   };
 
   const processFetchedData = (fetchedData: FileData[]) => {
-    
     if (fetchedData && fetchedData.length > 0) {
       const generatedColumns: ColumnDef<DataItem, any>[] = Object.keys(fetchedData[0]).map((key) => ({
         accessorKey: key,
@@ -160,8 +170,6 @@ const DataTablePage: React.FC = () => {
     setEditField(null);
     setIsSheetOpen(true);
   };
-//save as blob
-
 
   const handleSaveItem = async () => {
     if (editItem) {
@@ -173,7 +181,6 @@ const DataTablePage: React.FC = () => {
         // Add new item
         updatedData.push(editItem as DataItem);
       }
-      
       
       try {
         await saveDataToBlob(updatedData);
@@ -218,7 +225,6 @@ const DataTablePage: React.FC = () => {
     }
   };
 
-///
   const handleDelete = () => {
     const selectedIndices = selectedRows.map(row => row.index);
     setData(prevData => prevData.filter((_, index) => !selectedIndices.includes(index)));
@@ -240,7 +246,7 @@ const DataTablePage: React.FC = () => {
       await axios.post(`http://localhost:5000/update_blob/${user.id}/${selectedFile}`, {
         newContent: data,
       });
-
+      
       toast({
         title: "Success",
         description: "Data table content updated successfully",
@@ -257,95 +263,7 @@ const DataTablePage: React.FC = () => {
     }
   };
 
-  const getColumnStats = (columnKey: string) => {
-    const values = data.map(item => item[columnKey]);
-    const numericValues = values.filter(value => !isNaN(Number(value))).map(Number);
 
-    return {
-      uniqueCount: new Set(values).size,
-      nonNullCount: values.filter(v => v !== null && v !== undefined && v !== "").length,
-      dataType: getDataType(values),
-      numericStats: numericValues.length > 0 ? {
-        min: Math.min(...numericValues),
-        max: Math.max(...numericValues),
-        avg: numericValues.reduce((a, b) => a + b, 0) / numericValues.length,
-      } : null,
-      topValues: getTopValues(values),
-    };
-  };
-
-  const getDataType = (values: any[]): string => {
-    const types = new Set(values.map(v => typeof v));
-    if (types.size === 1) return Array.from(types)[0];
-    if (types.has("number") && types.has("string")) return "mixed (number/string)";
-    return "mixed";
-  };
-
-const getTopValues = (values: any[]): { value: any, count: number }[] => {
-  const counts = values.reduce((acc, value) => {
-    acc[value] = (acc[value] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  return (Object.entries(counts) as [string, number][])
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([value, count]) => ({ value, count }));
-};
-
-
-
-  const getDataInfo = () => {
-    return {
-      rowCount: data.length,
-      columnCount: columns.length,
-      nullCount: data.reduce((acc, row) => {
-        Object.values(row).forEach(value => {
-          if (value === null || value === undefined || value === "") acc++;
-        });
-        return acc;
-      }, 0),
-    };
-  };
-
-  const handleFilterChange = (column: string) => {
-    setFilterColumn(column);
-    setFilterValue("");
-  };
-
-  const filteredData = useMemo(() => {
-    let filtered = data;
-    if (filterColumn && filterValue) {
-      filtered = filtered.filter(item =>
-        String(item[filterColumn]).toLowerCase().includes(filterValue.toLowerCase())
-      );
-    }
-    Object.entries(numericFilters).forEach(([key, { min, max }]) => {
-      filtered = filtered.filter(item => {
-        const value = Number(item[key]);
-        return value >= min && value <= max;
-      });
-    });
-    return filtered;
-  }, [data, filterColumn, filterValue, numericFilters]);
-
-  const handleNumericFilterChange = (columnKey: string, min: number, max: number) => {
-    setNumericFilters(prev => ({
-      ...prev,
-      [columnKey]: { min, max },
-    }));
-  };
-
-  const resetFilters = () => {
-    setFilterColumn(null);
-    setFilterValue("");
-    setNumericFilters({});
-  };
-  const getFilterKey = () => {
-    if (filterColumn) return filterColumn;
-    const firstColumnWithAccessorKey = columns.find(hasAccessorKey);
-    return firstColumnWithAccessorKey ? firstColumnWithAccessorKey.accessorKey : "";
-  };
   if (!isUserLoaded) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -402,85 +320,6 @@ const getTopValues = (values: any[]): { value: any, count: number }[] => {
         <CardHeader className="bg-teal-50 flex flex-row items-center justify-between">
           <CardTitle className="text-2xl text-teal-700">Data Table</CardTitle>
           <div className="flex items-center gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="flex items-center bg-white text-teal-600 border-teal-300 hover:bg-teal-50"
-                >
-                  <Filter className="mr-2 h-4 w-4" />
-                  Filter
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-80">
-                <div className="grid gap-4">
-                  <div className="space-y-2">
-                    <h4 className="font-medium leading-none">Filter Data</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Select a column and enter a value to filter the data.
-                    </p>
-                  </div>
-                  <div className="grid gap-2">
-                    <Select onValueChange={handleFilterChange} value={filterColumn || undefined}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select column" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {columns.map(column =>
-                          hasAccessorKey(column) ? (
-                            <SelectItem key={column.accessorKey} value={column.accessorKey}>
-                              {column.header as string}
-                            </SelectItem>
-                          ) : null
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      placeholder="Enter filter value"
-                      value={filterValue}
-                      onChange={e => setFilterValue(e.target.value)}
-                    />
-                  </div>
-                  <Accordion type="single" collapsible className="w-full mt-4">
-                    <AccordionItem value="numeric-filters">
-                      <AccordionTrigger>Numeric Filters</AccordionTrigger>
-                      <AccordionContent>
-                        {columns.map(column => {
-                          if (hasAccessorKey(column) && getDataType(data.map(item => item[column.accessorKey])) === "number") {
-                            const values = data.map(item => Number(item[column.accessorKey]));
-                            const min = Math.min(...values);
-                            const max = Math.max(...values);
-                            return (
-                              <div key={column.accessorKey} className="mb-4">
-                                <Label>{column.header as string}</Label>
-                                <Slider
-                                  min={min}
-                                  max={max}
-                                  step={(max - min) / 100}
-                                  value={[
-                                    numericFilters[column.accessorKey]?.min || min,
-                                    numericFilters[column.accessorKey]?.max || max,
-                                  ]}
-                                  onValueChange={([min, max]) => handleNumericFilterChange(column.accessorKey, min, max)}
-                                />
-                                <div className="flex justify-between text-sm mt-1">
-                                  <span>{numericFilters[column.accessorKey]?.min || min}</span>
-                                  <span>{numericFilters[column.accessorKey]?.max || max}</span>
-                                </div>
-                              </div>
-                            );
-                          }
-                          return null;
-                        })}
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                  <Button className="w-full mt-4" onClick={resetFilters}>
-                    Reset Filters
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
             <Button onClick={handleCreate} className="flex items-center bg-teal-500 text-white hover:bg-teal-600">
               <PlusCircle className="mr-2 h-4 w-4" />
               Create New
@@ -511,86 +350,7 @@ const getTopValues = (values: any[]): { value: any, count: number }[] => {
                 </Button>
               </SheetTrigger>
               <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
-                <SheetHeader>
-                  <SheetTitle>Data Analysis</SheetTitle>
-                  <SheetDescription>
-                    Explore detailed information about your data.
-                  </SheetDescription>
-                </SheetHeader>
-                <div className="mt-6">
-                  <Tabs defaultValue="overview" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="overview">Overview</TabsTrigger>
-                      <TabsTrigger value="columns">Columns</TabsTrigger>
-                      <TabsTrigger value="values">Top Values</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="overview">
-                      <div className="space-y-4">
-                        <h3 className="font-semibold text-lg">Data Information</h3>
-                        {(() => {
-                          const info = getDataInfo();
-                          return (
-                            <div className="grid grid-cols-2 gap-2">
-                              <p>Rows: {info.rowCount}</p>
-                              <p>Columns: {info.columnCount}</p>
-                              <p>Null Values: {info.nullCount}</p>
-                              <p>Non-Null Values: {info.rowCount * info.columnCount - info.nullCount}</p>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </TabsContent>
-                    <TabsContent value="columns">
-                      <Accordion type="single" collapsible className="w-full">
-                        {columns.map(column => {
-                          if (hasAccessorKey(column)) {
-                            const stats = getColumnStats(column.accessorKey);
-                            return (
-                              <AccordionItem key={column.accessorKey} value={column.accessorKey}>
-                                <AccordionTrigger>{column.header as string}</AccordionTrigger>
-                                <AccordionContent>
-                                  <div className="space-y-2">
-                                    <p>Data Type: {stats.dataType}</p>
-                                    <p>Unique Values: {stats.uniqueCount}</p>
-                                    <p>Non-Null Count: {stats.nonNullCount}</p>
-                                    {stats.numericStats && (
-                                      <>
-                                        <p>Min: {stats.numericStats.min.toFixed(2)}</p>
-                                        <p>Max: {stats.numericStats.max.toFixed(2)}</p>
-                                        <p>Average: {stats.numericStats.avg.toFixed(2)}</p>
-                                      </>
-                                    )}
-                                  </div>
-                                </AccordionContent>
-                              </AccordionItem>
-                            );
-                          }
-                          return null;
-                        })}
-                      </Accordion>
-                    </TabsContent>
-                    <TabsContent value="values">
-                      {columns.map(column => {
-                        if (hasAccessorKey(column)) {
-                          const topValues = getColumnStats(column.accessorKey).topValues;
-                          return (
-                            <div key={column.accessorKey} className="mb-4">
-                              <h3 className="font-semibold">{column.header as string}</h3>
-                              <ul className="list-disc pl-5">
-                                {topValues.map(({ value, count }, index) => (
-                                  <li key={index}>
-                                    {String(value)} ({count} occurrences)
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })}
-                    </TabsContent>
-                  </Tabs>
-                </div>
+                {/* Analysis content */}
               </SheetContent>
             </Sheet>
           </div>
@@ -603,13 +363,14 @@ const getTopValues = (values: any[]): { value: any, count: number }[] => {
             </div>
           ) : error ? (
             <p className="text-red-500">{error}</p>
-          ) : filteredData.length > 0 ? (
-            <DataTable
-      columns={columns}
-      data={filteredData}
-      filterkey={getFilterKey()}
-      onRowSelectionChange={setSelectedRows}
-    />
+          ) : data.length > 0 ? (
+            <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-teal-500" /></div>}>
+              <DataTable
+                    columns={columns}
+                    data={data}
+                    onRowSelectionChange={setSelectedRows}
+                    filterkey={""} />
+            </Suspense>
           ) : (
             <p className="text-teal-600">No data available. Please select a file or upload a new one.</p>
           )}
