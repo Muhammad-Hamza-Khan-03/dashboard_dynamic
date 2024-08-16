@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/select";
 import CSVUpload from "@/features/sqlite/components/csvupload";
 import FileDelete from "@/features/sqlite/components/file-delete";
-import { analyzeColumns, FileSummary, isValidDate } from "@/features/Data-table-store/helper/data-type-check";
 
 
 
@@ -80,44 +79,39 @@ const DataTablePage: React.FC = () => {
  
   
   const fetchFileData = useCallback(async (filename: string) => {
-  if (!user?.id) {
-    console.error("User ID not available");
-    setError("User ID not available");
-    return;
-  }
-  setLoading(true);
-  setError(null);
-  try {
-    const response = await axios.get(`http://localhost:5000/get_file/${user.id}/${filename}`, {
-      params: { sheet: selectedSheet },
-    });
-    processFetchedData(response.data);
-    
-    // If it's an Excel file, get the sheet count
-    if (filename.endsWith('.xlsx') || filename.endsWith('.xls')) {
-      try {
+    if (!user?.id) {
+      console.error("User ID not available");
+      setError("User ID not available");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await axios.get(`http://localhost:5000/get_file/${user.id}/${filename}`, {
+        params: { sheet: selectedSheet },
+      });
+      processFetchedData(response.data);
+      
+      // If it's an Excel file, get the sheet count
+      if (filename.endsWith('.xlsx') || filename.endsWith('.xls')) {
         const sheetCountResponse = await axios.get(`http://localhost:5000/get_sheet_count/${user.id}/${filename}`);
         setSheetCount(sheetCountResponse.data.sheet_count);
-      } catch (sheetCountError) {
-        console.error("Error fetching sheet count:", sheetCountError);
-        setSheetCount(1);  // Fallback to 1 sheet if we can't get the count
+      } else {
+        setSheetCount(1);
       }
-    } else {
-      setSheetCount(1);
+    } catch (err) {
+      console.error("Error in fetchFileData:", err);
+      setError("Failed to process file data");
+      toast({
+        title: "Error",
+        description: "Failed to process file data",
+        duration: 3000,
+      });
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error("Error in fetchFileData:", err);
-    setError("Failed to process file data");
-    toast({
-      title: "Error",
-      description: "Failed to process file data",
-      duration: 3000,
-    });
-  } finally {
-    setLoading(false);
-  }
   }, [user, selectedSheet]);
-  
+   
   useEffect(() => {
     if (isUserLoaded && user && selectedFile) {
       fetchFileData(selectedFile);
@@ -126,67 +120,41 @@ const DataTablePage: React.FC = () => {
 
 
   //////////date functionality here TODO
- const formatDate = (value: any): string => {
-  if (value instanceof Date) {
-    return value.toLocaleString();
-  }
-  if (typeof value === 'number' && value.toString().length === 10) {
-    // Assuming it's a Unix timestamp
-    return new Date(value * 1000).toLocaleString();
-  }
-  if (typeof value === 'string') {
-    const date = new Date(value);
-    if (!isNaN(date.getTime())) {
-      return date.toLocaleString();
-    }
-  }
-  return String(value);
-};
-
-const processFetchedData = (fetchedData: FileData[]) => {
-  if (fetchedData && fetchedData.length > 0) {
-    const fileSummary: FileSummary = analyzeColumns(Object.keys(fetchedData[0]), fetchedData);
+    const formatDate = (value: any): string => {
     
-    const generatedColumns: ColumnDef<DataItem, any>[] = Object.keys(fetchedData[0]).map((key) => ({
-      accessorKey: key,
-      header: key,
-      cell: ({ row }) => {
-        const value = row.getValue(key);
-        let formattedValue: string | number = '';
-        
-        if (typeof value === 'string' && fileSummary.columnTypes[key] === 'Datetime' && isValidDate(value)) {
-          formattedValue = new Date(value).toLocaleDateString();
-        } else if (typeof value === 'number' && fileSummary.columnTypes[key] === 'Datetime') {
-          // Handle potential Excel serial dates
-          const date = new Date((value - 25569) * 86400 * 1000);
-          formattedValue = date.toLocaleDateString();
-        } else if (value !== null && value !== undefined) {
-          formattedValue = String(value);
-        }
+    return String(value);
+  };
 
-        return (
-          <div className="flex items-center justify-between">
-            <span>{formattedValue}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleEdit(row.index, key, formattedValue)}
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-          </div>
-        );
-      },
-    }));
-    setColumns(generatedColumns);
-    setData(fetchedData);
-  } else {
-    console.warn("Received empty or invalid data");
-    setColumns([]);
-    setData([]);
-    setError("No data found in the file");
-  }
-};
+  const processFetchedData = (fetchedData: FileData[]) => {
+    if (fetchedData && fetchedData.length > 0) {
+      const generatedColumns: ColumnDef<DataItem, any>[] = Object.keys(fetchedData[0]).map((key) => ({
+        accessorKey: key,
+        header: key,
+        cell: ({ row }) => {
+          const value = row.getValue(key);
+          return (
+            <div className="flex items-center justify-between">
+              <span>{formatDate(value)}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleEdit(row.index, key, formatDate(value))}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
+          );
+        },
+      }));
+      setColumns(generatedColumns);
+      setData(fetchedData);
+    } else {
+      console.warn("Received empty or invalid data");
+      setColumns([]);
+      setData([]);
+      setError("No data found in the file");
+    }
+  };
   
   const handleEdit = (index: number, field: string, value: string) => {
     setEditItem({ [field]: value });
