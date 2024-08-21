@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import CSVUpload from "@/features/sqlite/components/csvupload";
 import FileDelete from "@/features/sqlite/components/file-delete";
+import { Progress } from "@/components/ui/progress";
 
 
 
@@ -69,6 +70,10 @@ const DataTablePage: React.FC = () => {
   const [tableKey, setTableKey] = useState(0);
     const [selectedSheet, setSelectedSheet] = useState<number>(0);
   const [sheetCount, setSheetCount] = useState<number>(1);
+ const [currentChunk, setCurrentChunk] = useState(0);
+  const [hasMoreChunks, setHasMoreChunks] = useState(true);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [loadingProgress, setLoadingProgress] = useState(0);
 
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
@@ -77,8 +82,7 @@ const DataTablePage: React.FC = () => {
   }, [isUserLoaded, user, fileList, selectedFile]);
 
  
-  
-  const fetchFileData = useCallback(async (filename: string) => {
+const fetchFileData = useCallback(async (filename: string, chunkNumber: number = 0) => {
     if (!user?.id) {
       console.error("User ID not available");
       setError("User ID not available");
@@ -88,35 +92,98 @@ const DataTablePage: React.FC = () => {
     setError(null);
     try {
       const response = await axios.get(`http://localhost:5000/get_file/${user.id}/${filename}`, {
-        params: { sheet: selectedSheet },
+        params: { sheet: selectedSheet, chunk: chunkNumber },
+        responseType: 'text',
+         onDownloadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+          setLoadingProgress(percentCompleted);
+        }
       });
-      processFetchedData(response.data);
       
-      // If it's an Excel file, get the sheet count
+      const csvData = response.data;
+      if (csvData.trim() === "Invalid sheet index") {
+        throw new Error("Invalid sheet index");
+      }
+      
+      const parsedData = parseCSV(csvData);
+      
+      if (chunkNumber === 0) {
+        setData(parsedData);
+        setColumns(generateColumns(parsedData[0]));
+      } else {
+        setData(prevData => [...prevData, ...parsedData.slice(1)]); // Skip header row for subsequent chunks
+      }
+      
+      setHasMoreChunks(parsedData.length === 5001); // 5000 rows + header
+      setCurrentChunk(chunkNumber);
+      
+      // If it's an Excel file, get the sheet count and names
       if (filename.endsWith('.xlsx') || filename.endsWith('.xls')) {
-        const sheetCountResponse = await axios.get(`http://localhost:5000/get_sheet_count/${user.id}/${filename}`);
-        setSheetCount(sheetCountResponse.data.sheet_count);
+        const sheetInfoResponse = await axios.get(`http://localhost:5000/get_sheet_count/${user.id}/${filename}`);
+        setSheetCount(sheetInfoResponse.data.sheet_count);
+        setSheetNames(sheetInfoResponse.data.sheet_names || []);
       } else {
         setSheetCount(1);
+        setSheetNames(['Sheet1']);
       }
     } catch (err) {
       console.error("Error in fetchFileData:", err);
-      setError("Failed to process file data");
+      setError(err instanceof Error ? err.message : "Failed to process file data");
       toast({
         title: "Error",
-        description: "Failed to process file data",
+        description: err instanceof Error ? err.message : "Failed to process file data",
         duration: 3000,
       });
     } finally {
       setLoading(false);
     }
   }, [user, selectedSheet]);
-   
   useEffect(() => {
     if (isUserLoaded && user && selectedFile) {
       fetchFileData(selectedFile);
     }
   }, [isUserLoaded, user, selectedFile, selectedSheet, fetchFileData]);
+  
+  const loadMoreData = () => {
+    if (hasMoreChunks && selectedFile) {
+      fetchFileData(selectedFile, currentChunk + 1);
+    }
+  };
+
+  const parseCSV = (csvString: string): FileData[] => {
+    const lines = csvString.split('\n');
+    const headers = lines[0].split(',');
+    return lines.slice(1).map(line => {
+      const values = line.split(',');
+      const obj: FileData = {};
+      headers.forEach((header, index) => {
+        obj[header] = values[index];
+      });
+      return obj;
+    });
+  };
+
+  const generateColumns = (firstRow: FileData): ColumnDef<DataItem, any>[] => {
+    return Object.keys(firstRow).map((key) => ({
+      accessorKey: key,
+      header: key,
+      cell: ({ row }) => {
+        const value = row.getValue(key);
+        return (
+          <div className="flex items-center justify-between">
+            <span>{formatDate(value)}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleEdit(row.index, key, formatDate(value))}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+          </div>
+        );
+      },
+    }));
+  };
 
 
   //////////date functionality here TODO
@@ -358,18 +425,18 @@ const DataTablePage: React.FC = () => {
                 </SelectContent>
               </Select>
               {selectedFile && (selectedFile.endsWith('.xlsx') || selectedFile.endsWith('.xls')) && (
-                <Select onValueChange={(value) => setSelectedSheet(Number(value))} value={selectedSheet.toString()}>
-                  <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
-                    <SelectValue placeholder="Select a sheet" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: sheetCount }, (_, i) => (
-                      <SelectItem key={i} value={i.toString()}>
-                        Sheet {i + 1}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <Select onValueChange={(value) => setSelectedSheet(Number(value))} value={selectedSheet.toString()}>
+              <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
+                <SelectValue placeholder="Select a sheet" />
+              </SelectTrigger>
+              <SelectContent>
+                {sheetNames.map((name, index) => (
+                  <SelectItem key={index} value={index.toString()}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
               )}
             </div>
           ) : (
@@ -426,23 +493,33 @@ const DataTablePage: React.FC = () => {
           </div>
         </CardHeader>
 
-        <CardContent className="p-4">
+         <CardContent className="p-4">
           {loading ? (
+                <div className="space-y-4">
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            </div>
+            <Progress value={loadingProgress} className="w-full" />
             </div>
           ) : error ? (
             <p className="text-red-500">{error}</p>
           ) : data.length > 0 ? (
-            <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>}>
-              <DataTable
-                key={tableKey}
-                columns={columns}
-                data={data}
-                onRowSelectionChange={setSelectedRows}
-                onReset={handleReset}
-                filterkey={""} />
-            </Suspense>
+            <>
+              <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>}>
+                <DataTable
+                  key={tableKey}
+                  columns={columns}
+                  data={data}
+                  onRowSelectionChange={setSelectedRows}
+                  onReset={handleReset}
+                  filterkey={""} />
+              </Suspense>
+              {hasMoreChunks && (
+                <Button onClick={loadMoreData} className="mt-4">
+                  Load More
+                </Button>
+              )}
+            </>
           ) : (
             <p className="text-blue-500">No data available. Please select a file or upload a new one.</p>
           )}

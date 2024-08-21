@@ -1,10 +1,12 @@
-from flask import Flask, request, send_file, jsonify
+import traceback
+from flask import Flask, Response, request, send_file, jsonify
 from flask_cors import CORS
 import sqlite3
 import io
 import csv
 import logging
 
+import openpyxl
 import pandas as pd
 
 app = Flask(__name__)
@@ -82,28 +84,111 @@ def get_file(user_id, filename):
         
         if result:
             content = result[0]
+            chunk_size = 50 * 1024 * 1024  # 50MB chunks
+            chunk_number = int(request.args.get('chunk', 0))
+            
+            app.logger.info(f"Processing file: {filename} for user: {user_id}, chunk: {chunk_number}")
             
             if filename.endswith('.xlsx'):
                 # Handle Excel file
                 excel_buffer = io.BytesIO(content)
-                df = pd.read_excel(excel_buffer)
+                sheet_index = int(request.args.get('sheet', 0))
+                
+                def generate_excel_chunks():
+                    try:
+                        book = openpyxl.load_workbook(excel_buffer, read_only=True)
+                        sheet = book.worksheets[sheet_index]
+                        
+                        headers = [cell.value for cell in sheet[1]]
+                        yield ','.join(map(str, headers)) + '\n'
+                        
+                        row_count = sheet.max_row
+                        start_row = chunk_number * chunk_size + 2
+                        end_row = min((chunk_number + 1) * chunk_size + 1, row_count)
+                        
+                        for row in sheet.iter_rows(min_row=start_row, max_row=end_row, values_only=True):
+                            yield ','.join(map(str, row)) + '\n'
+                        
+                        if end_row >= row_count:
+                            yield 'EOF'
+                    except Exception as e:
+                        app.logger.error(f"Error processing Excel file: {str(e)}")
+                        app.logger.error(traceback.format_exc())
+                        yield f"Error: {str(e)}"
+                
+                return Response(generate_excel_chunks(), mimetype='text/csv')
             else:
                 # Handle CSV file
                 if isinstance(content, bytes):
                     content = content.decode('utf-8')
                 csv_buffer = io.StringIO(content)
-                df = pd.read_csv(csv_buffer)
-            
-            # Convert DataFrame to JSON
-            json_data = df.to_json(orient='records')
-            
-            return json_data, 200, {'Content-Type': 'application/json'}
+                
+                def generate_csv_chunks():
+                    try:
+                        reader = csv.reader(csv_buffer)
+                        headers = next(reader)
+                        yield ','.join(headers) + '\n'
+                        
+                        csv_buffer.seek(0)
+                        csv_buffer.readline()  # Skip header
+                        
+                        start_pos = chunk_number * chunk_size
+                        csv_buffer.seek(start_pos)
+                        
+                        bytes_read = 0
+                        for row in reader:
+                            row_data = ','.join(row) + '\n'
+                            bytes_read += len(row_data)
+                            yield row_data
+                            
+                            if bytes_read >= chunk_size:
+                                break
+                        
+                        if csv_buffer.tell() >= len(content):
+                            yield 'EOF'
+                    except Exception as e:
+                        app.logger.error(f"Error processing CSV file: {str(e)}")
+                        app.logger.error(traceback.format_exc())
+                        yield f"Error: {str(e)}"
+                
+                return Response(generate_csv_chunks(), mimetype='text/csv')
         else:
+            app.logger.warning(f"File not found: {filename} for user: {user_id}")
             return "File not found", 404
     except Exception as e:
         app.logger.error(f"Error retrieving file: {str(e)}")
-        return str(e), 500
+        app.logger.error(traceback.format_exc())
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
     
+@app.route('/get_sheet_count/<user_id>/<filename>', methods=['GET'])
+def get_sheet_count(user_id, filename):
+    try:
+        conn = sqlite3.connect('user_csvs.db')
+        c = conn.cursor()
+        c.execute("SELECT content FROM csv_files WHERE user_id = ? AND filename = ?", (user_id, filename))
+        result = c.fetchone()
+        conn.close()
+        
+        if result:
+            content = result[0]
+            
+            if filename.endswith('.xlsx'):
+                excel_buffer = io.BytesIO(content)
+                book = openpyxl.load_workbook(excel_buffer, read_only=True)
+                sheet_count = len(book.worksheets)
+                sheet_names = book.sheetnames
+                app.logger.info(f"Sheet names for {filename}: {sheet_names}")
+                return jsonify({"sheet_count": sheet_count, "sheet_names": sheet_names})
+            else:
+                app.logger.info(f"CSV file {filename}: single sheet")
+                return jsonify({"sheet_count": 1, "sheet_names": ["Sheet1"]})
+        else:
+            app.logger.warning(f"File not found: {filename}")
+            return "File not found", 404
+    except Exception as e:
+        app.logger.error(f"Error getting sheet count: {str(e)}")
+        return str(e), 500
+        
 @app.route('/delete_file/<user_id>/<filename>', methods=['DELETE'])
 def delete_file(user_id, filename):
     try:
