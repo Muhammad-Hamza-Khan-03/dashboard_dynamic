@@ -13,10 +13,7 @@ const routes = [
         href: "/upload",
         label: "Data Table"
     },
-    {
-        href: "/csvupload",
-        label: "Upload file"
-    },
+    
     
     
     {
