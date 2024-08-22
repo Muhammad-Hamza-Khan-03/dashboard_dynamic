@@ -36,3 +36,4 @@ yarn-error.log*
 next-env.d.ts
 
 user_csvs.db
+user_files.db
