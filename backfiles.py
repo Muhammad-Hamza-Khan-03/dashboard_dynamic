@@ -76,44 +76,7 @@ def list_files(user_id):
         app.logger.error(f"Error listing files: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/get_file/<user_id>/<filename>', methods=['GET'])
-def get_file(user_id, filename):
-    try:
-        conn = sqlite3.connect('user_files.db')
-        c = conn.cursor()
-        c.execute("SELECT content FROM user_files WHERE user_id = ? AND filename = ?", (user_id, filename))
-        result = c.fetchone()
-        conn.close()
         
-        if result:
-            content = result[0]
-            chunk_size = 5000
-            chunk_number = int(request.args.get('chunk', 0))
-            
-            app.logger.info(f"Processing file: {filename} for user: {user_id}, chunk: {chunk_number}")
-            
-            file_extension = filename.split('.')[-1].lower()
-            
-            if file_extension == 'xlsx':
-                return process_excel(content, chunk_number, chunk_size)
-            elif file_extension in ['csv', 'tsv', 'txt']:
-                return process_text(content, chunk_number, chunk_size, delimiter=',' if file_extension == 'csv' else '\t')
-            elif file_extension == 'db':
-                return process_sqlite(content, chunk_number, chunk_size)
-            elif file_extension == 'xml':
-                return process_xml(content, chunk_number, chunk_size)
-            elif file_extension == 'pdf':
-                return process_pdf(content, chunk_number, chunk_size)
-            else:
-                return "Unsupported file type", 400
-        else:
-            app.logger.warning(f"File not found: {filename} for user: {user_id}")
-            return "File not found", 404
-    except Exception as e:
-        app.logger.error(f"Error retrieving file: {str(e)}")
-        app.logger.error(traceback.format_exc())
-        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
-    
 def process_excel(content, chunk_number, chunk_size):
     excel_buffer = io.BytesIO(content)
     sheet_index = int(request.args.get('sheet', 0))
@@ -177,77 +140,49 @@ def process_text(content, chunk_number, chunk_size, delimiter=','):
     
     return Response(generate_text_chunks(), mimetype='text/plain')
 
-@app.route('/get_table_count/<user_id>/<filename>', methods=['GET'])
-def get_table_count(user_id, filename):
-    try:
-        conn = sqlite3.connect('user_files.db')
-        c = conn.cursor()
-        c.execute("SELECT content FROM user_files WHERE user_id = ? AND filename = ?", (user_id, filename))
-        result = c.fetchone()
-        conn.close()
 
-        if result:
-            content = result[0]
-            temp_db = io.BytesIO(content)
-
-            with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as temp_db_file:
-                temp_db_file.write(content)
-                temp_db_path = temp_db_file.name
-
-            conn = sqlite3.connect(temp_db_path)
-            cursor = conn.cursor()
-
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = [table[0] for table in cursor.fetchall()]
-            conn.close()
-
-            app.logger.info(f"Tables in {filename}: {tables}")
-            return jsonify({"table_count": len(tables), "table_names": tables})
-        else:
-            app.logger.warning(f"File not found: {filename}")
-            return "File not found", 404
-    except Exception as e:
-        app.logger.error(f"Error getting table count: {str(e)}")
-        return str(e), 500
-
-def process_sqlite(content, chunk_number, chunk_size):
+def process_sqlite(content, chunk_number, chunk_size,table_name): # noqa
+    
     def generate_sqlite_chunks():
         conn = None
-        table_name = None
+        table_name = "Models"#strange.......................here
         try:
             # Create a temporary file to store the SQLite database content
             with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as temp_db_file:
                 temp_db_file.write(content)
                 temp_db_path = temp_db_file.name
 
+            app.logger.info(f"Temporary SQLite file created at: {temp_db_path}")
+
             # Connect to the SQLite database using the temporary file
             conn = sqlite3.connect(temp_db_path)
             cursor = conn.cursor()
 
-            app.logger.info(f"Initial table_name: {table_name}")
+            app.logger.info(f"Connected to SQLite database. Processing table: {table_name}")
 
-            # Ensure table_name is defined and valid
+            # If no table is specified, get the list of tables
             if not table_name:
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
                 tables = cursor.fetchall()
-
+                # app.logger.info(f"Tables in the database: {tables}")
+                
                 if not tables:
-                    app.logger.warning("No tables found in the database")
+                    # app.logger.warning("No tables found in the database")
                     yield "No tables found in the database"
                     return
 
                 # Assign the first table name
                 table_name = tables[0][0]
-                app.logger.info(f"No table specified. Defaulting to the first table: {table_name}")
+                # app.logger.info(f"No table specified. Defaulting to the first table: {table_name}")
             else:
                 # Verify the specified table_name exists
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
                 if cursor.fetchone() is None:
-                    app.logger.warning(f"Specified table '{table_name}' does not exist.")
+                    # app.logger.warning(f"Specified table '{table_name}' does not exist.")
                     yield f"Specified table '{table_name}' does not exist."
                     return
 
-            app.logger.info(f"Processing table: {table_name}")
+            app.logger.info(f"Fetching columns for table: {table_name}")
 
             # Fetch and yield table headers
             cursor.execute(f"PRAGMA table_info({table_name})")
@@ -261,6 +196,7 @@ def process_sqlite(content, chunk_number, chunk_size):
             yield ','.join(headers) + '\n'
 
             # Fetch and yield table rows in chunks
+            app.logger.info(f"Fetching rows for table {table_name}. Chunk: {chunk_number}, Size: {chunk_size}")
             cursor.execute(f"SELECT * FROM {table_name} LIMIT ? OFFSET ?", 
                            (chunk_size, chunk_number * chunk_size))
             rows = cursor.fetchall()
@@ -270,14 +206,20 @@ def process_sqlite(content, chunk_number, chunk_size):
                 yield ','.join(map(str, row)) + '\n'
 
             if len(rows) < chunk_size:
+                app.logger.info("Reached end of data")
                 yield 'EOF'
                 
+        except sqlite3.Error as e:
+            app.logger.error(f"SQLite error occurred: {e}")
+            yield f"SQLite Error: {str(e)}"
         except Exception as e:
             app.logger.error(f"Error processing SQLite file: {str(e)}")
+            app.logger.error(traceback.format_exc())
             yield f"Error: {str(e)}"
         finally:
             if conn:
                 conn.close()
+                app.logger.info("SQLite connection closed")
 
     return Response(generate_sqlite_chunks(), mimetype='text/csv')
 
@@ -337,6 +279,86 @@ def process_pdf(content, chunk_number, chunk_size):
     
     return Response(generate_pdf_chunks(), mimetype='text/csv')
 
+@app.route('/get_table_count/<user_id>/<filename>', methods=['GET'])
+def get_table_count(user_id, filename):
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        c.execute("SELECT content FROM user_files WHERE user_id = ? AND filename = ?", (user_id, filename))
+        result = c.fetchone()
+        conn.close()
+
+        if result:
+            content = result[0]
+            temp_db = io.BytesIO(content)
+
+            with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as temp_db_file:
+                temp_db_file.write(content)
+                temp_db_path = temp_db_file.name
+
+            conn = sqlite3.connect(temp_db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = [table[0] for table in cursor.fetchall()]
+            conn.close()
+
+            app.logger.info(f"Tables in {filename}: {tables}")
+            return jsonify({"table_count": len(tables), "table_names": tables})
+        else:
+            app.logger.warning(f"File not found: {filename}")
+            return "File not found", 404
+    except Exception as e:
+        app.logger.error(f"Error getting table count: {str(e)}")
+        return str(e), 500
+
+
+@app.route('/get_file/<user_id>/<filename>', methods=['GET'])
+def get_file(user_id, filename):
+    try:
+        app.logger.info(f"Received request for file: {filename}, user: {user_id}")
+        
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        c.execute("SELECT content FROM user_files WHERE user_id = ? AND filename = ?", (user_id, filename))
+        result = c.fetchone()
+        conn.close()
+        if result:
+            content = result[0]
+            chunk_size = 5000
+            chunk_number = int(request.args.get('chunk', 0))
+            table_name = request.args.get('table')
+            app.logger.info("2selected table: ",table_name)
+            app.logger.info(f"Processing file: {filename} for user: {user_id}, chunk: {chunk_number}, table: {table_name}")
+            
+            file_extension = filename.split('.')[-1].lower()
+            
+            if file_extension == 'db':
+                app.logger.info("Detected SQLite database file")
+                return process_sqlite(content, chunk_number, chunk_size,table_name)
+            elif file_extension == 'xlsx':
+                app.logger.info("Detected Excel file")
+                return process_excel(content, chunk_number, chunk_size)
+            elif file_extension in ['csv', 'tsv', 'txt']:
+                app.logger.info(f"Detected text file: {file_extension}")
+                return process_text(content, chunk_number, chunk_size, delimiter=',' if file_extension == 'csv' else '\t')
+            elif file_extension == 'xml':
+                app.logger.info("Detected XML file")
+                return process_xml(content, chunk_number, chunk_size)
+            elif file_extension == 'pdf':
+                app.logger.info("Detected PDF file")
+                return process_pdf(content, chunk_number, chunk_size)
+            else:
+                app.logger.warning(f"Unsupported file type: {file_extension}")
+                return "Unsupported file type", 400
+        else:
+            app.logger.warning(f"File not found: {filename} for user: {user_id}")
+            return "File not found", 404
+    except Exception as e:
+        app.logger.error(f"Error retrieving file: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+    
 @app.route('/get_sheet_count/<user_id>/<filename>', methods=['GET'])
 def get_sheet_count(user_id, filename):
     try:

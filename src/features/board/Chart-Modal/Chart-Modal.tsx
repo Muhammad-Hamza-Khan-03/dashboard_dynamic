@@ -20,6 +20,7 @@ interface ChartModalProps {
 const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns, setSelectedColumns, onExport }) => {
     const { showModal, chartType, openModal, closeModal, setChartType } = useModalSheet();
 
+    
     const loading = false;
     const error = null;
     const handleChartTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -32,6 +33,7 @@ const ChartModal: React.FC<ChartModalProps> = ({ data, columns, selectedColumns,
         );
     };
 
+    
     const handleExport = () => {
         const chartData = {
             type: chartType,

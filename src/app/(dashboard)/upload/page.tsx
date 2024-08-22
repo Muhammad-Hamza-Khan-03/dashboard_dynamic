@@ -31,7 +31,7 @@ import FileUpload from "./fileupload";
 import FileDelete from "@/features/sqlite/components/file-delete";
 import { Progress } from "@/components/ui/progress";
 
-const DataTable = dynamic<DataTableProps<FileData>>(() => 
+const DataTable = dynamic<DataTableProps<FileData>>(() =>
   import('@/components/data-table').then((mod) => mod.DataTable), {
   loading: () => <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-teal-500" /></div>,
   ssr: false,
@@ -68,145 +68,146 @@ const DataTablePage: React.FC = () => {
   const [hasMoreChunks, setHasMoreChunks] = useState(true);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [loadingProgress, setLoadingProgress] = useState(0);
-
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [tableNames, setTableNames] = useState<string[]>([]);
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
       setSelectedFile(fileList[0]);
     }
   }, [isUserLoaded, user, fileList, selectedFile]);
 
-const [selectedTable, setSelectedTable] = useState<string | null>(null);
-const [tableNames, setTableNames] = useState<string[]>([]);
 
 
-const fetchFileData = useCallback(async (filename: string, chunkNumber: number = 0) => {
+  const fetchFileData = useCallback(async (filename: string, chunkNumber: number = 0) => {
     if (!user?.id) {
-        console.error("User ID not available");
-        setError("User ID not available");
-        return;
+      console.error("User ID not available");
+      setError("User ID not available");
+      return;
     }
     setLoading(true);
     setError(null);
     try {
-        const response = await axios.get(`http://localhost:5000/get_file/${user.id}/${filename}`, {
-            params: { table: selectedTable, chunk: chunkNumber },
-            responseType: 'text',
-            onDownloadProgress: (progressEvent) => {
-                const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
-                setLoadingProgress(percentCompleted);
-            }
-        });
-
-        const fileData = response.data;
-        console.log("Fetched file data:", fileData);
-
-        if (!fileData || fileData.trim() === "EOF") {
-            setHasMoreChunks(false);
-            return;
+      const response = await axios.get(`http://localhost:5000/get_file/${user.id}/${filename}`, {
+        params: { table: selectedTable, chunk: chunkNumber },
+        responseType: 'text',
+        onDownloadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+          setLoadingProgress(percentCompleted);
         }
+      });
 
-        const parsedData = parseFileData(fileData, filename);
-        console.log("Parsed file data:", parsedData);
+      const fileData = response.data;
+      console.log("Fetched file data:", fileData);
 
-        if (chunkNumber === 0) {
-            setData(parsedData);
-            if (parsedData.length > 0) {
-                setColumns(generateColumns(parsedData[0]));
-            } else {
-                setColumns([]);
-            }
+      if (!fileData || fileData.trim() === "EOF") {
+        setHasMoreChunks(false);
+        return;
+      }
+
+      const parsedData = parseFileData(fileData, filename);
+      console.log("Parsed file data:", parsedData);
+
+      if (chunkNumber === 0) {
+        setData(parsedData);
+        if (parsedData.length > 0) {
+          setColumns(generateColumns(parsedData[0]));
         } else {
-            setData(prevData => [...prevData, ...parsedData.slice(1)]);
+          setColumns([]);
         }
+      } else {
+        setData(prevData => [...prevData, ...parsedData.slice(1)]);
+      }
 
-        setHasMoreChunks(parsedData.length === 5001); // Assuming 5000 rows per chunk + header row
-        setCurrentChunk(chunkNumber);
+      setHasMoreChunks(parsedData.length === 5001); // Assuming 5000 rows per chunk + header row
+      setCurrentChunk(chunkNumber);
     } catch (err) {
-        console.error("Error in fetchFileData:", err);
-        setError(err instanceof Error ? err.message : "Failed to process file data");
-        toast({
-            title: "Error",
-            description: err instanceof Error ? err.message : "Failed to process file data",
-            duration: 3000,
-        });
+      console.error("Error in fetchFileData:", err);
+      setError(err instanceof Error ? err.message : "Failed to process file data");
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to process file data",
+        duration: 3000,
+      });
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-}, [user, selectedTable]);
+  }, [user, selectedTable, toast]);
 
-
-useEffect(() => {
+  useEffect(() => {
     if (isUserLoaded && user && selectedFile) {
-        fetchFileData(selectedFile);
+      fetchFileData(selectedFile);
     }
-}, [isUserLoaded, user, selectedFile, selectedTable, fetchFileData]);
+  }, [isUserLoaded, user, selectedFile, selectedTable, fetchFileData]);
+
   const fetchTableNames = useCallback(async (filename: string) => {
-        if (!user?.id) {
-        console.error("User ID not available");
-        toast({
-            title: "Error",
-            description: "User ID is not available. Please sign in.",
-            variant: "destructive",
-        });
-        return;
+    if (!user?.id) {
+      console.error("User ID not available");
+      toast({
+        title: "Error",
+        description: "User ID is not available. Please sign in.",
+        variant: "destructive",
+      });
+      return;
     }
     setLoading(true);
     setError(null);
     try {
-        const response = await axios.get(`http://localhost:5000/get_table_count/${user.id}/${filename}`);
-        setTableNames(response.data.table_names || []);
-        setSelectedTable(response.data.table_names[0] || null);
+      const response = await axios.get(`http://localhost:5000/get_table_count/${user.id}/${filename}`);
+      setTableNames(response.data.table_names || []);
+      setSelectedTable(response.data.table_names[0] || null);
     } catch (error) {
-        console.error("Error fetching table names:", error);
-        toast({
-            title: "Error",
-            description: "Failed to fetch table names. Please try again.",
-            variant: "destructive",
-        });
+      console.error("Error fetching table names:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch table names. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-}, [user]);
+  }, [user, toast]);
 
-useEffect(() => {
+  useEffect(() => {
     if (selectedFile && selectedFile.endsWith('.db')) {
-        fetchTableNames(selectedFile);
+      fetchTableNames(selectedFile);
     }
-}, [selectedFile, fetchTableNames]);
+  }, [selectedFile, fetchTableNames]);
 
-  
-  
+
+
   const loadMoreData = () => {
     if (hasMoreChunks && selectedFile) {
       fetchFileData(selectedFile, currentChunk + 1);
     }
   };
 
- const parseFileData = (fileData: string, filename: string): FileData[] => {
-  if (!fileData) {
-    console.error("Received undefined or null fileData");
-    return [];
-  }
-
-  const fileExtension = filename.split('.').pop()?.toLowerCase();
-  
-  switch (fileExtension) {
-    case 'csv':
-    case 'tsv':
-    case 'txt':
-      return parseDelimitedText(fileData, fileExtension === 'csv' ? ',' : '\t');
-    case 'xlsx':
-    case 'xls':
-      return parseCSV(fileData); // The backend converts Excel to CSV format
-    case 'db':
-      return parseCSV(fileData); // SQLite data is returned as CSV
-    case 'xml':
-      return parseCSV(fileData); // XML data is converted to CSV format by the backend
-    case 'pdf':
-      return parsePDFData(fileData);
-    default:
-      console.error(`Unsupported file type: ${fileExtension}`);
+  const parseFileData = (fileData: string, filename: string): FileData[] => {
+    if (!fileData) {
+      console.error("Received undefined or null fileData");
       return [];
-  }
-};
+    }
+
+    const fileExtension = filename.split('.').pop()?.toLowerCase();
+
+    switch (fileExtension) {
+      case 'csv':
+      case 'tsv':
+      case 'txt':
+        return parseDelimitedText(fileData, fileExtension === 'csv' ? ',' : '\t');
+      case 'xlsx':
+      case 'xls':
+        return parseCSV(fileData); // The backend converts Excel to CSV format
+      case 'db':
+        return parseCSV(fileData); // SQLite data is returned as CSV
+      case 'xml':
+        return parseCSV(fileData); // XML data is converted to CSV format by the backend
+      case 'pdf':
+        return parsePDFData(fileData);
+      default:
+        console.error(`Unsupported file type: ${fileExtension}`);
+        return [];
+    }
+  };
 
 
   const parseDelimitedText = (text: string, delimiter: string): FileData[] => {
@@ -235,32 +236,32 @@ useEffect(() => {
   };
 
   const generateColumns = (firstRow: FileData): ColumnDef<DataItem, any>[] => {
-  if (!firstRow) {
-    console.error("Empty or undefined data row");
-    return [];
-  }
+    if (!firstRow) {
+      console.error("Empty or undefined data row");
+      return [];
+    }
 
-  return Object.keys(firstRow).map((key) => ({
-    accessorKey: key,
-    header: key,
-    cell: ({ row }) => {
-      const value = row.getValue(key);
-      return (
-        <div className="flex items-center justify-between">
-          <span>{formatCellValue(value)}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleEdit(row.index, key, formatCellValue(value))}
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-        </div>
-      );
-    },
-  }));
+    return Object.keys(firstRow).map((key) => ({
+      accessorKey: key,
+      header: key,
+      cell: ({ row }) => {
+        const value = row.getValue(key);
+        return (
+          <div className="flex items-center justify-between">
+            <span>{formatCellValue(value)}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleEdit(row.index, key, formatCellValue(value))}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+          </div>
+        );
+      },
+    }));
   };
-  
+
   const formatCellValue = (value: any): string => {
     if (value === null || value === undefined) {
       return '';
@@ -301,7 +302,7 @@ useEffect(() => {
         // Add new item
         updatedData.push(editItem as DataItem);
       }
-      
+
       try {
         await saveDataToBlob(updatedData);
         setData(updatedData);
@@ -366,7 +367,7 @@ useEffect(() => {
       await axios.post(`http://localhost:5000/update_blob/${user.id}/${selectedFile}`, {
         newContent: data,
       });
-      
+
       toast({
         title: "Success",
         description: "File content updated successfully",
@@ -390,7 +391,7 @@ useEffect(() => {
       description: "All filters and sorting have been reset.",
     });
   };
-  
+
   const handleUploadSuccess = useCallback(() => {
     refetchFileList();
     toast({
@@ -406,9 +407,9 @@ useEffect(() => {
       setSelectedFile(null);
     }
   }, [refetchFileList, selectedFile]);
-  
-  
-  
+
+
+
   if (!isUserLoaded) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -438,7 +439,7 @@ useEffect(() => {
             File Selection
           </CardTitle>
           <div className="flex items-center space-x-2">
-            <FileUpload 
+            <FileUpload
               onUploadSuccess={handleUploadSuccess}
               triggerButton={
                 <Button className="flex items-center bg-blue-500 text-white hover:bg-blue-600">
@@ -447,7 +448,7 @@ useEffect(() => {
                 </Button>
               }
             />
-            <FileDelete 
+            <FileDelete
               fileList={fileList || []}
               onDeleteSuccess={handleDeleteSuccess}
             />
@@ -489,31 +490,29 @@ useEffect(() => {
                       ))}
                     </SelectContent>
                   </Select>
-                    )}
-                    {selectedFile && selectedFile.endsWith('.db') && (
-                      
-                      <Select onValueChange={setSelectedTable} value={selectedTable || undefined}>
-        <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
-            <SelectValue placeholder="Select a table" />
-        </SelectTrigger>
-        <SelectContent>
-            {tableNames.map((name, index) => (
-                <SelectItem key={index} value={name}>
-                    {name}
-                </SelectItem>
-            ))}
-        </SelectContent>
-                        </Select>
-                        
-)}
+                )}
+                {selectedFile && selectedFile.endsWith('.db') && (
 
+                  <Select onValueChange={setSelectedTable} value={selectedTable || undefined}>
+                    <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
+                      <SelectValue placeholder="Select a table" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tableNames.map((name, index) => (
+                        <SelectItem key={index} value={name}>
+                          {name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             ) : (
               <span className="text-blue-500">No files available</span>
             )}
           </CardContent>
           }
-          </CardContent>
+        </CardContent>
       </Card>
 
       <Card className="shadow-lg rounded-lg overflow-hidden bg-white">
