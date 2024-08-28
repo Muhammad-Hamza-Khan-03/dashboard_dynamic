@@ -21,18 +21,18 @@ const routes = [
         label:"board"
     },        
     {
-        href: "/overview",
-        label:"Overview"
+        href: "/DataWorkspace",
+        label:"Data Workspace"
     },
    
-    {
-        href: "/custom_layout",
-        label:"Custom Layouts"
-    },
-    {
-        href: "/settings",
-        label: "Settings"
-    },
+    // {
+    //     href: "/custom_layout",
+    //     label:"Custom Layouts"
+    // },
+    // {
+    //     href: "/settings",
+    //     label: "Settings"
+    // },
 
    
 ]

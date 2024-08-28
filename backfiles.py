@@ -65,17 +65,18 @@ def upload_file(user_id):
 
 @app.route('/list_files/<user_id>', methods=['GET'])
 def list_files(user_id):
+    app.logger.info(f"Received request to list files for user: {user_id}")
     try:
         conn = sqlite3.connect('user_files.db')
         c = conn.cursor()
         c.execute("SELECT filename FROM user_files WHERE user_id = ?", (user_id,))
         files = [row[0] for row in c.fetchall()]
         conn.close()
+        app.logger.info(f"Files found for user {user_id}: {files}")
         return jsonify({"files": files})
     except Exception as e:
         app.logger.error(f"Error listing files: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
         
 def process_excel(content, chunk_number, chunk_size):
     excel_buffer = io.BytesIO(content)
@@ -328,7 +329,6 @@ def get_file(user_id, filename):
             chunk_size = 5000
             chunk_number = int(request.args.get('chunk', 0))
             table_name = request.args.get('table')
-            app.logger.info("2selected table: ",table_name)
             app.logger.info(f"Processing file: {filename} for user: {user_id}, chunk: {chunk_number}, table: {table_name}")
             
             file_extension = filename.split('.')[-1].lower()
