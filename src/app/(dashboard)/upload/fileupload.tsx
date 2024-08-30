@@ -60,7 +60,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
           },
         });
       }
-
       toast({
         title: 'Success',
         description: 'Files uploaded successfully!',

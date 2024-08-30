@@ -123,6 +123,7 @@ const DataTablePage: React.FC = () => {
     } catch (err) {
       console.error("Error in fetchFileData:", err);
       setError(err instanceof Error ? err.message : "Failed to process file data");
+      
       toast({
         title: "Error",
         description: err instanceof Error ? err.message : "Failed to process file data",
