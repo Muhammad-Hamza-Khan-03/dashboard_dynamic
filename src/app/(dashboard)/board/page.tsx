@@ -1,9 +1,8 @@
-'use client'
-import React, { useEffect, useState } from 'react';
+"use client"
+import React, { useEffect, useState, useCallback } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { Loader, BarChart, BarChart2, BarChart3, FileText, ChevronRight, AlertCircle, Trash2 } from 'lucide-react';
+import { Loader, BarChart, BarChart2, FileText, ChevronRight, AlertCircle, Trash2, Search } from 'lucide-react';
 import ChartModal from '@/features/board/Chart-Modal/Chart-Modal';
-import DragChartModal from '@/features/board/Dragboard/D-ChartModal';
 import S_ChartModal from '@/features/board/Sidebar/S-ChartModal';
 import useFilesList from '@/features/sqlite/api/file-list';
 import { handleUseCSV } from '@/features/sqlite/api/file-content';
@@ -12,19 +11,22 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import SavedChartModal from '@/features/board/Chart-Modal/SavedChartModal';
 import { toast } from '@/components/ui/use-toast';
-import { useRechartsModalStore } from '@/features/board/recharts-modal/hooks/use-recharts';
-import RechartsModalWrapper from '@/features/board/recharts-modal/components/RechartModalWrapper';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import axios from 'axios';
 
 interface FileData {
   [key: string]: unknown;
 }
+
 interface SavedChart {
   id: string;
   type: string;
   data: any[];
   columns: string[];
-   filename: string;
+  filename: string;
 }
+
 const Board_Main = () => {
   const { user, isLoaded: userLoaded } = useUser();
   const userId = user?.id;
@@ -37,24 +39,10 @@ const Board_Main = () => {
   const [dataError, setDataError] = useState<string | null>(null);
   const [savedCharts, setSavedCharts] = useState<SavedChart[]>([]);
   const [selectedSavedChart, setSelectedSavedChart] = useState<SavedChart | null>(null);
-
-  //////
-  const { openModal: openRechartsModal } = useRechartsModalStore();
-  //////
-  
-  const handleFileSelection = async (filename: string) => {
-    if (filename !== selectedFilename) {
-      setSelectedFilename(filename);
-      setSelectedColumns([]); // Clear selected columns when changing files
-      await handleUseCSV(filename, userId!, setDataLoading, setDataError, (data) => {
-        setFileData(data);
-        if (data.length > 0) {
-          const headers = Object.keys(data[0]);
-          setColumns(headers.map(header => ({ header, accessorKey: header, isNumeric: typeof data[0][header] === 'number' })));
-        }
-      });
-    }
-  };
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [tableNames, setTableNames] = useState<string[]>([]);
+  const [isSelectModalOpen, setIsSelectModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const storedCharts = localStorage.getItem('savedCharts');
@@ -89,13 +77,76 @@ const Board_Main = () => {
       duration: 3000,
     });
   };
+
   const handleSavedChartClick = (chart: SavedChart) => {
     setSelectedSavedChart(chart);
   };
-  //group saved charts
+
+  const fetchSheetNames = useCallback(async (filename: string) => {
+    if (!userId) return;
+    try {
+      const response = await axios.get(`http://localhost:5000/get_sheet_count/${userId}/${filename}`);
+      setSheetNames(response.data.sheet_names || []);
+    } catch (error) {
+      console.error("Error fetching sheet names:", error);
+      setDataError("Failed to fetch sheet names");
+    }
+  }, [userId]);
+
+  const fetchTableNames = useCallback(async (filename: string) => {
+    if (!userId) return;
+    try {
+      const response = await axios.get(`http://localhost:5000/get_table_count/${userId}/${filename}`);
+      setTableNames(response.data.table_names || []);
+    } catch (error) {
+      console.error("Error fetching table names:", error);
+      setDataError("Failed to fetch table names");
+    }
+  }, [userId]);
+
+  const handleFileSelection = useCallback(async (filename: string) => {
+    setSelectedFilename(filename);
+    setSelectedColumns([]);
+    setSearchTerm('');
+
+    if (filename.endsWith('.xlsx')) {
+      await fetchSheetNames(filename);
+      setIsSelectModalOpen(true);
+    } else if (filename.endsWith('.db')) {
+      await fetchTableNames(filename);
+      setIsSelectModalOpen(true);
+    } else {
+      await handleUseCSV(filename, userId!, setDataLoading, setDataError, (data) => {
+        setFileData(data);
+        if (data.length > 0) {
+          const headers = Object.keys(data[0]);
+          setColumns(headers.map(header => ({ header, accessorKey: header, isNumeric: typeof data[0][header] === 'number' })));
+        }
+      });
+    }
+  }, [userId, fetchSheetNames, fetchTableNames]);
+
+  const handleSheetOrTableSelection = useCallback(async (sheetOrTable: string) => {
+    setIsSelectModalOpen(false);
+    if (!selectedFilename || !userId) return;
+
+    await handleUseCSV(selectedFilename, userId, setDataLoading, setDataError, (data) => {
+      setFileData(data);
+      if (data.length > 0) {
+        const headers = Object.keys(data[0]);
+        setColumns(headers.map(header => ({ header, accessorKey: header, isNumeric: typeof data[0][header] === 'number' })));
+      }
+    }, selectedFilename.endsWith('.xlsx') ? sheetOrTable : undefined, selectedFilename.endsWith('.db') ? sheetOrTable : undefined);
+  }, [selectedFilename, userId]);
+
+  useEffect(() => {
+    if (userLoaded && userId && fileList && fileList.length > 0 && !selectedFilename) {
+      handleFileSelection(fileList[0]);
+    }
+  }, [userLoaded, userId, fileList, selectedFilename, handleFileSelection]);
 
   const groupedCharts = savedCharts.reduce((acc, chart) => {
-    const filename = chart.filename || 'Unknown File';  // Fallback to 'Unknown File' if filename is undefined
+    const filename = chart.filename || 'Unknown File';
     if (!acc[filename]) {
       acc[filename] = [];
     }
@@ -103,7 +154,10 @@ const Board_Main = () => {
     return acc;
   }, {} as { [key: string]: SavedChart[] });
 
-  if (!userLoaded || !userId) {
+  const filteredSheetOrTableNames = (selectedFilename?.endsWith('.xlsx') ? sheetNames : tableNames)
+    .filter(name => name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  if (!userLoaded || !userId || filesLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader className="animate-spin w-8 h-8 text-blue-500" />
@@ -111,13 +165,6 @@ const Board_Main = () => {
     );
   }
 
-  if (filesLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader className="animate-spin w-8 h-8 text-blue-500" />
-      </div>
-    );
-  }
   return (
     <div className='flex bg-white rounded-lg mx-4 p-6 shadow-lg'>
       <div className='w-1/4 flex flex-col gap-y-6 pr-6 border-r border-gray-200'>
@@ -146,33 +193,6 @@ const Board_Main = () => {
             setSelectedColumns={setSelectedColumns}
           />
         </div>
-        
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2 text-green-600">
-            <BarChart2 className="w-5 h-5" />
-            <span className="text-sm font-medium">Pro Chart</span>
-          </div>
-          <RechartsModalWrapper
-            data={fileData}
-            columns={columns}
-          selectedColumns={selectedColumns}
-            setSelectedColumns={setSelectedColumns}
-           onExport={handleExport}
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2 text-purple-600">
-            <BarChart3 className="w-5 h-5" />
-            <span className="text-sm font-medium">Draggable Chart</span>
-          </div>
-          {/* <DragChartModal
-            data={fileData}
-            columns={columns}
-            selectedColumns={selectedColumns}
-            setSelectedColumns={setSelectedColumns}
-          /> */}
-        </div>
       </div>
       <div className='w-3/4 pl-6'>
         <h2 className='text-xl font-semibold mb-4 text-gray-800'>Select a File</h2>
@@ -180,7 +200,7 @@ const Board_Main = () => {
           {fileList?.map((filename) => (
             <Card
               key={filename}
-              className="cursor-pointer transition-all duration-300 hover:shadow-md hover:bg-gray-50"
+              className={`cursor-pointer transition-all duration-300 hover:shadow-md ${selectedFilename === filename ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
               onClick={() => handleFileSelection(filename)}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -196,6 +216,7 @@ const Board_Main = () => {
             </Card>
           ))}
         </div>
+
         <h2 className='text-xl font-semibold my-4 text-gray-800'>Saved Charts</h2>
         <ScrollArea className="h-[400px] pr-4">
           {Object.entries(groupedCharts).map(([filename, charts]) => (
@@ -255,7 +276,7 @@ const Board_Main = () => {
           </div>
         )}
       </div>
- {selectedSavedChart && (
+      {selectedSavedChart && (
         <SavedChartModal
           chart={{
             type: selectedSavedChart.type,
@@ -265,7 +286,36 @@ const Board_Main = () => {
           onClose={() => setSelectedSavedChart(null)}
         />
       )}
-    
+      <Dialog open={isSelectModalOpen} onOpenChange={setIsSelectModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{selectedFilename?.endsWith('.xlsx') ? 'Select a Sheet' : 'Select a Table'}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="flex items-center space-x-2">
+              <Search className="w-4 h-4 text-gray-500" />
+              <Input
+                placeholder="Search..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+            <ScrollArea className="h-[300px] pr-4">
+              {filteredSheetOrTableNames.map((name) => (
+                <Button
+                  key={name}
+                  variant="ghost"
+                  className="w-full justify-start mb-2"
+                  onClick={() => handleSheetOrTableSelection(name)}
+                >
+                  {name}
+                </Button>
+              ))}
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

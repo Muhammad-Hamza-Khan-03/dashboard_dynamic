@@ -1,14 +1,14 @@
 "use client"
-import React, { useState, useEffect, useMemo, Suspense, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import dynamic from 'next/dynamic';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { toast } from "@/components/ui/use-toast";
 import { useUser } from '@clerk/nextjs';
-import { Loader2, PlusCircle, Edit, Save, Trash, Filter, FileIcon, BarChart, RefreshCw, Settings, Trash2, Upload } from "lucide-react";
+import { Loader2, PlusCircle, Edit, Save, Trash2, FileIcon, BarChart, RefreshCw, Upload } from "lucide-react";
 import axios from 'axios';
-import { handleUseCSV, FileData } from "@/features/sqlite/api/file-content";
+import { FileData } from "@/features/sqlite/api/file-content";
 import useFilesList from "@/features/sqlite/api/file-list";
 import {
   Sheet,
@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/select";
 import FileUpload from "./fileupload";
 import FileDelete from "@/features/sqlite/components/file-delete";
-import { Progress } from "@/components/ui/progress";
 
 const DataTable = dynamic<DataTableProps<FileData>>(() =>
   import('@/components/data-table').then((mod) => mod.DataTable), {
@@ -62,23 +61,16 @@ const DataTablePage: React.FC = () => {
   const [selectedRows, setSelectedRows] = useState<Row<DataItem>[]>([]);
   const [isAnalysisDrawerOpen, setIsAnalysisDrawerOpen] = useState(false);
   const [tableKey, setTableKey] = useState(0);
-  const [selectedSheet, setSelectedSheet] = useState<number>(0);
-  const [sheetCount, setSheetCount] = useState<number>(1);
-  const [currentChunk, setCurrentChunk] = useState(0);
-  const [hasMoreChunks, setHasMoreChunks] = useState(true);
-  const [sheetNames, setSheetNames] = useState<string[]>([]);
-  const [loadingProgress, setLoadingProgress] = useState(0);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [tableNames, setTableNames] = useState<string[]>([]);
+
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
       setSelectedFile(fileList[0]);
     }
   }, [isUserLoaded, user, fileList, selectedFile]);
 
-
-
-  const fetchFileData = useCallback(async (filename: string, chunkNumber: number = 0) => {
+  const fetchFileData = useCallback(async (filename: string) => {
     if (!user?.id) {
       console.error("User ID not available");
       setError("User ID not available");
@@ -88,42 +80,25 @@ const DataTablePage: React.FC = () => {
     setError(null);
     try {
       const response = await axios.get(`http://localhost:5000/get_file/${user.id}/${filename}`, {
-        params: { table: selectedTable, chunk: chunkNumber },
+        params: { table: selectedTable },
         responseType: 'text',
-        onDownloadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
-          setLoadingProgress(percentCompleted);
-        }
       });
 
       const fileData = response.data;
       console.log("Fetched file data:", fileData);
 
-      if (!fileData || fileData.trim() === "EOF") {
-        setHasMoreChunks(false);
-        return;
-      }
-
       const parsedData = parseFileData(fileData, filename);
       console.log("Parsed file data:", parsedData);
 
-      if (chunkNumber === 0) {
-        setData(parsedData);
-        if (parsedData.length > 0) {
-          setColumns(generateColumns(parsedData[0]));
-        } else {
-          setColumns([]);
-        }
+      setData(parsedData);
+      if (parsedData.length > 0) {
+        setColumns(generateColumns(parsedData[0]));
       } else {
-        setData(prevData => [...prevData, ...parsedData.slice(1)]);
+        setColumns([]);
       }
-
-      setHasMoreChunks(parsedData.length === 5001); // Assuming 5000 rows per chunk + header row
-      setCurrentChunk(chunkNumber);
     } catch (err) {
       console.error("Error in fetchFileData:", err);
       setError(err instanceof Error ? err.message : "Failed to process file data");
-      
       toast({
         title: "Error",
         description: err instanceof Error ? err.message : "Failed to process file data",
@@ -132,7 +107,7 @@ const DataTablePage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, selectedTable, toast]);
+  }, [user, selectedTable]);
 
   useEffect(() => {
     if (isUserLoaded && user && selectedFile) {
@@ -166,21 +141,13 @@ const DataTablePage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, toast]);
+  }, [user]);
 
   useEffect(() => {
     if (selectedFile && selectedFile.endsWith('.db')) {
       fetchTableNames(selectedFile);
     }
   }, [selectedFile, fetchTableNames]);
-
-
-
-  const loadMoreData = () => {
-    if (hasMoreChunks && selectedFile) {
-      fetchFileData(selectedFile, currentChunk + 1);
-    }
-  };
 
   const parseFileData = (fileData: string, filename: string): FileData[] => {
     if (!fileData) {
@@ -194,14 +161,11 @@ const DataTablePage: React.FC = () => {
       case 'csv':
       case 'tsv':
       case 'txt':
-        return parseDelimitedText(fileData, fileExtension === 'csv' ? ',' : '\t');
       case 'xlsx':
       case 'xls':
-        return parseCSV(fileData); // The backend converts Excel to CSV format
       case 'db':
-        return parseCSV(fileData); // SQLite data is returned as CSV
       case 'xml':
-        return parseCSV(fileData); // XML data is converted to CSV format by the backend
+        return parseCSV(fileData);
       case 'pdf':
         return parsePDFData(fileData);
       default:
@@ -210,26 +174,21 @@ const DataTablePage: React.FC = () => {
     }
   };
 
-
-  const parseDelimitedText = (text: string, delimiter: string): FileData[] => {
-    const lines = text.split('\n');
-    const headers = lines[0].split(delimiter);
+  const parseCSV = (csvString: string): FileData[] => {
+    const lines = csvString.trim().split('\n');
+    const headers = lines[0].split(',');
     return lines.slice(1).map(line => {
-      const values = line.split(delimiter);
+      const values = line.split(',');
       const obj: FileData = {};
       headers.forEach((header, index) => {
-        obj[header] = values[index];
+        obj[header.trim()] = values[index]?.trim();
       });
       return obj;
     });
   };
 
-  const parseCSV = (csvString: string): FileData[] => {
-    return parseDelimitedText(csvString, ',');
-  };
-
   const parsePDFData = (pdfData: string): FileData[] => {
-    const lines = pdfData.split('\n');
+    const lines = pdfData.trim().split('\n');
     return lines.slice(1).map(line => {
       const [page, content] = line.split(',', 2);
       return { page, content };
@@ -409,8 +368,6 @@ const DataTablePage: React.FC = () => {
     }
   }, [refetchFileList, selectedFile]);
 
-
-
   if (!isUserLoaded) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -456,63 +413,45 @@ const DataTablePage: React.FC = () => {
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          {<CardContent className="p-4">
-            {fileListLoading ? (
-              <div className="flex items-center text-blue-500">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                <span>Loading files...</span>
-              </div>
-            ) : fileListError ? (
-              <span className="text-red-500">{fileListError}</span>
-            ) : fileList && fileList.length > 0 ? (
-              <div className="space-y-4">
-                <Select onValueChange={setSelectedFile} value={selectedFile || undefined}>
+          {fileListLoading ? (
+            <div className="flex items-center text-blue-500">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <span>Loading files...</span>
+            </div>
+          ) : fileListError ? (
+            <span className="text-red-500">{fileListError}</span>
+          ) : fileList && fileList.length > 0 ? (
+            <div className="space-y-4">
+              <Select onValueChange={setSelectedFile} value={selectedFile || undefined}>
+                    <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
+                  <SelectValue placeholder="Select a file" />
+                </SelectTrigger>
+                <SelectContent>
+                  {fileList.map(file => (
+                    <SelectItem key={file} value={file}>
+                      {file}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedFile && selectedFile.endsWith('.db') && (
+                <Select onValueChange={setSelectedTable} value={selectedTable || undefined}>
                   <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
-                    <SelectValue placeholder="Select a file" />
+                    <SelectValue placeholder="Select a table" />
                   </SelectTrigger>
                   <SelectContent>
-                    {fileList.map(file => (
-                      <SelectItem key={file} value={file}>
-                        {file}
+                    {tableNames.map((name, index) => (
+                      <SelectItem key={index} value={name}>
+                        {name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedFile && (selectedFile.endsWith('.xlsx') || selectedFile.endsWith('.xls')) && (
-                  <Select onValueChange={(value) => setSelectedSheet(Number(value))} value={selectedSheet.toString()}>
-                    <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
-                      <SelectValue placeholder="Select a sheet" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sheetNames.map((name, index) => (
-                        <SelectItem key={index} value={index.toString()}>
-                          {name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                {selectedFile && selectedFile.endsWith('.db') && (
-
-                  <Select onValueChange={setSelectedTable} value={selectedTable || undefined}>
-                    <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
-                      <SelectValue placeholder="Select a table" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tableNames.map((name, index) => (
-                        <SelectItem key={index} value={name}>
-                          {name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            ) : (
-              <span className="text-blue-500">No files available</span>
-            )}
-          </CardContent>
-          }
+              )}
+            </div>
+          ) : (
+            <span className="text-blue-500">No files available</span>
+          )}
         </CardContent>
       </Card>
 
@@ -565,31 +504,20 @@ const DataTablePage: React.FC = () => {
 
         <CardContent className="p-4">
           {loading ? (
-            <div className="space-y-4">
-              <div className="flex justify-center items-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-              </div>
-              <Progress value={loadingProgress} className="w-full" />
+            <div className="flex justify-center items-center h-64">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
             </div>
           ) : error ? (
             <p className="text-red-500">{error}</p>
           ) : data.length > 0 ? (
-            <>
-              <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>}>
-                <DataTable
-                  key={tableKey}
-                  columns={columns}
-                  data={data}
-                  onRowSelectionChange={setSelectedRows}
-                  onReset={handleReset}
-                  filterkey={""} />
-              </Suspense>
-              {hasMoreChunks && (
-                <Button onClick={loadMoreData} className="mt-4">
-                  Load More
-                </Button>
-              )}
-            </>
+            <DataTable
+              key={tableKey}
+              columns={columns}
+              data={data}
+              onRowSelectionChange={setSelectedRows}
+              onReset={handleReset}
+              filterkey={""} 
+            />
           ) : (
             <p className="text-blue-500">No data available. Please select a file or upload a new one.</p>
           )}

@@ -6,12 +6,7 @@ interface FileData {
 }
 
 export const handleUseCSV = async (
-  filename: string,
-  userId: string | undefined,
-  setLoading: (loading: boolean) => void,
-  setError: (error: string | null) => void,
-  onUpload: (data: FileData[]) => void
-) => {
+filename: string, userId: string | undefined, setLoading: (loading: boolean) => void, setError: (error: string | null) => void, onUpload: (data: FileData[]) => void, sheet?: string, table?: string) => {
   setLoading(true);
   setError(null);
 
