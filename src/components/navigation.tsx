@@ -6,30 +6,35 @@ import NavButton from "./nav-button";
 const routes = [
     {
         href: "/",
-        label: "Overview",
+        label: "Home",
     },
     
     {
-        href: "/main",
-        label: "Main"
+        href: "/upload",
+        label: "Data Table"
     },
-            
+    
+    
+    
     {
-        href: "/transactions",
-        label:"Transactions"
-    },
+        href: "/board",
+        label:"board"
+    },        
     {
-        href: "/accounts",
-        label: "Accounts"
+        href: "/DataWorkspace",
+        label:"Data Workspace"
     },
-    {
-        href: "/categories",
-        label: "Categories"
-    },
-    {
-        href: "/settings",
-        label: "Settings"
-    },
+   
+    // {
+    //     href: "/custom_layout",
+    //     label:"Custom Layouts"
+    // },
+    // {
+    //     href: "/settings",
+    //     label: "Settings"
+    // },
+
+   
 ]
 export const Navigation = () => {
     const pathname=usePathname()
