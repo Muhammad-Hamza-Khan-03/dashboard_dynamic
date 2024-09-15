@@ -111,10 +111,16 @@ type MessageType = "user" | "ai" | "system";
 
 type Message = {
   id: number;
-  type: MessageType;
+  type: MessageType
   content: string;
   branchId: number;
-  attachment?: any;
+  attachment?: {
+    type: 'data_cleaning_result';
+    cleaningOutput: string;
+    previewData: any[];
+    totalRows: number;
+    dataframeChanged: boolean;
+  };
 };
 
 interface Branch {
@@ -227,6 +233,11 @@ const App: React.FC = () => {
   const [mermaidCode, setMermaidCode] = useState<string>('');
   const mermaidRef = useRef<HTMLDivElement>(null);
   const [mermaidError, setMermaidError] = useState<string | null>(null);
+  const [dataframeChanged, setDataframeChanged] = useState(false);
+  const [cleaningOutput, setCleaningOutput] = useState('');
+  const [previewData, setPreviewData] = useState([]);
+  const [totalRows, setTotalRows] = useState(0);
+
 
   useEffect(() => {
     if (mermaidRef.current && mermaidCode) {
@@ -887,73 +898,99 @@ const correctFlowchart = (lines: string[]): string => {
     return lines.map(line => line.replace(/(-+>)\|([^|]+)\|>/g, '$1|$2|')).join('\n');
 };
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
-    const newMessage: Message = { id: Date.now(), type: 'user', content: input, branchId: currentBranchId };
-    setMessages((prev) => [...prev, newMessage]);
+const handleSend = async () => {
+  if (!input.trim()) return;
+  const newMessage: Message = { id: Date.now(), type: 'user', content: input, branchId: currentBranchId };
+  setMessages((prev) => [...prev, newMessage]);
+  setBranches((branches) => {
+    const updatedBranches = branches.map((branch) => {
+      if (branch.id === currentBranchId) {
+        return { ...branch, messages: [...branch.messages, newMessage] };
+      }
+      return branch;
+    });
+    return updatedBranches;
+  });
+  setInput('');
+
+  try {
+    setLoading(true);
+    const response = await fetch('http://localhost:5000/query', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        question: input,
+        agent_type: selectedAgent,
+        custom_instructions: customInstructions,
+      }),
+    });
+    const data = await response.json();
+
+    let aiMessageContent = data.output;
+    if (selectedAgent === 'data_cleaning') {
+      setDataframeChanged(data.dataframe_changed);
+      setCleaningOutput(data.output);
+      setPreviewData(data.preview_data);
+      setTotalRows(data.total_rows);
+      aiMessageContent = 'Data cleaning completed. See results below.';
+    }
+
+    const aiMessage: Message = { 
+      id: Date.now(), 
+      type: 'ai', 
+      content: aiMessageContent, 
+      branchId: currentBranchId,
+      attachment: selectedAgent === 'data_cleaning' ? {
+        type: 'data_cleaning_result',
+        cleaningOutput: data.output,
+        previewData: data.preview_data,
+        totalRows: data.total_rows,
+        dataframeChanged: data.dataframe_changed
+      } : undefined
+    };
+
+    setMessages((prev) => [...prev, aiMessage]);
     setBranches((branches) => {
       const updatedBranches = branches.map((branch) => {
         if (branch.id === currentBranchId) {
-          return { ...branch, messages: [...branch.messages, newMessage] };
+          return { ...branch, messages: [...branch.messages, aiMessage] };
         }
         return branch;
       });
       return updatedBranches;
     });
-    setInput('');
 
-    try {
-      setLoading(true);
-      const response = await fetch('http://localhost:5000/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question: input,
-          agent_type: selectedAgent,
-          custom_instructions: customInstructions,
-        }),
-      });
-      const data = await response.json();
-      const aiMessage: Message = { id: Date.now(), type: 'ai', content: data.output, branchId: currentBranchId };
-      setMessages((prev) => [...prev, aiMessage]);
+    if (data.graph) {
       setBranches((branches) => {
         const updatedBranches = branches.map((branch) => {
           if (branch.id === currentBranchId) {
-            return { ...branch, messages: [...branch.messages, aiMessage] };
+            return { ...branch, graphs: [...branch.graphs, { id: aiMessage.id, graph: JSON.parse(data.graph) }] };
           }
           return branch;
         });
         return updatedBranches;
       });
-      if (data.graph) {
-        setBranches((branches) => {
-          const updatedBranches = branches.map((branch) => {
-            if (branch.id === currentBranchId) {
-              return { ...branch, graphs: [...branch.graphs, { id: aiMessage.id, graph: JSON.parse(data.graph) }] };
-            }
-            return branch;
-          });
-          return updatedBranches;
-        });
-      }
-      if (data.mermaid) {
-        console.log(data.mermaid);
-        const correctedMermaidCode = correctMermaidSyntax(data.mermaid);
-        console.log(data.correctedMermaidCode);
-        setMermaidCode(correctedMermaidCode);
-      }
-      if (data.suggestions) {
-        setSuggestedPrompts(data.suggestions);
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setSnackbar({ open: true, message: 'Error sending message', severity: 'error' });
-    } finally {
-      setLoading(false);
     }
-  };
+
+    if (data.mermaid) {
+      console.log(data.mermaid);
+      const correctedMermaidCode = correctMermaidSyntax(data.mermaid);
+      console.log(correctedMermaidCode);
+      setMermaidCode(correctedMermaidCode);
+    }
+
+    if (data.suggestions) {
+      setSuggestedPrompts(data.suggestions);
+    }
+  } catch (error) {
+    console.error('Error sending message:', error);
+    setSnackbar({ open: true, message: 'Error sending message', severity: 'error' });
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleChange = (panel: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
     setExpanded(isExpanded ? panel : false);
@@ -964,6 +1001,9 @@ const correctFlowchart = (lines: string[]): string => {
       event.preventDefault();
       handleSend();
     }
+  };
+  const handleDownloadCleanedData = () => {
+    window.open('http://localhost:5000/download_cleaned_data', '_blank');
   };
 
   const SQLStructureVisualization: React.FC<{ dbInfo: DbInfo, darkMode: boolean }> = ({ dbInfo, darkMode }) => {
@@ -1469,7 +1509,7 @@ const correctFlowchart = (lines: string[]): string => {
   const renderMessages = () => {
     const currentBranch = branches.find(branch => branch.id === currentBranchId);
     if (!currentBranch) return null;
-
+  
     const tableStyle: React.CSSProperties = {
       borderCollapse: 'separate',
       borderSpacing: 0,
@@ -1480,7 +1520,7 @@ const correctFlowchart = (lines: string[]): string => {
       borderRadius: '10px',
       overflow: 'hidden',
     };
-
+  
     const thStyle: React.CSSProperties = {
       backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
       color: theme.palette.text.primary,
@@ -1489,15 +1529,16 @@ const correctFlowchart = (lines: string[]): string => {
       padding: '12px 15px',
       borderBottom: `1px solid ${theme.palette.divider}`,
     };
-
+  
     const tdStyle: React.CSSProperties = {
       padding: '12px 15px',
       borderBottom: `1px solid ${theme.palette.divider}`,
     };
-
+  
     const trStyle: React.CSSProperties = {
       backgroundColor: theme.palette.background.paper,
     };
+  
     return currentBranch.messages.map((message, messageIndex) => {
       const editedBranches = branches.filter(branch =>
         branch.messages.some(m => m.id === message.id)
@@ -1505,7 +1546,7 @@ const correctFlowchart = (lines: string[]): string => {
       const isEdited = editedBranches.length > 1;
       const currentEditIndex = editedBranches.findIndex(branch => branch.id === currentBranchId) + 1;
       const totalEdits = editedBranches.length;
-
+  
       return (
         <Box
           key={messageIndex}
@@ -1545,11 +1586,11 @@ const correctFlowchart = (lines: string[]): string => {
                     code: ({ className, children }) => {
                       const match = /language-(\w+)/.exec(className || '');
                       const [isExpanded, setIsExpanded] = useState(false);
-
+  
                       if (!match) {
                         return <code className={className}>{children}</code>;
                       }
-
+  
                       return (
                         <Box sx={{ width: '100%', mt: 2 }}>
                           <Button
@@ -1614,6 +1655,45 @@ const correctFlowchart = (lines: string[]): string => {
                     </Tooltip>
                   </Box>
                 ))}
+              {message.type === 'ai' && message.attachment?.type === 'data_cleaning_result' && (
+                <Box sx={{ width: '100%', mt: 2 }}>
+                  <Typography variant="h6">Data Cleaning Results:</Typography>
+                  <Box sx={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #ccc', p: 1, mb: 2 }}>
+                    <ReactMarkdown>{message.attachment.cleaningOutput}</ReactMarkdown>
+                  </Box>
+                  <Typography variant="h6">Preview of Cleaned Data (First 10 rows):</Typography>
+                  <TableContainer component={Paper} sx={{ maxHeight: 300, overflow: 'auto', mb: 2 }}>
+                    <Table stickyHeader aria-label="preview table">
+                      <TableHead>
+                        <TableRow>
+                          {message.attachment.previewData.length > 0 && Object.keys(message.attachment.previewData[0]).map((key) => (
+                            <TableCell key={key}>{key}</TableCell>
+                          ))}
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {message.attachment.previewData.map((row, index) => (
+                          <TableRow key={index}>
+                            {Object.values(row).map((value: any, idx) => (
+                              <TableCell key={idx}>{String(value)}</TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  <Typography>Total rows in cleaned dataset: {message.attachment.totalRows}</Typography>
+                  <Button 
+                    onClick={handleDownloadCleanedData} 
+                    disabled={!message.attachment.dataframeChanged}
+                    startIcon={<Download />}
+                    variant="contained"
+                    sx={{ mt: 2 }}
+                  >
+                    Download Cleaned Data
+                  </Button>
+                </Box>
+              )}
               {message.type === 'user' && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mt: 1 }}>
                   <IconButton size="small" onClick={() => handleBranchNavigation('prev', message.id)} disabled={currentEditIndex === 1}>
@@ -1659,7 +1739,6 @@ const correctFlowchart = (lines: string[]): string => {
                 </IconButton>
               </Tooltip>
             )}
-            {message.attachment && renderAttachment(message.attachment)}
           </Card>
         </Box>
       );
@@ -1701,17 +1780,14 @@ const correctFlowchart = (lines: string[]): string => {
             >
               <Box
                 component="span"
-                sx={{
-                  background: darkMode ? 'linear-gradient(45deg, #FE6B8B 30%, #FF8E53 90%)' : 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  fontWeight: 900,
+                sx={{ 
+                  flexGrow: 1, 
+                  textAlign: 'center',
+                  color: theme.palette.mode === 'dark' ? '#ffffff' : '#000000',
+                  fontWeight: 'bold',
                 }}
               >
-                InSight
-              </Box>
-              <Box component="span" sx={{ ml: 1, fontSize: '0.8em', fontWeight: 600, opacity: 0.8 }}>
-                AI
+                InSight AI
               </Box>
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -1842,6 +1918,7 @@ const correctFlowchart = (lines: string[]): string => {
             </Box>
           </Toolbar>
         </AppBar>
+
         <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}>
           <Drawer
             anchor="left"
