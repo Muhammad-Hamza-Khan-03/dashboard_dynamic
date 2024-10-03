@@ -1,6 +1,6 @@
 import tempfile
 import traceback
-from flask import Flask, Response, request, send_file, jsonify
+from flask import Flask, Response, request, send_file, jsonify,stream_with_context
 from flask_cors import CORS
 import sqlite3
 import io
@@ -10,9 +10,11 @@ import openpyxl
 import pandas as pd
 import xml.etree.ElementTree as ET
 import PyPDF2
+from docx import Document
 
 app = Flask(__name__)
 CORS(app)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 logging.basicConfig(level=logging.DEBUG)
 
 def init_db():
@@ -44,10 +46,34 @@ def upload_file(user_id):
         app.logger.warning("No selected file")
         return 'No selected file', 400
     
-    allowed_extensions = {'csv', 'xlsx', 'db', 'txt', 'tsv', 'pdf', 'xml'}
-    if file and file.filename.split('.')[-1].lower() in allowed_extensions:
+    allowed_extensions = {'csv', 'xlsx', 'db', 'txt', 'tsv', 'pdf', 'xml','doc'}
+    file_extension = file.filename.split('.')[-1].lower()
+    if file and file_extension in allowed_extensions:
         try:
             content = file.read()
+            ##
+            # Handle different file types
+            if file_extension in ['csv', 'tsv', 'txt']:
+                # Handle text-based datasets
+                delimiter = ',' if file_extension == 'csv' else '\t'
+                df = pd.read_csv(io.BytesIO(content), delimiter=delimiter)
+                df = df.fillna('NULL')  # Replace empty values with 'NULL'
+                
+                content = df.to_csv(index=False).encode('utf-8')
+
+            elif file_extension == 'xlsx':
+                # Handle Excel datasets
+                df = pd.read_excel(io.BytesIO(content))
+                df = df.fillna('NULL')  # Replace empty values with 'NULL'
+                content = df.to_csv(index=False).encode('utf-8')
+
+            elif file_extension in ['doc', 'docx']:
+                # Handle Word documents
+                doc_buffer = io.BytesIO(content)
+                doc = Document(doc_buffer)
+                text = '\n'.join([para.text if para.text.strip() != '' else 'NULL' for para in doc.paragraphs])
+                content = text.encode('utf-8')  # Re-encode to bytes for storage in BLOB
+                ##
             conn = sqlite3.connect('user_files.db')
             c = conn.cursor()
             c.execute("INSERT INTO user_files (user_id, filename, content) VALUES (?, ?, ?)",
@@ -78,33 +104,40 @@ def list_files(user_id):
         app.logger.error(f"Error listing files: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+
+CHUNK_SIZE = 5*1024 * 1024  # 5MB chunk size
+
 @app.route('/get_file/<user_id>/<filename>', methods=['GET'])
 def get_file(user_id, filename):
     try:
         app.logger.info(f"Received request for file: {filename}, user: {user_id}")
         
+        # Connect to the SQLite database
         conn = sqlite3.connect('user_files.db')
         c = conn.cursor()
         c.execute("SELECT content FROM user_files WHERE user_id = ? AND filename = ?", (user_id, filename))
         result = c.fetchone()
         conn.close()
+
         if result:
             content = result[0]
             table_name = request.args.get('table')
             app.logger.info(f"Processing file: {filename} for user: {user_id}, table: {table_name}")
             
             file_extension = filename.split('.')[-1].lower()
-            
+
+            # Stream data based on file type
             if file_extension == 'db':
-                return process_sqlite(content, table_name)
+                return stream_with_context(process_sqlite(content, table_name))
             elif file_extension == 'xlsx':
-                return process_excel(content)
+                return stream_with_context(process_excel(content))
             elif file_extension in ['csv', 'tsv', 'txt']:
-                return process_text(content, delimiter=',' if file_extension == 'csv' else '\t')
+                delimiter = ',' if file_extension == 'csv' else '\t'
+                return stream_with_context(process_text(content, delimiter))
             elif file_extension == 'xml':
-                return process_xml(content)
+                return stream_with_context(process_xml(content))
             elif file_extension == 'pdf':
-                return process_pdf(content)
+                return stream_with_context(process_pdf(content))
             else:
                 app.logger.warning(f"Unsupported file type: {file_extension}")
                 return "Unsupported file type", 400
@@ -116,42 +149,89 @@ def get_file(user_id, filename):
         app.logger.error(traceback.format_exc())
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
+# Process functions using streaming
+
+def stream_file_content(content):
+    """Generator function to stream large files in chunks."""
+    start = 0
+    while start < len(content):
+        chunk = content[start:start + CHUNK_SIZE]
+        yield chunk
+        start += CHUNK_SIZE
+
 def process_excel(content):
+    """Stream Excel file processing."""
     excel_buffer = io.BytesIO(content)
-    df = pd.read_excel(excel_buffer)
-    return Response(df.to_csv(index=False), mimetype='text/csv')
+    df = pd.read_excel(excel_buffer, chunksize=10000)
+    
+    def generate():
+        for chunk in df:
+            yield chunk.to_csv(index=False)
+
+    return Response(generate(), mimetype='text/csv')
 
 def process_text(content, delimiter=','):
+    """Stream text/csv/tsv file processing."""
     if isinstance(content, bytes):
         content = content.decode('utf-8')
-    return Response(content, mimetype='text/plain')
+    
+    def generate():
+        for line in content.splitlines():
+            yield line + '\n'
+
+    return Response(generate(), mimetype='text/plain')
 
 def process_sqlite(content, table_name):
+    """Stream SQLite database processing."""
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as temp_db_file:
         temp_db_file.write(content)
         temp_db_path = temp_db_file.name
 
     conn = sqlite3.connect(temp_db_path)
-    df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+    
+    def generate():
+        for chunk in pd.read_sql_query(f"SELECT * FROM {table_name}", conn, chunksize=10000):
+            yield chunk.to_csv(index=False)
+    
     conn.close()
-
-    return Response(df.to_csv(index=False), mimetype='text/csv')
+    return Response(generate(), mimetype='text/csv')
 
 def process_xml(content):
+    """Stream XML file processing."""
     root = ET.fromstring(content)
     data = []
-    for elem in root.iter():
-        data.append(elem.attrib)
-    df = pd.DataFrame(data)
-    return Response(df.to_csv(index=False), mimetype='text/csv')
+    
+    def generate():
+        for elem in root.iter():
+            data.append(elem.attrib)
+            if len(data) >= 1000:
+                df = pd.DataFrame(data)
+                yield df.to_csv(index=False)
+                data.clear()
+        if data:
+            df = pd.DataFrame(data)
+            yield df.to_csv(index=False)
+
+    return Response(generate(), mimetype='text/csv')
 
 def process_pdf(content):
+    """Stream PDF processing."""
     pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
     text = []
-    for page in pdf_reader.pages:
-        text.append(page.extract_text())
-    df = pd.DataFrame({'page': range(1, len(text) + 1), 'content': text})
-    return Response(df.to_csv(index=False), mimetype='text/csv')
+
+    def generate():
+        for i, page in enumerate(pdf_reader.pages, 1):
+            text.append(page.extract_text())
+            if i % 10 == 0:  # Process in chunks of 10 pages
+                df = pd.DataFrame({'page': range(i-9, i+1), 'content': text})
+                yield df.to_csv(index=False)
+                text.clear()
+        if text:
+            df = pd.DataFrame({'page': range(i-len(text)+1, i+1), 'content': text})
+            yield df.to_csv(index=False)
+
+    return Response(generate(), mimetype='text/csv')
+
 
 @app.route('/get_table_count/<user_id>/<filename>', methods=['GET'])
 def get_table_count(user_id, filename):

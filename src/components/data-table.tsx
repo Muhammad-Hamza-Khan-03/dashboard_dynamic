@@ -201,7 +201,9 @@ export function DataTable<TData>({
                     <SelectValue placeholder="Select a value" />
                   </SelectTrigger>
                   <SelectContent>
-                    {uniqueValues.map((value) => (
+                  <SelectItem value="none">None</SelectItem>
+                    {uniqueValues
+                    .map((value) => (
                       <SelectItem key={value as string} value={value as string}>
                         {value as string}
                       </SelectItem>
