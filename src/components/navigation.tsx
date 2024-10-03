@@ -8,23 +8,27 @@ const routes = [
         href: "/",
         label: "Home",
     },
-    
+
     {
         href: "/upload",
         label: "Data Table"
     },
-    
-    
-    
+
+
+
     {
         href: "/board",
-        label:"board"
-    },        
+        label: "Board"
+    },
     {
         href: "/DataWorkspace",
-        label:"Data Workspace"
+        label: "Data Workspace"
     },
-   
+    {
+        href: "/Chat",
+        label: "InSightAI"
+    },
+
     // {
     //     href: "/custom_layout",
     //     label:"Custom Layouts"
@@ -34,23 +38,23 @@ const routes = [
     //     label: "Settings"
     // },
 
-   
+
 ]
 export const Navigation = () => {
-    const pathname=usePathname()
+    const pathname = usePathname()
     return (
-       <nav className="hidden lg:flex items-center gap-x-2 overflow-x-auto">
-    {routes.map((route) => {
-        return (
-            <NavButton
-                key={route.href}
-                href={route.href}
-                label={route.label}
-                
-                isActive={pathname === route.href} />
-        );
-    })}
-</nav>
+        <nav className="hidden lg:flex items-center gap-x-2 overflow-x-auto">
+            {routes.map((route) => {
+                return (
+                    <NavButton
+                        key={route.href}
+                        href={route.href}
+                        label={route.label}
+
+                        isActive={pathname === route.href} />
+                );
+            })}
+        </nav>
 
     )
 }
