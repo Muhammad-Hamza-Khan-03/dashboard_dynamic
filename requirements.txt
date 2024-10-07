@@ -1,5 +1,0 @@
-flask 
-flask_cors 
-openpyxl
-PyPDF2
-python-docx

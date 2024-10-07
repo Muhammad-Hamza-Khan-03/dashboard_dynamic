@@ -89,7 +89,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
     }
   };
 
-  const allowedFileTypes = ".csv,.xlsx,.xls,.db,.txt,.tsv,.pdf,.xml,.docx";
+  const allowedFileTypes = ".csv,.xlsx,.xls,.db,.txt,.tsv,.pdf,.xml";
 
   const uploadContent = (
     <div className="p-4 bg-white rounded-lg">
@@ -108,7 +108,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
             <div className="flex flex-col items-center">
               <Upload className="w-12 h-12 text-gray-400 mb-2" />
               <p className="text-sm text-gray-600">Drag & Drop or Choose files to upload</p>
-              <p className="text-xs text-gray-400 mt-1">CSV, XLSX, DB, TXT, TSV, PDF, XML,DOCX</p>
+              <p className="text-xs text-gray-400 mt-1">CSV, XLSX, DB, TXT, TSV, PDF, XML</p>
             </div>
           </label>
         </div>

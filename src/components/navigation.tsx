@@ -35,7 +35,18 @@ const routes = [
     {
         href: "/Chat",
         label: "InSightAI"
-    }
+    },
+
+    // {
+    //     href: "/custom_layout",
+    //     label:"Custom Layouts"
+    // },
+    // {
+    //     href: "/settings",
+    //     label: "Settings"
+    // },
+
+
 ]
 export const Navigation = () => {
     const [isOpen,setisOpen] = useState(false);
