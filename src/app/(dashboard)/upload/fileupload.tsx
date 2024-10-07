@@ -38,7 +38,10 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
   };
 
   const uploadFiles = async () => {
-    if (files.length === 0 || !user) return;
+
+    //if user not present or no file
+    if (files.length === 0 || !user) 
+      return;
 
     setUploading(true);
     setUploadProgress(new Array(files.length).fill(0));
@@ -48,6 +51,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
         const formData = new FormData();
         formData.append('file', files[i]);
 
+        // Upload file to server
         await axios.post(`http://localhost:5000/upload/${user.id}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
           onUploadProgress: (progressEvent) => {
@@ -89,7 +93,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
     }
   };
 
-  const allowedFileTypes = ".csv,.xlsx,.xls,.db,.txt,.tsv,.pdf,.xml";
+  const allowedFileTypes = ".csv,.xlsx,.xls,.db,.txt,.tsv,.pdf,.xml..docx,.doc";
 
   const uploadContent = (
     <div className="p-4 bg-white rounded-lg">
@@ -158,7 +162,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Upload New Files</DialogTitle>
+          <DialogTitle>Upload your Files here!</DialogTitle>
         </DialogHeader>
         {uploadContent}
       </DialogContent>
