@@ -1,50 +1,94 @@
-"use client";
+import React from 'react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from 'recharts'
+import { PlusCircle, Settings, Filter, Database, Cog, ChevronRight } from 'lucide-react'
 
-import { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
-import { useUser, SignIn, UserButton } from "@clerk/nextjs";
+const data = [
+  { name: 'Artist A', streams: 4000, revenue: 2400 },
+  { name: 'Artist B', streams: 3000, revenue: 1398 },
+  { name: 'Artist C', streams: 2000, revenue: 9800 },
+  { name: 'Artist D', streams: 2780, revenue: 3908 },
+  { name: 'Artist E', streams: 1890, revenue: 4800 },
+  { name: 'Artist F', streams: 2390, revenue: 3800 },
+  { name: 'Artist G', streams: 3490, revenue: 4300 },
+]
 
-const DataAnalysisWorkspace = dynamic(() => import('./DataAnalysisWorkspace'), {
-  loading: () => <p>Loading Data Analysis Workspace...</p>,
-  ssr: false
-});
+const sidebarItems = [
+  { icon: PlusCircle, label: 'Add' },
+  { icon: Settings, label: 'Setup' },
+  { icon: Filter, label: 'Filter' },
+  { icon: Database, label: 'Data' },
+  { icon: Cog, label: 'Settings' },
+]
 
-const Workspace = () => {
-  const { isLoaded, isSignedIn, user } = useUser();
-  const [userId, setUserId] = useState<string>();
-
-  useEffect(() => {
-    if (isLoaded && isSignedIn) {
-      setUserId(user.id);
-    }
-  }, [isLoaded, isSignedIn, user]);
-
-  if (!isLoaded) {
-    return <div>Loading...</div>;
-  }
-
-  if (!isSignedIn) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <h1 className="text-2xl font-bold mb-4">Please sign in to access the Data Analysis Tool</h1>
-        <SignIn />
-      </div>
-    );
-  }
-
+export default function Workspace() {
   return (
-    <div className="p-4">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Your Data Analysis Tool</h1>
-        <UserButton />
+    
+      <div className="flex h-screen bg-gray-50">
+        {/* Left Sidebar */}
+        <div className="w-20 bg-white shadow-md flex flex-col items-center py-8 space-y-8">
+          {sidebarItems.map((item, index) => (
+            <div key={index} className="flex flex-col items-center cursor-pointer group">
+              <div className="p-3 rounded-lg group-hover:bg-teal-50 transition-colors duration-200">
+                <item.icon className="w-6 h-6 text-gray-500 group-hover:text-teal-500" />
+              </div>
+              <span className="text-xs mt-1 text-gray-500 group-hover:text-teal-500">{item.label}</span>
+            </div>
+          ))}
+        </div>
+  
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Top Section */}
+          <header className="bg-white shadow-sm py-4 px-6">
+            <h1 className="text-2xl font-semibold text-gray-800">Dashboard</h1>
+          </header>
+  
+          {/* Chart Area */}
+          <main className="flex-1 overflow-y-auto p-6">
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold text-gray-800">Count of Streams sliced by Artist</h2>
+                <p className="text-sm text-gray-500 mt-1">Comparing stream counts across different artists</p>
+                <a href="#" className="text-teal-500 text-sm hover:underline mt-2 inline-block">Read More</a>
+              </div>
+              <div className="h-96">
+                {/* <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={70} />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="streams" fill="#3B82F6" />
+                    <Bar dataKey="revenue" fill="#10B981" />
+                  </BarChart>
+                </ResponsiveContainer> */}
+              </div>
+            </div>
+  
+            {/* Suggested Insights */}
+            <div className="mt-8">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Suggested Insights</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3].map((item) => (
+                  <div key={item} className="bg-white rounded-lg shadow-md p-4">
+                    <h4 className="text-md font-semibold text-gray-700 mb-2">Insight {item}</h4>
+                    <p className="text-sm text-gray-500">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+                    <a href="#" className="text-teal-500 text-sm hover:underline mt-2 inline-block">Explore</a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </main>
+  
+          {/* Footer */}
+          <footer className="bg-white shadow-md py-4 px-6 flex justify-end">
+            <button className="bg-teal-500 text-white px-4 py-2 rounded-md hover:bg-teal-600 transition-colors duration-200 flex items-center">
+              Load More
+              <ChevronRight className="ml-2 w-4 h-4" />
+            </button>
+          </footer>
+        </div>
       </div>
-      {userId ? (
-        <DataAnalysisWorkspace userId={userId} />
-      ) : (
-        <p>Loading user data...</p>
-      )}
-    </div>
-  );
-};
-
-export default Workspace;
+    )
+}
