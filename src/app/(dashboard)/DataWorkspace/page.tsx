@@ -1,15 +1,69 @@
 import React from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from 'recharts'
-import { PlusCircle, Settings, Filter, Database, Cog, ChevronRight } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,Tooltip, ResponsiveContainer, Line } from 'recharts'
+import { PlusCircle, Settings, Filter, Database, Cog, ChevronRight, LineChart } from 'lucide-react'
+// import React, { PureComponent } from 'react';
+// import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
+type data={
+  name:string,
+  uv:number,
+  pv:number,
+  amt:number
+}
 const data = [
-  { name: 'Artist A', streams: 4000, revenue: 2400 },
-  { name: 'Artist B', streams: 3000, revenue: 1398 },
-  { name: 'Artist C', streams: 2000, revenue: 9800 },
-  { name: 'Artist D', streams: 2780, revenue: 3908 },
-  { name: 'Artist E', streams: 1890, revenue: 4800 },
-  { name: 'Artist F', streams: 2390, revenue: 3800 },
-  { name: 'Artist G', streams: 3490, revenue: 4300 },
+  {
+    name: 'Page A',
+    uv: 4000,
+    pv: 2400,
+    amt: 2400,
+  },
+  {
+    name: 'Page B',
+    uv: 3000,
+    pv: 1398,
+    amt: 2210,
+  },
+  {
+    name: 'Page C',
+    uv: 2000,
+    pv: 9800,
+    amt: 2290,
+  },
+  {
+    name: 'Page D',
+    uv: 2780,
+    pv: 3908,
+    amt: 2000,
+  },
+  {
+    name: 'Page E',
+    uv: 1890,
+    pv: 4800,
+    amt: 2181,
+  },
+  {
+    name: 'Page F',
+    uv: 2390,
+    pv: 3800,
+    amt: 2500,
+  },
+  {
+    name: 'Page G',
+    uv: 3490,
+    pv: 4300,
+    amt: 2100,
+  },
+];
+
+
+const data1 = [
+  { streams: 4000, revenue: 2400 },
+  { streams: 3000, revenue: 1398 },
+  { streams: 2000, revenue: 9800 },
+  { streams: 2780, revenue: 3908 },
+  { streams: 1890, revenue: 4800 },
+  { streams: 2390, revenue: 3800 },
+  { streams: 3490, revenue: 4300 },
 ]
 
 const sidebarItems = [
@@ -20,7 +74,10 @@ const sidebarItems = [
   { icon: Cog, label: 'Settings' },
 ]
 
+
 export default function Workspace() {
+
+  
   return (
     
       <div className="flex h-screen bg-gray-50">
@@ -63,6 +120,7 @@ export default function Workspace() {
                     <Bar dataKey="revenue" fill="#10B981" />
                   </BarChart>
                 </ResponsiveContainer> */}
+                  
               </div>
             </div>
   
@@ -83,10 +141,10 @@ export default function Workspace() {
   
           {/* Footer */}
           <footer className="bg-white shadow-md py-4 px-6 flex justify-end">
-            <button className="bg-teal-500 text-white px-4 py-2 rounded-md hover:bg-teal-600 transition-colors duration-200 flex items-center">
+            {/* <button className="bg-teal-500 text-white px-4 py-2 rounded-md hover:bg-teal-600 transition-colors duration-200 flex items-center">
               Load More
               <ChevronRight className="ml-2 w-4 h-4" />
-            </button>
+            </button> */}
           </footer>
         </div>
       </div>
