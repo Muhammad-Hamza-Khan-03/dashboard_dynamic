@@ -1,3 +1,4 @@
+import tempfile
 import traceback
 from flask import Flask, Response, request, send_file, jsonify
 from flask_cors import CORS
@@ -7,20 +8,58 @@ import csv
 import logging
 import openpyxl
 import pandas as pd
-import os
+import xml.etree.ElementTree as ET
+import PyPDF2
+from werkzeug.utils import secure_filename
+import uuid
 
 app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.DEBUG)
 
 def init_db():
-    conn = sqlite3.connect('user_csvs.db')
+    conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS csv_files
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  user_id TEXT,
-                  filename TEXT,
-                  content BLOB)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+    user_id TEXT PRIMARY KEY,
+    -- username TEXT NOT NULL,
+    -- email TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              );
+              ''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS  user_files 
+              (file_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT REFERENCES users(user_id),
+    filename TEXT NOT NULL,
+    file_type TEXT CHECK(file_type IN ('csv', 'xlsx','xls', 'db', 'tsv', 'doc', 'docx', 'txt', 'xml','pdf')),
+    is_structured BOOLEAN,
+    sheet_table TEXT, -- For Excel sheets or DB tables
+    unique_key TEXT,  -- Random unique identifier for structured data storage table
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+              );
+              ''')
+    
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS  structured_file_storage (
+    unique_key TEXT PRIMARY KEY,
+    file_id INTEGER REFERENCES user_files(file_id),
+    table_name TEXT NOT NULL, -- Name of dynamically created table for each file
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (file_id) REFERENCES user_files(file_id)
+    );
+              ''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS  unstructured_file_storage (
+    file_id INTEGER REFERENCES user_files(file_id),
+    content BLOB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (file_id) REFERENCES user_files(file_id)
+    );
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -30,182 +69,355 @@ init_db()
 def upload_file(user_id):
     app.logger.info(f"Received upload request for user: {user_id}")
     app.logger.debug(f"Request files: {request.files}")
-    
+
     if 'file' not in request.files:
         app.logger.warning("No file part in the request")
         return 'No file part', 400
-    
+
     file = request.files['file']
     app.logger.info(f"File name: {file.filename}")
-    
+
     if file.filename == '':
         app.logger.warning("No selected file")
         return 'No selected file', 400
-    
-    if file and file.filename.endswith('.csv') or file.filename.endswith('.xlsx'):
-        try:
+
+    allowed_extensions = {'csv', 'xlsx', 'xls', 'db', 'txt', 'tsv', 'pdf', 'xml', 'docx', 'doc'}
+    structured_extensions = {'csv', 'xlsx', 'xls', 'db', 'tsv'}
+    unstructured_extensions = {'txt', 'pdf', 'xml', 'docx', 'doc'}
+
+    extension = file.filename.split('.')[-1].lower()
+
+    # Invalid file extension
+    if extension not in allowed_extensions:
+        app.logger.warning("Invalid file type")
+        return 'Invalid file type', 400
+
+    # Connect to the main SQLite database
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+
+    # Ensure the user exists in the 'users' table
+    c.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
+
+    try:
+        # For structured files
+        if extension in structured_extensions:
+            # Generate a unique key for the structured data
+            unique_key = str(uuid.uuid4())
+            if extension in {'csv', 'tsv'}:
+                # Read CSV or TSV file into a DataFrame
+                delimiter = ',' if extension == 'csv' else '\t'
+                df = pd.read_csv(file, delimiter=delimiter)
+
+                # Create a new table for the structured data
+                table_name = f"table_{unique_key}"
+                df.to_sql(table_name, conn, if_exists='replace', index=False)
+
+                # Insert metadata into 'user_files'
+                c.execute("""
+                    INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (user_id, file.filename, extension, True, unique_key))
+                file_id = c.lastrowid
+
+                # Insert into 'structured_file_storage'
+                c.execute("""
+                    INSERT INTO structured_file_storage (unique_key, file_id, table_name)
+                    VALUES (?, ?, ?)
+                """, (unique_key, file_id, table_name))
+
+            elif extension in {'xlsx', 'xls'}:
+                # Read Excel file and process each sheet
+                excel_file = pd.ExcelFile(file)
+                for sheet_name in excel_file.sheet_names:
+                    df = excel_file.parse(sheet_name)
+                    sheet_unique_key = str(uuid.uuid4())
+                    table_name = f"table_{sheet_unique_key}"
+                    df.to_sql(table_name, conn, if_exists='replace', index=False)
+
+                    # Insert metadata into 'user_files'
+                    c.execute("""
+                        INSERT INTO user_files (user_id, filename, file_type, is_structured, sheet_table, unique_key)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (user_id, file.filename, extension, True, sheet_name, sheet_unique_key))
+                    file_id = c.lastrowid
+
+                    # Insert into 'structured_file_storage'
+                    c.execute("""
+                        INSERT INTO structured_file_storage (unique_key, file_id, table_name)
+                        VALUES (?, ?, ?)
+                    """, (sheet_unique_key, file_id, table_name))
+
+            elif extension == 'db':
+                # Read the content of the uploaded .db file
+                file_content = file.read()
+
+                # Load the uploaded .db file into an in-memory SQLite database
+                in_memory_db = sqlite3.connect(':memory:')
+                in_memory_db.executescript(file_content.decode('utf-8', errors='ignore'))
+                temp_cursor = in_memory_db.cursor()
+
+                # Get all table names from the in-memory database
+                temp_cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+                tables = temp_cursor.fetchall()
+
+                # Copy each table from the in-memory database to 'user_files.db'
+                for table in tables:
+                    table_name_in_db = table[0]
+
+                    # Fetch the CREATE TABLE statement
+                    temp_cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table_name_in_db}';")
+                    create_table_sql = temp_cursor.fetchone()[0]
+
+                    # Generate a unique key and create a new table in 'user_files.db'
+                    unique_key = str(uuid.uuid4())
+                    table_name = f"table_{unique_key}"
+                    c.execute(create_table_sql.replace(table_name_in_db, table_name))
+
+                    # Copy data from the in-memory table to the new table
+                    temp_cursor.execute(f"SELECT * FROM {table_name_in_db}")
+                    rows = temp_cursor.fetchall()
+                    if rows:
+                        placeholders = ','.join('?' * len(rows[0]))
+                        insert_query = f"INSERT INTO {table_name} VALUES ({placeholders})"
+                        c.executemany(insert_query, rows)
+
+                    # Insert metadata into 'user_files'
+                    c.execute("""
+                        INSERT INTO user_files (user_id, filename, file_type, is_structured, sheet_table, unique_key)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (user_id, file.filename, extension, True, table_name_in_db, unique_key))
+                    file_id = c.lastrowid
+
+                    # Insert into 'structured_file_storage'
+                    c.execute("""
+                        INSERT INTO structured_file_storage (unique_key, file_id, table_name)
+                        VALUES (?, ?, ?)
+                    """, (unique_key, file_id, table_name))
+
+                in_memory_db.close()
+
+        # For unstructured files
+        elif extension in unstructured_extensions:
             content = file.read()
-            conn = sqlite3.connect('user_csvs.db')
-            c = conn.cursor()
-            c.execute("INSERT INTO csv_files (user_id, filename, content) VALUES (?, ?, ?)",
-                      (user_id, file.filename, content))
-            conn.commit()
-            conn.close()
-            app.logger.info("File uploaded successfully")
-            return 'File uploaded successfully', 200
-        except Exception as e:
-            app.logger.error(f"Error during file upload: {str(e)}")
-            return f'Error during file upload: {str(e)}', 500
-    
-    app.logger.warning("Invalid file type")
-    return 'Invalid file type', 400
+
+            # Insert metadata into 'user_files'
+            c.execute("""
+                INSERT INTO user_files (user_id, filename, file_type, is_structured)
+                VALUES (?, ?, ?, ?)
+            """, (user_id, file.filename, extension, False))
+            file_id = c.lastrowid
+
+            # Insert the content into 'unstructured_file_storage'
+            c.execute("""
+                INSERT INTO unstructured_file_storage (file_id, content)
+                VALUES (?, ?)
+            """, (file_id, content))
+
+        conn.commit()
+        app.logger.info(f"File uploaded successfully for user {user_id}")
+        return 'File uploaded successfully', 200
+
+    except Exception as e:
+        app.logger.error(f"Error during file upload: {str(e)}")
+        return f'Error during file upload: {str(e)}', 500
+
+    finally:
+        conn.close()
 
 @app.route('/list_files/<user_id>', methods=['GET'])
 def list_files(user_id):
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
     try:
-        conn = sqlite3.connect('user_csvs.db')
-        c = conn.cursor()
-        c.execute("SELECT filename FROM csv_files WHERE user_id = ?", (user_id,))
-        files = [row[0] for row in c.fetchall()]
-        conn.close()
-        return jsonify({"files": files})
+        c.execute("""
+            SELECT file_id, filename, file_type, is_structured, created_at
+            FROM user_files
+            WHERE user_id = ?
+        """, (user_id,))
+        files = c.fetchall()
+        file_list = [
+            {
+                'file_id': f[0],
+                'filename': f[1],
+                'file_type': f[2],
+                'is_structured': bool(f[3]),
+                'created_at': f[4]
+            } for f in files
+        ]
+        return jsonify({'files': file_list}), 200
     except Exception as e:
         app.logger.error(f"Error listing files: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/get_file/<user_id>/<filename>', methods=['GET'])
-def get_file(user_id, filename):
-    try:
-        conn = sqlite3.connect('user_csvs.db')
-        c = conn.cursor()
-        c.execute("SELECT content FROM csv_files WHERE user_id = ? AND filename = ?", (user_id, filename))
-        result = c.fetchone()
+        return f'Error listing files: {str(e)}', 500
+    finally:
         conn.close()
-        
-        if result:
-            content = result[0]
-            chunk_size = 50 * 1024 * 1024  # 50MB chunks
-            chunk_number = int(request.args.get('chunk', 0))
-            
-            app.logger.info(f"Processing file: {filename} for user: {user_id}, chunk: {chunk_number}")
-            
-            if filename.endswith('.xlsx'):
-                # Handle Excel file
-                excel_buffer = io.BytesIO(content)
-                sheet_index = int(request.args.get('sheet', 0))
-                
-                def generate_excel_chunks():
-                    try:
-                        book = openpyxl.load_workbook(excel_buffer, read_only=True)
-                        sheet = book.worksheets[sheet_index]
-                        
-                        headers = [cell.value for cell in sheet[1]]
-                        yield ','.join(map(str, headers)) + '\n'
-                        
-                        row_count = sheet.max_row
-                        start_row = chunk_number * chunk_size + 2
-                        end_row = min((chunk_number + 1) * chunk_size + 1, row_count)
-                        
-                        for row in sheet.iter_rows(min_row=start_row, max_row=end_row, values_only=True):
-                            yield ','.join(map(str, row)) + '\n'
-                        
-                        if end_row >= row_count:
-                            yield 'EOF'
-                    except Exception as e:
-                        app.logger.error(f"Error processing Excel file: {str(e)}")
-                        app.logger.error(traceback.format_exc())
-                        yield f"Error: {str(e)}"
-                
-                return Response(generate_excel_chunks(), mimetype='text/csv')
-            else:
-                # Handle CSV file
-                if isinstance(content, bytes):
-                    content = content.decode('utf-8')
-                csv_buffer = io.StringIO(content)
-                
-                def generate_csv_chunks():
-                    try:
-                        reader = csv.reader(csv_buffer)
-                        headers = next(reader)
-                        yield ','.join(headers) + '\n'
-                        
-                        csv_buffer.seek(0)
-                        csv_buffer.readline()  # Skip header
-                        
-                        start_pos = chunk_number * chunk_size
-                        csv_buffer.seek(start_pos)
-                        
-                        bytes_read = 0
-                        for row in reader:
-                            row_data = ','.join(row) + '\n'
-                            bytes_read += len(row_data)
-                            yield row_data
-                            
-                            if bytes_read >= chunk_size:
-                                break
-                        
-                        if csv_buffer.tell() >= len(content):
-                            yield 'EOF'
-                    except Exception as e:
-                        app.logger.error(f"Error processing CSV file: {str(e)}")
-                        app.logger.error(traceback.format_exc())
-                        yield f"Error: {str(e)}"
-                
-                return Response(generate_csv_chunks(), mimetype='text/csv')
+
+@app.route('/get-file/<user_id>/<file_id>', methods=['GET'])
+def get_file(user_id, file_id):
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+
+    try:
+        # Fetch file metadata from 'user_files' table
+        c.execute("""
+            SELECT filename, file_type, is_structured, sheet_table, unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        file_metadata = c.fetchone()
+
+        if not file_metadata:
+            app.logger.warning("File not found or access denied")
+            return 'File not found or access denied', 404
+
+        filename, file_type, is_structured, sheet_table, unique_key = file_metadata
+
+        if is_structured:
+            # Fetch table name from 'structured_file_storage' using unique_key
+            c.execute("""
+                SELECT table_name FROM structured_file_storage
+                WHERE unique_key = ?
+            """, (unique_key,))
+            result = c.fetchone()
+
+            if not result:
+                app.logger.warning("Structured data not found")
+                return 'Structured data not found', 404
+
+            table_name = result[0]
+
+            # Retrieve data from the dynamically created table
+            df = pd.read_sql_query(f"SELECT * FROM '{table_name}'", conn)
+
+            # Convert DataFrame to CSV
+            csv_data = df.to_csv(index=False)
+
+            # Return the CSV data as a response
+            return Response(
+                csv_data,
+                mimetype='text/csv',
+                headers={"Content-Disposition": f"attachment;filename={filename}.csv"}
+            )
+
         else:
-            app.logger.warning(f"File not found: {filename} for user: {user_id}")
-            return "File not found", 404
+            # Retrieve content from 'unstructured_file_storage'
+            c.execute("""
+                SELECT content FROM unstructured_file_storage
+                WHERE file_id = ?
+            """, (file_id,))
+            result = c.fetchone()
+
+            if not result:
+                app.logger.warning("Unstructured file content not found")
+                return 'Unstructured file content not found', 404
+
+            content = result[0]
+
+            # Attempt to decode content as text
+            try:
+                text_content = content.decode('utf-8')
+            except UnicodeDecodeError:
+                try:
+                    text_content = content.decode('latin1')
+                except UnicodeDecodeError:
+                    app.logger.error("Unable to decode content as text")
+                    return 'Unable to decode content as text', 500
+
+            # Return the text content
+            return Response(
+                text_content,
+                mimetype='text/plain',
+                headers={"Content-Disposition": f"attachment;filename={filename}"}
+            )
+
     except Exception as e:
         app.logger.error(f"Error retrieving file: {str(e)}")
-        app.logger.error(traceback.format_exc())
-        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+        return f'Error retrieving file: {str(e)}', 500
 
-    
-@app.route('/get_sheet_count/<user_id>/<filename>', methods=['GET'])
-def get_sheet_count(user_id, filename):
-    try:
-        conn = sqlite3.connect('user_csvs.db')
-        c = conn.cursor()
-        c.execute("SELECT content FROM csv_files WHERE user_id = ? AND filename = ?", (user_id, filename))
-        result = c.fetchone()
+    finally:
         conn.close()
         
+@app.route('/get_table_count/<user_id>/<filename>', methods=['GET'])
+def get_table_count(user_id, filename):
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        c.execute("SELECT content FROM user_files WHERE user_id = ? AND filename = ?", (user_id, filename))
+        result = c.fetchone()
+        conn.close()
+
         if result:
             content = result[0]
-            
-            if filename.endswith('.xlsx'):
-                excel_buffer = io.BytesIO(content)
-                book = openpyxl.load_workbook(excel_buffer, read_only=True)
-                sheet_count = len(book.worksheets)
-                sheet_names = book.sheetnames
-                app.logger.info(f"Sheet names for {filename}: {sheet_names}")
-                return jsonify({"sheet_count": sheet_count, "sheet_names": sheet_names})
-            else:
-                app.logger.info(f"CSV file {filename}: single sheet")
-                return jsonify({"sheet_count": 1, "sheet_names": ["Sheet1"]})
+            with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as temp_db_file:
+                temp_db_file.write(content)
+                temp_db_path = temp_db_file.name
+
+            conn = sqlite3.connect(temp_db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = [table[0] for table in cursor.fetchall()]
+            conn.close()
+
+            app.logger.info(f"Tables in {filename}: {tables}")
+            return jsonify({"table_count": len(tables), "table_names": tables})
         else:
             app.logger.warning(f"File not found: {filename}")
             return "File not found", 404
     except Exception as e:
-        app.logger.error(f"Error getting sheet count: {str(e)}")
+        app.logger.error(f"Error getting table count: {str(e)}")
         return str(e), 500
-        
-@app.route('/delete_file/<user_id>/<filename>', methods=['DELETE'])
-def delete_file(user_id, filename):
+
+@app.route('/delete-file/<user_id>/<file_id>', methods=['DELETE'])
+def delete_file(user_id, file_id):
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
     try:
-        conn = sqlite3.connect('user_csvs.db')
-        c = conn.cursor()
-        c.execute("DELETE FROM csv_files WHERE user_id = ? AND filename = ?", (user_id, filename))
+        # Verify file ownership
+        c.execute("""
+            SELECT is_structured, unique_key FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        result = c.fetchone()
+        if not result:
+            return 'File not found or access denied', 404
+        is_structured, unique_key = result
+        
+        if is_structured:
+            # Delete from structured_file_storage and drop the table
+            c.execute("""
+                SELECT table_name FROM structured_file_storage
+                WHERE unique_key = ?
+            """, (unique_key,))
+            table_result = c.fetchone()
+            if table_result:
+                table_name = table_result[0]
+                c.execute(f"DROP TABLE IF EXISTS '{table_name}'")
+                c.execute("""
+                    DELETE FROM structured_file_storage
+                    WHERE unique_key = ?
+                """, (unique_key,))
+        else:
+            # Delete from unstructured_file_storage
+            c.execute("""
+                DELETE FROM unstructured_file_storage
+                WHERE file_id = ?
+            """, (file_id,))
+        
+        # Delete from user_files
+        c.execute("""
+            DELETE FROM user_files
+            WHERE file_id = ?
+        """, (file_id,))
+        
         conn.commit()
-        if c.rowcount == 0:
-            conn.close()
-            return "File not found", 404
-        conn.close()
-        app.logger.info(f"File '{filename}' deleted successfully for user '{user_id}'")
         return 'File deleted successfully', 200
     except Exception as e:
         app.logger.error(f"Error deleting file: {str(e)}")
         return f'Error deleting file: {str(e)}', 500
+    finally:
+        conn.close()
+
 
 @app.route('/update_blob/<user_id>/<filename>', methods=['POST'])
 def update_blob(user_id, filename):
@@ -224,21 +436,47 @@ def update_blob(user_id, filename):
         df = pd.DataFrame(new_content)
         
         # Determine file type and save accordingly
-        if filename.endswith('.xlsx'):
+        file_extension = filename.split('.')[-1].lower()
+        
+        if file_extension == 'xlsx':
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False)
             content = output.getvalue()
-        else:  # Assume CSV for all other cases
+        elif file_extension in ['csv', 'tsv', 'txt']:
+            delimiter = ',' if file_extension == 'csv' else '\t'
             csv_buffer = io.StringIO()
-            df.to_csv(csv_buffer, index=False)
+            df.to_csv(csv_buffer, index=False, sep=delimiter)
             content = csv_buffer.getvalue().encode()
+        elif file_extension == 'db':
+            temp_db = io.BytesIO()
+            conn = sqlite3.connect(temp_db)
+            df.to_sql('data', conn, if_exists='replace', index=False)
+            conn.commit()
+            content = temp_db.getvalue()
+        elif file_extension == 'xml':
+            root = ET.Element('root')
+            for _, row in df.iterrows():
+                child = ET.SubElement(root, 'item')
+                for col, value in row.items():
+                    child.set(col, str(value))
+            content = ET.tostring(root)
+        elif file_extension == 'pdf':
+            # We can't easily update PDF content, so we'll create a new PDF with the data
+            output = io.BytesIO()
+            pdf = PyPDF2.PdfWriter()
+            page = pdf.add_blank_page(width=612, height=792)
+            page.insert_text(50, 700, str(df))
+            pdf.write(output)
+            content = output.getvalue()
+        else:
+            return jsonify({"error": "Unsupported file type for update"}), 400
         
-        conn = sqlite3.connect('user_csvs.db')
+        conn = sqlite3.connect('user_files.db')
         c = conn.cursor()
         
         # Update the database with the new content
-        c.execute("UPDATE csv_files SET content = ? WHERE user_id = ? AND filename = ?",
+        c.execute("UPDATE user_files SET content = ? WHERE user_id = ? AND filename = ?",
                   (content, user_id, filename))
         conn.commit()
         conn.close()
@@ -249,6 +487,6 @@ def update_blob(user_id, filename):
     except Exception as e:
         app.logger.error(f"Error updating blob content: {str(e)}")
         return jsonify({"error": str(e)}), 500
-    
+
 if __name__ == '__main__':
-    app.run(debug=True,port=5000)
+    app.run(debug=True, port=5000)
