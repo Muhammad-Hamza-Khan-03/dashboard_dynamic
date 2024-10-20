@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 
 import {
   ClerkProvider,
+  SignIn,
   SignInButton,
   SignedIn,
   SignedOut,
@@ -14,8 +15,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Insight AI Dashboard ",
-  description: "Final Year Project",
+  title: "InsightAI Dashboard ",
+  description: "Personalized Dashboard",
 };
 
 export default function RootLayout({
@@ -25,6 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
+     
     <html lang="en">
         <body className={inter.className}>{children}</body>
         
