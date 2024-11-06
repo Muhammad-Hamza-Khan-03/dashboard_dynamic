@@ -18,10 +18,13 @@ const routes = [
     },
 
     {
+href: "../Home",
+        label: "Main-Home"
+    },
+    {
         href: "/upload",
         label: "Data Table"
     },
-
 
 
     {
