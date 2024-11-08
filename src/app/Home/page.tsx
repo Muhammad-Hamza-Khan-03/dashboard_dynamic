@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, PieChart, LineChart, Activity, Database, MessageSquare, Zap, Upload, RefreshCw, GitBranch, Terminal, Layout } from 'lucide-react'
 import Image from 'next/image'
+import Link from 'next/link';
+import { useRouter } from 'next/router';
 
 export default function OverviewPage() {
   const [hoveredFeature, setHoveredFeature] = useState(null)
@@ -35,16 +37,10 @@ export default function OverviewPage() {
             <h1 className="text-2xl font-bold text-blue-600">InsightAI Dashboard</h1>
             {/* <p className="text-sm text-gray-600 hidden md:block">Your AI-Driven Data Dashboard for Smarter Insights</p> */}
           </div>
-          <div className="hidden md:flex space-x-4">
-            <Button variant="ghost">Home</Button>
-            <Button variant="ghost">Board</Button>
-            <Button variant="ghost">Use Cases</Button>
-            <Button variant="ghost">Resources</Button>
-            <Button variant="ghost">Support</Button>
-          </div>
+        
           <div className="flex space-x-2">
-            <Button variant="outline">Login</Button>
-            <Button>Sign Up</Button>
+            <Link href={"/sign-in"}><Button variant="outline">Login</Button></Link>
+            <Link href={"/sign-up"}><Button>Sign Up</Button></Link>
           </div>
         </nav>
       </header>
@@ -57,8 +53,10 @@ export default function OverviewPage() {
                 <h2 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">Unlock the Power of AI for Your Data</h2>
                 <p className="text-xl mb-8 leading-relaxed">From data handling to relational insights—all automated for you.</p>
                 <div className="flex align-middle">
+                  <Link href={"/"}>
                   <Button size="lg" variant="secondary" className="bg-white text-blue-600 hover:bg-blue-100 transition-colors duration-300">Get Started</Button>
-                </div>
+                  </Link>
+                  </div>
               </div>
               <div className="md:w-1/2">
                 <Image src="/logo.svg" alt="Dashboard Mockup" width={400} height={400} className="rounded-lg shadow-2xl transform hover:scale-105 transition-transform duration-300" />
@@ -152,7 +150,7 @@ export default function OverviewPage() {
               ].map((testimonial, index) => (
                 <Card key={index} className="bg-gray-50 shadow-lg hover:shadow-xl transition-shadow duration-300">
                   <CardContent className="pt-12 pb-8 px-8">
-                    <Image src="/profile1.svg" alt="User Avatar" width={80} height={80} className="rounded-full mx-auto mb-6 border-4 border-indigo-100" />
+                    <Image src="/next.svg" alt="User Avatar" width={80} height={80} className="rounded-full mx-auto mb-6 border-4 border-indigo-100" />
                     <p className="italic mb-6 text-gray-700 text-center leading-relaxed">"{testimonial.quote}"</p>
                     <p className="font-semibold text-indigo-600 text-center">{testimonial.author}</p>
                     <p className="text-gray-500 text-center text-sm">{testimonial.role}</p>
@@ -168,7 +166,9 @@ export default function OverviewPage() {
           <div className="container mx-auto px-4 text-center">
             <h2 className="text-4xl font-bold mb-8">Ready to Dive into AI-Powered Insights?</h2>
             <div className="flex justify-center ">
+              <Link href={"/"}>
               <Button size="lg" variant="secondary" className="bg-white text-blue-600 hover:bg-blue-100 transition-colors duration-300">Get Started</Button>
+              </Link>
               </div>
           </div>
         </section>

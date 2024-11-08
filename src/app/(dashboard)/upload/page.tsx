@@ -63,7 +63,7 @@ const DataTablePage: React.FC = () => {
   const [tableKey, setTableKey] = useState(0);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [tableNames, setTableNames] = useState<string[]>([]);
-
+ 
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
       setSelectedFile(fileList[0]);
