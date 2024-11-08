@@ -434,7 +434,7 @@ const DataTablePage: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
-              {selectedFile && selectedFile.endsWith('.db') && (
+              {selectedFile && selectedFile.endsWith('.db')  && (
                 <Select onValueChange={setSelectedTable} value={selectedTable || undefined}>
                   <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
                     <SelectValue placeholder="Select a table" />

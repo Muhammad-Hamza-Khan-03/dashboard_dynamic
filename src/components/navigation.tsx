@@ -18,8 +18,8 @@ const routes = [
     },
 
     {
-href: "../Home",
-        label: "Main-Home"
+        href: "../Home",
+        label: "Home-Main"
     },
     {
         href: "/upload",
