@@ -54,12 +54,22 @@ def init_db():
     
     c.execute('''CREATE TABLE IF NOT EXISTS  unstructured_file_storage (
     file_id INTEGER REFERENCES user_files(file_id),
+    unique_key TEXT PRIMARY KEY,
     content BLOB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (file_id) REFERENCES user_files(file_id)
     );
     ''')
     
+    c.execute('''CREATE TABLE IF NOT EXISTS  dashboard_store (
+        dashboard_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_id INTEGER REFERENCES user_files(file_id),
+        dashboard_data BLOB,
+              user_id TEXT REFERENCES users(user_id),
+        dashboard_name TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    ''')
     conn.commit()
     conn.close()
 
@@ -200,19 +210,19 @@ def upload_file(user_id):
         # For unstructured files
         elif extension in unstructured_extensions:
             content = file.read()
-
+            unique_key = str(uuid.uuid4())
             # Insert metadata into 'user_files'
             c.execute("""
-                INSERT INTO user_files (user_id, filename, file_type, is_structured)
-                VALUES (?, ?, ?, ?)
-            """, (user_id, file.filename, extension, False))
+                INSERT INTO user_files (user_id, filename, file_type, is_structured,unique_key)
+                VALUES (?, ?, ?, ?,?)
+            """, (user_id, file.filename, extension, False,unique_key))
             file_id = c.lastrowid
 
             # Insert the content into 'unstructured_file_storage'
             c.execute("""
-                INSERT INTO unstructured_file_storage (file_id, content)
-                VALUES (?, ?)
-            """, (file_id, content))
+                INSERT INTO unstructured_file_storage (file_id,unique_key, content)
+                VALUES (?,?, ?)
+            """, (file_id, unique_key, content))
 
         conn.commit()
         app.logger.info(f"File uploaded successfully for user {user_id}")
@@ -231,7 +241,7 @@ def list_files(user_id):
     c = conn.cursor()
     try:
         c.execute("""
-            SELECT file_id, filename, file_type, is_structured, created_at
+            SELECT file_id, filename, file_type, is_structured, created_at,unique_key
             FROM user_files
             WHERE user_id = ?
         """, (user_id,))
@@ -242,7 +252,8 @@ def list_files(user_id):
                 'filename': f[1],
                 'file_type': f[2],
                 'is_structured': bool(f[3]),
-                'created_at': f[4]
+                'created_at': f[4],
+                'unique_key': f[5]
             } for f in files
         ]
         return jsonify({'files': file_list}), 200
@@ -251,92 +262,175 @@ def list_files(user_id):
         return f'Error listing files: {str(e)}', 500
     finally:
         conn.close()
+#############################################
+@app.route('/get-sheets/<user_id>/<file_id>', methods=['GET'])
+def get_sheets(user_id, file_id):
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+    
+    try:
+        # Get file metadata first
+        c.execute("""
+            SELECT filename, file_type, is_structured
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        file_metadata = c.fetchone()
+        if not file_metadata:
+            return jsonify({'error': 'File not found'}), 404
+            
+        filename, file_type, is_structured = file_metadata
+        
+        # Get all sheets/tables for this file
+        c.execute("""
+            SELECT sheet_table, unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+            AND sheet_table IS NOT NULL
+        """, (file_id, user_id))
+        
+        sheets = c.fetchall()
+        
+        # Format response based on file type
+        if file_type in ['xlsx', 'xls']:
+            sheet_list = [{
+                'name': sheet[0],  # sheet_table
+                'key': sheet[1]    # unique_key
+            } for sheet in sheets]
+            
+            return jsonify({
+                'type': 'excel',
+                'sheets': sheet_list
+            })
+            
+        elif file_type == 'db':
+            table_list = [{
+                'name': sheet[0],  # sheet_table
+                'key': sheet[1]    # unique_key
+            } for sheet in sheets]
+            
+            return jsonify({
+                'type': 'database',
+                'tables': table_list
+            })
+            
+        else:
+            return jsonify({
+                'type': 'single',
+                'sheets': []
+            })
+            
+    except Exception as e:
+        app.logger.error(f"Error getting sheets/tables: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
 @app.route('/get-file/<user_id>/<file_id>', methods=['GET'])
 def get_file(user_id, file_id):
     conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
+    sheet_key = request.args.get('sheet_key')
 
     try:
-        # Fetch file metadata from 'user_files' table
-        c.execute("""
-            SELECT filename, file_type, is_structured, sheet_table, unique_key
-            FROM user_files
-            WHERE file_id = ? AND user_id = ?
-        """, (file_id, user_id))
+        # First get the file metadata
+        if sheet_key:
+            # If sheet_key is provided, get specific sheet metadata
+            c.execute("""
+                SELECT filename, file_type, is_structured, unique_key
+                FROM user_files
+                WHERE file_id = ? AND user_id = ? AND unique_key = ?
+            """, (file_id, user_id, sheet_key))
+        else:
+            # Otherwise get the main file metadata
+            c.execute("""
+                SELECT filename, file_type, is_structured, unique_key
+                FROM user_files
+                WHERE file_id = ? AND user_id = ? AND sheet_table IS NULL
+            """, (file_id, user_id))
+        
         file_metadata = c.fetchone()
-
         if not file_metadata:
-            app.logger.warning("File not found or access denied")
-            return 'File not found or access denied', 404
+            return jsonify({'error': 'File not found'}), 404
 
-        filename, file_type, is_structured, sheet_table, unique_key = file_metadata
+        filename, file_type, is_structured, unique_key = file_metadata
 
         if is_structured:
-            # Fetch table name from 'structured_file_storage' using unique_key
+            # Get the table name from structured_file_storage
             c.execute("""
                 SELECT table_name FROM structured_file_storage
                 WHERE unique_key = ?
             """, (unique_key,))
             result = c.fetchone()
-
+            
             if not result:
-                app.logger.warning("Structured data not found")
-                return 'Structured data not found', 404
-
+                return jsonify({'error': 'Structured data not found'}), 404
+            
             table_name = result[0]
-
-            # Retrieve data from the dynamically created table
-            df = pd.read_sql_query(f"SELECT * FROM '{table_name}'", conn)
-
-            # Convert DataFrame to CSV
-            csv_data = df.to_csv(index=False)
-
-            # Return the CSV data as a response
-            return Response(
-                csv_data,
-                mimetype='text/csv',
-                headers={"Content-Disposition": f"attachment;filename={filename}.csv"}
-            )
-
+            
+            # Get the table schema
+            c.execute(f"PRAGMA table_info('{table_name}')")
+            columns = [col[1] for col in c.fetchall()]
+            
+            # Fetch data with proper column names
+            c.execute(f"SELECT * FROM '{table_name}'")
+            rows = c.fetchall()
+            
+            # Convert to list of dictionaries with column names
+            data = []
+            for row in rows:
+                row_dict = {}
+                for i, value in enumerate(row):
+                    row_dict[columns[i]] = value
+                data.append(row_dict)
+            
+            return jsonify({
+                'type': 'structured',
+                'file_type': file_type,
+                'columns': columns,
+                'data': data
+            })
         else:
-            # Retrieve content from 'unstructured_file_storage'
+            # Handle unstructured data
             c.execute("""
                 SELECT content FROM unstructured_file_storage
-                WHERE file_id = ?
-            """, (file_id,))
+                WHERE file_id = ? AND unique_key = ?
+            """, (file_id, unique_key))
             result = c.fetchone()
-
+            
             if not result:
-                app.logger.warning("Unstructured file content not found")
-                return 'Unstructured file content not found', 404
-
+                return jsonify({'error': 'Unstructured data not found'}), 404
+                
             content = result[0]
-
-            # Attempt to decode content as text
-            try:
-                text_content = content.decode('utf-8')
-            except UnicodeDecodeError:
+            
+            if file_type in ['txt', 'csv', 'tsv']:
                 try:
-                    text_content = content.decode('latin1')
+                    decoded_content = content.decode('utf-8')
                 except UnicodeDecodeError:
-                    app.logger.error("Unable to decode content as text")
-                    return 'Unable to decode content as text', 500
-
-            # Return the text content
-            return Response(
-                text_content,
-                mimetype='text/plain',
-                headers={"Content-Disposition": f"attachment;filename={filename}"}
-            )
+                    decoded_content = content.decode('latin1')
+                    
+                return jsonify({
+                    'type': 'unstructured',
+                    'file_type': file_type,
+                    'content': decoded_content
+                })
+            else:
+                import base64
+                encoded_content = base64.b64encode(content).decode('utf-8')
+                return jsonify({
+                    'type': 'unstructured',
+                    'file_type': file_type,
+                    'content': encoded_content
+                })
 
     except Exception as e:
         app.logger.error(f"Error retrieving file: {str(e)}")
-        return f'Error retrieving file: {str(e)}', 500
-
+        return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
-        
+
+################################################        
 @app.route('/get_table_count/<user_id>/<filename>', methods=['GET'])
 def get_table_count(user_id, filename):
     try:

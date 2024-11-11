@@ -43,7 +43,19 @@ interface DataTableProps<TData> {
   onRowSelectionChange: (rows: Row<TData>[]) => void
   onReset: () => void
 }
+///////
+// Add these interfaces
+interface Sheet {
+  name: string;
+  key: string;
+}
 
+interface FileMetadata {
+  file_id: string;
+  filename: string;
+  file_type: string;
+}
+///////
 type DataItem = FileData;
 
 const DataTablePage: React.FC = () => {
@@ -51,7 +63,8 @@ const DataTablePage: React.FC = () => {
   const [columns, setColumns] = useState<ColumnDef<DataItem, any>[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{file_id: string, filename: string} | null>(null);
+
   const { user, isLoaded: isUserLoaded } = useUser();
   const { fileList, error: fileListError, loading: fileListLoading, refetch: refetchFileList } = useFilesList(user?.id);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -66,54 +79,130 @@ const DataTablePage: React.FC = () => {
  
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
-      setSelectedFile(fileList[0]);
+      setSelectedFile({ file_id: fileList[0].file_id, filename: fileList[0].filename });
     }
   }, [isUserLoaded, user, fileList, selectedFile]);
 
-  const fetchFileData = useCallback(async (filename: string) => {
-    if (!user?.id) {
-      console.error("User ID not available");
-      setError("User ID not available");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await axios.get(`http://localhost:5000/get_file/${user.id}/${filename}`, {
+  /////////////////////////////////////////////////////
+// Modified fetchFileData function in page.tsx
+const fetchFileData = useCallback(async (fileId: string, filename: string) => {
+  if (!user?.id) {
+    console.error("User ID not available");
+    setError("User ID not available");
+    return;
+  }
+  
+  setLoading(true);
+  setError(null);
+  
+  try {
+    console.log(`Fetching file: /get-file/${user.id}/${fileId}`); // Debug log
+    
+    const response = await axios.get(
+      `http://localhost:5000/get-file/${user.id}/${fileId}`,
+      {
         params: { table: selectedTable },
-        responseType: 'text',
+        headers: { 'Accept': 'application/json' }
+      }
+    );
+
+    if (!response.data) {
+      throw new Error('No data received from server');
+    }
+
+    console.log('Response data:', response.data); // Debug log
+
+    const responseData = response.data;
+
+    if (responseData.type === 'structured') {
+      // Handle structured data
+      const parsedData = responseData.data.map((row: any) => {
+        const processedRow: { [key: string]: any } = {};
+        responseData.columns.forEach((column: string) => {
+          processedRow[column] = row[column];
+        });
+        return processedRow;
       });
-
-      const fileData = response.data;
-      console.log("Fetched file data:", fileData);
-
-      const parsedData = parseFileData(fileData, filename);
-      console.log("Parsed file data:", parsedData);
 
       setData(parsedData);
       if (parsedData.length > 0) {
         setColumns(generateColumns(parsedData[0]));
-      } else {
-        setColumns([]);
       }
-    } catch (err) {
-      console.error("Error in fetchFileData:", err);
-      setError(err instanceof Error ? err.message : "Failed to process file data");
-      toast({
-        title: "Error",
-        description: err instanceof Error ? err.message : "Failed to process file data",
-        duration: 3000,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [user, selectedTable]);
+    } else {
+      // Handle unstructured data
+      const fileExtension = filename.split('.').pop()?.toLowerCase();
+      let parsedData: FileData[] = [];
 
-  useEffect(() => {
-    if (isUserLoaded && user && selectedFile) {
-      fetchFileData(selectedFile);
+      if (fileExtension === 'csv' || fileExtension === 'tsv') {
+        parsedData = parseCSVContent(responseData.content);
+      } else if (fileExtension === 'txt') {
+        parsedData = parseTextContent(responseData.content);
+      } else {
+        parsedData = [{
+          content: responseData.content,
+          type: responseData.file_type
+        }];
+      }
+
+      setData(parsedData);
+      if (parsedData.length > 0) {
+        setColumns(generateColumns(parsedData[0]));
+      }
     }
-  }, [isUserLoaded, user, selectedFile, selectedTable, fetchFileData]);
+  } catch (err) {
+    console.error("Error in fetchFileData:", err);
+    setError(err instanceof Error ? err.message : "Failed to process file data");
+    toast({
+      title: "Error",
+      description: err instanceof Error ? err.message : "Failed to process file data",
+      variant: "destructive"
+    });
+  } finally {
+    setLoading(false);
+  }
+}, [user, selectedTable]);
+
+
+// Helper function to parse CSV content
+const parseCSVContent = (content: string): DataItem[] => {
+  const lines = content.trim().split('\n');
+  if (lines.length === 0) return [];
+
+  const headers = lines[0].split(',').map(header => header.trim());
+  
+  return lines.slice(1).map(line => {
+    const values = line.split(',');
+    const row: DataItem = {};
+    
+    headers.forEach((header, index) => {
+      let value = values[index]?.trim() || '';
+      
+      // Try to parse numbers
+      if (!isNaN(Number(value))) {
+        row[header] = Number(value);
+      } else {
+        row[header] = value;
+      }
+    });
+    
+    return row;
+  });
+};
+
+// Helper function to parse text content
+const parseTextContent = (content: string): DataItem[] => {
+  const lines = content.trim().split('\n');
+  return lines.map((line, index) => ({
+    line: index + 1,
+    content: line.trim()
+  }));
+};
+///////////////////////////////////////////////////////////////////////////////////
+useEffect(() => {
+  if (isUserLoaded && user && selectedFile) {
+    fetchFileData(selectedFile.file_id, selectedFile.filename);
+  }
+}, [isUserLoaded, user, selectedFile, fetchFileData]);
 
   const fetchTableNames = useCallback(async (filename: string) => {
     if (!user?.id) {
@@ -144,7 +233,7 @@ const DataTablePage: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
-    if (selectedFile && selectedFile.endsWith('.db')) {
+    if (selectedFile && typeof selectedFile === 'string' && (selectedFile as string).endsWith('.db')) {
       fetchTableNames(selectedFile);
     }
   }, [selectedFile, fetchTableNames]);
@@ -407,7 +496,7 @@ const DataTablePage: React.FC = () => {
               }
             />
             <FileDelete
-              fileList={fileList || []}
+              fileList={fileList?.map(file => file.filename) || []}
               onDeleteSuccess={handleDeleteSuccess}
             />
           </div>
@@ -422,19 +511,29 @@ const DataTablePage: React.FC = () => {
             <span className="text-red-500">{fileListError}</span>
           ) : fileList && fileList.length > 0 ? (
             <div className="space-y-4">
-              <Select onValueChange={setSelectedFile} value={selectedFile || undefined}>
-                    <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
-                  <SelectValue placeholder="Select a file" />
-                </SelectTrigger>
-                <SelectContent>
-                  {fileList.map(file => (
-                    <SelectItem key={file} value={file}>
-                      {file}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedFile && selectedFile.endsWith('.db')  && (
+              <Select 
+  onValueChange={(value) => {
+    const selectedFileData = fileList?.find(file => file.file_id === value);
+    if (selectedFileData) {
+      setSelectedFile({
+        file_id: selectedFileData.file_id,
+        filename: selectedFileData.filename
+      });
+    }
+  }} 
+  value={selectedFile?.file_id}>
+  <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
+    <SelectValue placeholder="Select a file" />
+  </SelectTrigger>
+  <SelectContent>
+    {fileList?.map(file => (
+      <SelectItem key={file.file_id} value={file.file_id}>
+        {file.filename}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+              {selectedFile && typeof selectedFile==='string' && (selectedFile as string).endsWith('.db')  && (
                 <Select onValueChange={setSelectedTable} value={selectedTable || undefined}>
                   <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
                     <SelectValue placeholder="Select a table" />
@@ -454,7 +553,7 @@ const DataTablePage: React.FC = () => {
           )}
         </CardContent>
       </Card>
-
+ 
       <Card className="shadow-lg rounded-lg overflow-hidden bg-white">
         <CardHeader className="flex flex-row items-center justify-between bg-gray-50">
           <CardTitle className="text-2xl">File Content</CardTitle>
