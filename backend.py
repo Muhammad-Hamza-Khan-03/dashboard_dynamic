@@ -263,98 +263,31 @@ def list_files(user_id):
     finally:
         conn.close()
 #############################################
-@app.route('/get-sheets/<user_id>/<file_id>', methods=['GET'])
-def get_sheets(user_id, file_id):
-    conn = sqlite3.connect('user_files.db')
-    c = conn.cursor()
-    
-    try:
-        # Get file metadata first
-        c.execute("""
-            SELECT filename, file_type, is_structured
-            FROM user_files
-            WHERE file_id = ? AND user_id = ?
-        """, (file_id, user_id))
-        
-        file_metadata = c.fetchone()
-        if not file_metadata:
-            return jsonify({'error': 'File not found'}), 404
-            
-        filename, file_type, is_structured = file_metadata
-        
-        # Get all sheets/tables for this file
-        c.execute("""
-            SELECT sheet_table, unique_key
-            FROM user_files
-            WHERE file_id = ? AND user_id = ?
-            AND sheet_table IS NOT NULL
-        """, (file_id, user_id))
-        
-        sheets = c.fetchall()
-        
-        # Format response based on file type
-        if file_type in ['xlsx', 'xls']:
-            sheet_list = [{
-                'name': sheet[0],  # sheet_table
-                'key': sheet[1]    # unique_key
-            } for sheet in sheets]
-            
-            return jsonify({
-                'type': 'excel',
-                'sheets': sheet_list
-            })
-            
-        elif file_type == 'db':
-            table_list = [{
-                'name': sheet[0],  # sheet_table
-                'key': sheet[1]    # unique_key
-            } for sheet in sheets]
-            
-            return jsonify({
-                'type': 'database',
-                'tables': table_list
-            })
-            
-        else:
-            return jsonify({
-                'type': 'single',
-                'sheets': []
-            })
-            
-    except Exception as e:
-        app.logger.error(f"Error getting sheets/tables: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        conn.close()
 
 @app.route('/get-file/<user_id>/<file_id>', methods=['GET'])
 def get_file(user_id, file_id):
     conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
-    sheet_key = request.args.get('sheet_key')
 
     try:
+        # Debug logging
+        app.logger.info(f"Retrieving file for user_id: {user_id}, file_id: {file_id}")
+        
         # First get the file metadata
-        if sheet_key:
-            # If sheet_key is provided, get specific sheet metadata
-            c.execute("""
-                SELECT filename, file_type, is_structured, unique_key
-                FROM user_files
-                WHERE file_id = ? AND user_id = ? AND unique_key = ?
-            """, (file_id, user_id, sheet_key))
-        else:
-            # Otherwise get the main file metadata
-            c.execute("""
-                SELECT filename, file_type, is_structured, unique_key
-                FROM user_files
-                WHERE file_id = ? AND user_id = ? AND sheet_table IS NULL
-            """, (file_id, user_id))
+        c.execute("""
+            SELECT filename, file_type, is_structured, unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
         
         file_metadata = c.fetchone()
+        
         if not file_metadata:
+            app.logger.error(f"File not found for user_id: {user_id}, file_id: {file_id}")
             return jsonify({'error': 'File not found'}), 404
 
         filename, file_type, is_structured, unique_key = file_metadata
+        app.logger.info(f"File metadata found: {filename}, {file_type}, {is_structured}, {unique_key}")
 
         if is_structured:
             # Get the table name from structured_file_storage
@@ -365,9 +298,11 @@ def get_file(user_id, file_id):
             result = c.fetchone()
             
             if not result:
+                app.logger.error(f"Structured data not found for unique_key: {unique_key}")
                 return jsonify({'error': 'Structured data not found'}), 404
             
             table_name = result[0]
+            app.logger.info(f"Found table name: {table_name}")
             
             # Get the table schema
             c.execute(f"PRAGMA table_info('{table_name}')")
@@ -385,12 +320,15 @@ def get_file(user_id, file_id):
                     row_dict[columns[i]] = value
                 data.append(row_dict)
             
-            return jsonify({
+            response_data = {
                 'type': 'structured',
                 'file_type': file_type,
                 'columns': columns,
                 'data': data
-            })
+            }
+            
+            app.logger.info(f"Returning structured data with {len(data)} rows")
+            return jsonify(response_data)
         else:
             # Handle unstructured data
             c.execute("""
@@ -400,29 +338,35 @@ def get_file(user_id, file_id):
             result = c.fetchone()
             
             if not result:
+                app.logger.error(f"Unstructured data not found for file_id: {file_id}")
                 return jsonify({'error': 'Unstructured data not found'}), 404
                 
             content = result[0]
             
+            # For text-based unstructured files, decode content
             if file_type in ['txt', 'csv', 'tsv']:
                 try:
                     decoded_content = content.decode('utf-8')
                 except UnicodeDecodeError:
                     decoded_content = content.decode('latin1')
                     
-                return jsonify({
+                response_data = {
                     'type': 'unstructured',
                     'file_type': file_type,
                     'content': decoded_content
-                })
+                }
             else:
+                # For binary files, return base64 encoded content
                 import base64
                 encoded_content = base64.b64encode(content).decode('utf-8')
-                return jsonify({
+                response_data = {
                     'type': 'unstructured',
                     'file_type': file_type,
                     'content': encoded_content
-                })
+                }
+            
+            app.logger.info(f"Returning unstructured data of type {file_type}")
+            return jsonify(response_data)
 
     except Exception as e:
         app.logger.error(f"Error retrieving file: {str(e)}")
