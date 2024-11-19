@@ -545,27 +545,27 @@ export default function ChatSection() {
                   selectedBackground === '#000000'
                     ? '#ffffff' // White text for dark backgrounds
                     : selectedBackground === '#ffffff'
-                    ? selectedColor // Use selectedColor for light backgrounds
-                    : '#000000', // Default to black text
+                      ? selectedColor // Use selectedColor for light backgrounds
+                      : '#000000', // Default to black text
               },
             }}
             config={{ responsive: true }} // Make the graph responsive to container size
           />
           <TooltipProvider>
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <Button
-        variant="outline"
-        size="icon"
-        style={{ marginTop: '4px' }} // Use inline style instead of `sx`
-        onClick={() => exportGraphAsJSON(plotData)}
-      >
-        <BookmarkCheckIcon size={16} />
-      </Button>
-    </TooltipTrigger>
-    <TooltipContent>Export Graph as JSON</TooltipContent>
-  </Tooltip>
-</TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  style={{ marginTop: '4px' }} // Use inline style instead of `sx`
+                  onClick={() => exportGraphAsJSON(plotData)}
+                >
+                  <BookmarkCheckIcon size={16} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Export Graph as JSON</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </Box>
       );
     }
@@ -698,14 +698,12 @@ export default function ChatSection() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className={`flex ${
-                message.sender === 'user' ? 'justify-end' : 'justify-start'
-              } mb-4`}
+              className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'
+                } mb-4`}
             >
               <div
-                className={`flex items-start gap-2 max-w-full sm:max-w-[80%] ${
-                  message.sender === 'user' ? 'flex-row-reverse' : ''
-                }`}
+                className={`flex items-start gap-2 max-w-full sm:max-w-[80%] ${message.sender === 'user' ? 'flex-row-reverse' : ''
+                  }`}
               >
                 <Avatar className="w-8 h-8 hidden sm:block">
                   <AvatarFallback>
@@ -713,11 +711,10 @@ export default function ChatSection() {
                   </AvatarFallback>
                 </Avatar>
                 <div
-                  className={`rounded-lg p-3 ${
-                    message.sender === 'user'
+                  className={`rounded-lg p-3 ${message.sender === 'user'
                       ? 'bg-primary text-primary-foreground shadow-lg'
                       : 'bg-muted shadow-sm'
-                  }`}
+                    }`}
                 >
                   {renderContent(message)}
                   <div className="flex justify-between items-center mt-2">
@@ -951,6 +948,14 @@ export default function ChatSection() {
                   ? setEditContent(e.target.value)
                   : setInputMessage(e.target.value)
               }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (!isLoading) {
+                    handleSendMessage();
+                  }
+                }
+              }}
               className="flex-1"
               disabled={isLoading}
             />
