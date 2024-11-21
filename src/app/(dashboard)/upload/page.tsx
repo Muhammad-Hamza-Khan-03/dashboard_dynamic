@@ -57,6 +57,22 @@ interface FileMetadata {
 }
 ///////
 type DataItem = FileData;
+interface PaginationInfo {
+  total_rows: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+interface FileResponse {
+  type: 'structured' | 'unstructured';
+  file_type: string;
+  columns?: string[];
+  data?: any[];
+  content?: string;
+  editable?: boolean;
+  pagination?: PaginationInfo;
+}
 
 const DataTablePage: React.FC = () => {
   const [data, setData] = useState<DataItem[]>([]);
@@ -76,7 +92,10 @@ const DataTablePage: React.FC = () => {
   const [tableKey, setTableKey] = useState(0);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [tableNames, setTableNames] = useState<string[]>([]);
- 
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [paginationInfo, setPaginationInfo] = useState<PaginationInfo | null>(null);
+  const [unstructuredContent, setUnstructuredContent] = useState<string>('');
+  const [isEditing, setIsEditing] = useState<boolean>(false);
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
       setSelectedFile({ file_id: fileList[0].file_id, filename: fileList[0].filename });
@@ -84,8 +103,8 @@ const DataTablePage: React.FC = () => {
   }, [isUserLoaded, user, fileList, selectedFile]);
 
   /////////////////////////////////////////////////////
-// Modified fetchFileData function in page.tsx
-const fetchFileData = useCallback(async (fileId: string, filename: string) => {
+// Modify the fetchFileData function
+const fetchFileData = useCallback(async (fileId: string, filename: string, page: number = 1) => {
   if (!user?.id) {
     console.error("User ID not available");
     setError("User ID not available");
@@ -96,13 +115,14 @@ const fetchFileData = useCallback(async (fileId: string, filename: string) => {
   setError(null);
   
   try {
-    console.log(`Fetching file: /get-file/${user.id}/${fileId}`); // Debug log
-    
-    const response = await axios.get(
+    const response = await axios.get<FileResponse>(
       `http://localhost:5000/get-file/${user.id}/${fileId}`,
       {
-        params: { table: selectedTable },
-        headers: { 'Accept': 'application/json' }
+        params: { 
+          table: selectedTable,
+          page: page,
+          page_size: 50
+        }
       }
     );
 
@@ -110,44 +130,25 @@ const fetchFileData = useCallback(async (fileId: string, filename: string) => {
       throw new Error('No data received from server');
     }
 
-    console.log('Response data:', response.data); // Debug log
-
     const responseData = response.data;
 
     if (responseData.type === 'structured') {
-      // Handle structured data
-      const parsedData = responseData.data.map((row: any) => {
-        const processedRow: { [key: string]: any } = {};
-        responseData.columns.forEach((column: string) => {
-          processedRow[column] = row[column];
-        });
-        return processedRow;
-      });
-
-      setData(parsedData);
-      if (parsedData.length > 0) {
-        setColumns(generateColumns(parsedData[0]));
+      // Handle structured data with pagination
+      setData(responseData.data || []);
+      setPaginationInfo(responseData.pagination || null);
+      
+      if (responseData.columns && responseData.data && responseData.data.length > 0) {
+        setColumns(generateColumns(responseData.data[0]));
       }
     } else {
       // Handle unstructured data
-      const fileExtension = filename.split('.').pop()?.toLowerCase();
-      let parsedData: FileData[] = [];
-
-      if (fileExtension === 'csv' || fileExtension === 'tsv') {
-        parsedData = parseCSVContent(responseData.content);
-      } else if (fileExtension === 'txt') {
-        parsedData = parseTextContent(responseData.content);
-      } else {
-        parsedData = [{
-          content: responseData.content,
-          type: responseData.file_type
-        }];
-      }
-
-      setData(parsedData);
-      if (parsedData.length > 0) {
-        setColumns(generateColumns(parsedData[0]));
-      }
+      setUnstructuredContent(responseData.content || '');
+      setIsEditing(responseData.editable || false);
+      
+      // Clear structured data states
+      setData([]);
+      setPaginationInfo(null);
+      setColumns([]);
     }
   } catch (err) {
     console.error("Error in fetchFileData:", err);
@@ -161,7 +162,6 @@ const fetchFileData = useCallback(async (fileId: string, filename: string) => {
     setLoading(false);
   }
 }, [user, selectedTable]);
-
 
 // Helper function to parse CSV content
 const parseCSVContent = (content: string): DataItem[] => {
@@ -320,13 +320,122 @@ useEffect(() => {
     }
     return String(value);
   };
+// Add save function for unstructured content
+const handleSaveUnstructured = async () => {
+  if (!user?.id || !selectedFile) {
+    toast({
+      title: "Error",
+      description: "User not authenticated or no file selected",
+      variant: "destructive",
+    });
+    return;
+  }setLoading(true);
+  try {
+    await axios.post(
+      `http://localhost:5000/save-unstructured/${user.id}/${selectedFile.file_id}`,
+      { content: unstructuredContent }
+    );
 
+    toast({
+      title: "Success",
+      description: "File content updated successfully",
+    });
+  } catch (error) {
+    console.error("Error saving unstructured content:", error);
+    toast({
+      title: "Error",
+      description: "Failed to save content. Please try again.",
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
+// Add this JSX for rendering unstructured content editor
+const renderUnstructuredContent = () => {
+  if (!isEditing) return null;
+
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>Edit Content</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <textarea
+          className="w-full h-96 p-4 border rounded-md"
+          value={unstructuredContent}
+          onChange={(e) => setUnstructuredContent(e.target.value)}
+        />
+        <div className="mt-4 flex justify-end">
+          <Button
+            onClick={handleSaveUnstructured}
+            disabled={loading}
+            className="bg-blue-500 text-white"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Changes'
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+// Add pagination component
+const renderPagination = () => {
+  if (!paginationInfo) return null;
+
+  return (
+    <div className="mt-4 flex items-center justify-between px-4">
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          onClick={() => handlePageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+        >
+          Previous
+        </Button>
+        <span className="text-sm">
+          Page {currentPage} of {paginationInfo.total_pages}
+        </span>
+        <Button
+          variant="outline"
+          onClick={() => handlePageChange(currentPage + 1)}
+          disabled={currentPage === paginationInfo.total_pages}
+        >
+          Next
+        </Button>
+      </div>
+      <div className="text-sm text-gray-500">
+        Total rows: {paginationInfo.total_rows}
+      </div>
+    </div>
+  );
+};
+  
+
+// Add pagination handling function
+const handlePageChange = (newPage: number) => {
+  setCurrentPage(newPage);
+  if (selectedFile) {
+    fetchFileData(selectedFile.file_id, selectedFile.filename, newPage);
+  }
+};
   const handleEdit = (index: number, field: string, value: string) => {
     setEditItem({ [field]: value });
     setEditIndex(index);
     setEditField(field);
     setIsSheetOpen(true);
   };
+
+
 
   const handleCreate = () => {
     const newItem: Partial<DataItem> = {};
@@ -602,25 +711,32 @@ useEffect(() => {
         </CardHeader>
 
         <CardContent className="p-4">
-          {loading ? (
-            <div className="flex justify-center items-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-            </div>
-          ) : error ? (
-            <p className="text-red-500">{error}</p>
-          ) : data.length > 0 ? (
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+          </div>
+        ) : error ? (
+          <p className="text-red-500">{error}</p>
+        ) : isEditing ? (
+          renderUnstructuredContent()
+        ) : data.length > 0 ? (
+          <>
             <DataTable
               key={tableKey}
               columns={columns}
               data={data}
               onRowSelectionChange={setSelectedRows}
               onReset={handleReset}
-              filterkey={""} 
+              filterkey=""
             />
-          ) : (
-            <p className="text-blue-500">No data available. Please select a file or upload a new one.</p>
-          )}
-        </CardContent>
+            {renderPagination()}
+          </>
+        ) : (
+          <p className="text-blue-500">
+            No data available. Please select a file or upload a new one.
+          </p>
+        )}
+      </CardContent>
       </Card>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>

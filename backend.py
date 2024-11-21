@@ -263,17 +263,16 @@ def list_files(user_id):
     finally:
         conn.close()
 #############################################
-
+# Modified get-file route in backend.py
 @app.route('/get-file/<user_id>/<file_id>', methods=['GET'])
 def get_file(user_id, file_id):
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 50, type=int)
     conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
 
     try:
-        # Debug logging
-        app.logger.info(f"Retrieving file for user_id: {user_id}, file_id: {file_id}")
-        
-        # First get the file metadata
+        # Get file metadata
         c.execute("""
             SELECT filename, file_type, is_structured, unique_key
             FROM user_files
@@ -281,13 +280,10 @@ def get_file(user_id, file_id):
         """, (file_id, user_id))
         
         file_metadata = c.fetchone()
-        
         if not file_metadata:
-            app.logger.error(f"File not found for user_id: {user_id}, file_id: {file_id}")
             return jsonify({'error': 'File not found'}), 404
 
         filename, file_type, is_structured, unique_key = file_metadata
-        app.logger.info(f"File metadata found: {filename}, {file_type}, {is_structured}, {unique_key}")
 
         if is_structured:
             # Get the table name from structured_file_storage
@@ -298,18 +294,27 @@ def get_file(user_id, file_id):
             result = c.fetchone()
             
             if not result:
-                app.logger.error(f"Structured data not found for unique_key: {unique_key}")
                 return jsonify({'error': 'Structured data not found'}), 404
             
             table_name = result[0]
-            app.logger.info(f"Found table name: {table_name}")
             
-            # Get the table schema
+            # Get total count of rows
+            c.execute(f"SELECT COUNT(*) FROM '{table_name}'")
+            total_rows = c.fetchone()[0]
+            
+            # Get columns
             c.execute(f"PRAGMA table_info('{table_name}')")
             columns = [col[1] for col in c.fetchall()]
             
-            # Fetch data with proper column names
-            c.execute(f"SELECT * FROM '{table_name}'")
+            # Calculate offset
+            offset = (page - 1) * page_size
+            
+            # Fetch paginated data
+            c.execute(f"""
+                SELECT * FROM '{table_name}'
+                LIMIT ? OFFSET ?
+            """, (page_size, offset))
+            
             rows = c.fetchall()
             
             # Convert to list of dictionaries with column names
@@ -324,10 +329,15 @@ def get_file(user_id, file_id):
                 'type': 'structured',
                 'file_type': file_type,
                 'columns': columns,
-                'data': data
+                'data': data,
+                'pagination': {
+                    'total_rows': total_rows,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': (total_rows + page_size - 1) // page_size
+                }
             }
             
-            app.logger.info(f"Returning structured data with {len(data)} rows")
             return jsonify(response_data)
         else:
             # Handle unstructured data
@@ -338,13 +348,12 @@ def get_file(user_id, file_id):
             result = c.fetchone()
             
             if not result:
-                app.logger.error(f"Unstructured data not found for file_id: {file_id}")
                 return jsonify({'error': 'Unstructured data not found'}), 404
                 
             content = result[0]
             
-            # For text-based unstructured files, decode content
-            if file_type in ['txt', 'csv', 'tsv']:
+            # For text-based unstructured files
+            if file_type in ['txt', 'docx', 'doc']:
                 try:
                     decoded_content = content.decode('utf-8')
                 except UnicodeDecodeError:
@@ -353,19 +362,20 @@ def get_file(user_id, file_id):
                 response_data = {
                     'type': 'unstructured',
                     'file_type': file_type,
-                    'content': decoded_content
+                    'content': decoded_content,
+                    'editable': True
                 }
-            else:
-                # For binary files, return base64 encoded content
+            elif file_type == 'pdf':
+                # For PDF files, return base64 encoded content
                 import base64
                 encoded_content = base64.b64encode(content).decode('utf-8')
                 response_data = {
                     'type': 'unstructured',
                     'file_type': file_type,
-                    'content': encoded_content
+                    'content': encoded_content,
+                    'editable': True
                 }
             
-            app.logger.info(f"Returning unstructured data of type {file_type}")
             return jsonify(response_data)
 
     except Exception as e:
@@ -374,7 +384,55 @@ def get_file(user_id, file_id):
     finally:
         conn.close()
 
-################################################        
+################################################      
+
+# Add a new route for saving unstructured content
+@app.route('/save-unstructured/<user_id>/<file_id>', methods=['POST'])
+def save_unstructured(user_id, file_id):
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+    
+    try:
+        # Verify file ownership and type
+        c.execute("""
+            SELECT file_type, unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ? AND is_structured = 0
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found or not unstructured'}), 404
+            
+        file_type, unique_key = result
+        
+        # Get the new content from request
+        new_content = request.json.get('content')
+        if not new_content:
+            return jsonify({'error': 'No content provided'}), 400
+            
+        # Convert string content to bytes
+        if isinstance(new_content, str):
+            content_bytes = new_content.encode('utf-8')
+        else:
+            content_bytes = new_content
+            
+        # Update the content in unstructured_file_storage
+        c.execute("""
+            UPDATE unstructured_file_storage
+            SET content = ?
+            WHERE file_id = ? AND unique_key = ?
+        """, (content_bytes, file_id, unique_key))
+        
+        conn.commit()
+        return jsonify({'message': 'Content updated successfully'}), 200
+        
+    except Exception as e:
+        app.logger.error(f"Error saving unstructured content: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
 @app.route('/get_table_count/<user_id>/<filename>', methods=['GET'])
 def get_table_count(user_id, filename):
     try:
