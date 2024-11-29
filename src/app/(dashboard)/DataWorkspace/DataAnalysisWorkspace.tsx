@@ -1,19 +1,20 @@
-"use client";
-
-import React, { useState, useEffect, useCallback } from 'react';
+"use client"
+import React, { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  LineChart, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, 
+  Line, Bar, AreaChart, Area, PieChart, Pie, ScatterChart, Scatter,
+  ComposedChart, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
+} from 'recharts';
+import { PlusCircle, Settings, Filter, Database, Cog, Maximize2 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
-import { useModalSheet } from '@/features/board/Chart-Modal/useChartModal-sheet';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { AlertCircle, Loader, Move } from 'lucide-react';
-import Draggable, { DraggableData, DraggableEvent } from 'react-draggable';
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
-import { motion } from 'framer-motion';
+import { ChartModal } from './chartmodal';
 
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
 
@@ -21,250 +22,334 @@ interface DataAnalysisWorkspaceProps {
   userId: string;
 }
 
-interface Column {
-  header: string;
-  accessor: string;
+interface FileItem {
+  file_id: string;
+  filename: string;
+  file_type: string;
+  is_structured: boolean;
+  unique_key: string;
 }
 
-interface SortConfig {
-  column: string;
-  direction: 'asc' | 'desc';
+interface ChartConfig {
+  id: number;
+  type: 'line' | 'bar' | 'area' | 'pie' | 'scatter' | 'composed' | 'radar';
+  data: Record<string, any>[];
+  columns: {
+    x: string;
+    y: string;
+  };
 }
 
-interface CalculatedColumn {
-  name: string;
-  formula: string;
-}
-
-interface ChartData {
+interface FileResponse {
   type: string;
-  data: any[];
+  data: Record<string, any>[];
   columns: string[];
 }
 
-interface DashboardChart extends ChartData {
-  id: string;
-  position: { x: number; y: number };
-  size: { width: number; height: number };
-}
-
-const DEFAULT_CHART_SIZE = { width: 400, height: 300 };
-
 const DataAnalysisWorkspace: React.FC<DataAnalysisWorkspaceProps> = ({ userId }) => {
-  const [data, setData] = useState<Record<string, string | number>[]>([]);
-  const [columns, setColumns] = useState<Column[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [loadingMessage, setLoadingMessage] = useState<string>('Initializing...');
-  const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>('');
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ column: '', direction: 'asc' });
-  const [calculatedColumn, setCalculatedColumn] = useState<CalculatedColumn>({ name: '', formula: '' });
-  const [showStats, setShowStats] = useState<boolean>(false);
-  const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
-  const [savedCharts, setSavedCharts] = useState<ChartData[]>([]);
-  const [showSavedChart, setShowSavedChart] = useState<ChartData | null>(null);
-  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [dashboardCharts, setDashboardCharts] = useState<DashboardChart[]>([]);
-
-  const { showModal, chartType, openModal, closeModal, setChartType } = useModalSheet();
+  const [fileData, setFileData] = useState<Record<string, any>[]>([]);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [selectedColumns, setSelectedColumns] = useState<{ x: string; y: string }>({ x: '', y: '' });
+  const [charts, setCharts] = useState<ChartConfig[]>([]);
+  const [showFileModal, setShowFileModal] = useState(false);
+  const [showChartModal, setShowChartModal] = useState(false);
+  const [filterValue, setFilterValue] = useState('');
+  const [usePlotly, setUsePlotly] = useState(false);
+  const [selectedChart, setSelectedChart] = useState<ChartConfig | null>(null);
+  const [chartType, setChartType] = useState<ChartConfig['type']>('line');
 
   useEffect(() => {
     fetchFiles();
-    loadChartsFromLocalStorage();
-  }, []);
-
-  const fetchFiles = useCallback(async () => {
-    setLoadingMessage('Fetching file list...');
-    setFetchError(null);
-    try {
-      const response = await axios.get(`http://localhost:5000/list_files/${userId}`);
-      if (response.data && response.data.files && Array.isArray(response.data.files)) {
-        setUploadedFiles(response.data.files);
-      } else {
-        setFetchError('Unexpected response format from server');
-      }
-    } catch (err) {
-      setFetchError('Failed to fetch file list. Please try again.');
-    } finally {
-      setLoading(false);
-      setLoadingMessage('');
-    }
   }, [userId]);
 
-  const loadChartsFromLocalStorage = () => {
-    const storedCharts = localStorage.getItem('savedCharts');
-    if (storedCharts) {
-      setSavedCharts(JSON.parse(storedCharts));
+  const renderPlotlyChart = (chart: ChartConfig): JSX.Element => {
+    let plotlyType = 'scatter';
+    let mode = 'lines+markers';
+
+    switch (chart.type) {
+      case 'bar':
+        plotlyType = 'bar';
+        break;
+      case 'area':
+        plotlyType = 'scatter';
+        mode = 'lines';
+        break;
+      case 'pie':
+        plotlyType = 'pie';
+        break;
+      case 'scatter':
+        plotlyType = 'scatter';
+        mode = 'markers';
+        break;
+      case 'radar':
+        plotlyType = 'scatterpolar';
+        mode = 'lines+markers';
+        break;
     }
-    const storedDashboardCharts = localStorage.getItem('dashboardCharts');
-    if (storedDashboardCharts) {
-      setDashboardCharts(JSON.parse(storedDashboardCharts));
-    }
-  };
 
-  const addChartToDashboard = (chart: ChartData) => {
-    const newDashboardChart: DashboardChart = {
-      ...chart,
-      id: Date.now().toString(),
-      position: { x: 0, y: 0 },
-      size: DEFAULT_CHART_SIZE
-    };
-    const updatedDashboard = [...dashboardCharts, newDashboardChart];
-    setDashboardCharts(updatedDashboard);
-    localStorage.setItem('dashboardCharts', JSON.stringify(updatedDashboard));
-  };
+    const data = [{
+      x: chart.data.map(item => item[chart.columns.x]),
+      y: chart.data.map(item => item[chart.columns.y]),
+      type: plotlyType,
+      mode: mode,
+      marker: { color: '#8884d8' },
+      fill: chart.type === 'area' ? 'tozeroy' : undefined
+    } as Partial<Plotly.PlotData>];
 
-  const onDragStop = useCallback((e: DraggableEvent, data: DraggableData, chartId: string) => {
-    const updatedCharts = dashboardCharts.map(chart =>
-      chart.id === chartId ? { ...chart, position: { x: data.x, y: data.y } } : chart
-    );
-    setDashboardCharts(updatedCharts);
-    localStorage.setItem('dashboardCharts', JSON.stringify(updatedCharts));
-  }, [dashboardCharts]);
-
-  const onResize = useCallback((chartId: string, newSize: { width: number; height: number }) => {
-    const updatedCharts = dashboardCharts.map(chart =>
-      chart.id === chartId ? { ...chart, size: newSize } : chart
-    );
-    setDashboardCharts(updatedCharts);
-    localStorage.setItem('dashboardCharts', JSON.stringify(updatedCharts));
-  }, [dashboardCharts]);
-
-  const renderChart = (chart: DashboardChart) => {
     const layout = {
-      autosize: true,
       title: `${chart.type.charAt(0).toUpperCase() + chart.type.slice(1)} Chart`,
-      margin: { l: 40, r: 10, t: 40, b: 30 },
+      xaxis: { title: chart.columns.x },
+      yaxis: { title: chart.columns.y },
+      autosize: true,
+      margin: { l: 50, r: 50, t: 50, b: 50 }
     };
+
+    return (
+      <Plot
+        data={data}
+        layout={layout}
+        useResizeHandler={true}
+        style={{ width: '100%', height: '400px' }}
+      />
+    );
+  };
+
+  const renderRechartsChart = (chart: ChartConfig): JSX.Element => {
+    const commonProps = {
+      width: 600,
+      height: 400,
+      data: filterData(chart.data),
+      margin: { top: 20, right: 30, left: 20, bottom: 5 }
+    };
+
     switch (chart.type) {
       case 'line':
         return (
-          <Plot
-            data={[
-              {
-                x: chart.data.map(item => item[chart.columns[0]]),
-                y: chart.data.map(item => item[chart.columns[1]]),
-                type: 'scatter',
-                mode: 'lines+markers',
-                marker: { color: 'blue' },
-              },
-            ]}
-            layout={layout}
-            useResizeHandler={true}
-            style={{ width: '100%', height: '100%' }}
-          />
+          <LineChart {...commonProps}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey={chart.columns.x} />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Line type="monotone" dataKey={chart.columns.y} stroke="#8884d8" />
+          </LineChart>
         );
       case 'bar':
         return (
-          <Plot
-            data={[
-              {
-                x: chart.data.map(item => item[chart.columns[0]]),
-                y: chart.data.map(item => item[chart.columns[1]]),
-                type: 'bar',
-              },
-            ]}
-            layout={layout}
-            useResizeHandler={true}
-            style={{ width: '100%', height: '100%' }}
-          />
+          <BarChart {...commonProps}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey={chart.columns.x} />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey={chart.columns.y} fill="#8884d8" />
+          </BarChart>
+        );
+      case 'area':
+        return (
+          <AreaChart {...commonProps}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey={chart.columns.x} />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Area type="monotone" dataKey={chart.columns.y} fill="#8884d8" stroke="#8884d8" />
+          </AreaChart>
         );
       case 'pie':
         return (
-          <Plot
-            data={[
-              {
-                values: chart.data.map(item => item[chart.columns[1]]),
-                labels: chart.data.map(item => item[chart.columns[0]]),
-                type: 'pie',
-              },
-            ]}
-            layout={layout}
-            useResizeHandler={true}
-            style={{ width: '100%', height: '100%' }}
-          />
+          <PieChart width={600} height={400}>
+            <Pie
+              data={filterData(chart.data)}
+              dataKey={chart.columns.y}
+              nameKey={chart.columns.x}
+              cx="50%"
+              cy="50%"
+              fill="#8884d8"
+            />
+            <Tooltip />
+            <Legend />
+          </PieChart>
+        );
+      case 'scatter':
+        return (
+          <ScatterChart {...commonProps}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey={chart.columns.x} />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Scatter name={chart.columns.y} data={filterData(chart.data)} fill="#8884d8" />
+          </ScatterChart>
+        );
+      case 'composed':
+        return (
+          <ComposedChart {...commonProps}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey={chart.columns.x} />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey={chart.columns.y} fill="#8884d8" />
+            <Line type="monotone" dataKey={chart.columns.y} stroke="#82ca9d" />
+          </ComposedChart>
+        );
+      case 'radar':
+        return (
+          <RadarChart {...commonProps} cx="50%" cy="50%" outerRadius="80%">
+            <PolarGrid />
+            <PolarAngleAxis dataKey={chart.columns.x} />
+            <PolarRadiusAxis />
+            <Radar dataKey={chart.columns.y} stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
+          </RadarChart>
         );
       default:
         return <div>Unsupported chart type</div>;
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <Loader className="animate-spin h-10 w-10 mb-4" />
-        <p>{loadingMessage || 'Loading...'}</p>
-      </div>
-    );
-  }
+  const fetchFiles = async (): Promise<void> => {
+    try {
+      const response = await axios.get<{ files: FileItem[] }>(`http://localhost:5000/list_files/${userId}`);
+      setFiles(response.data.files);
+    } catch (error) {
+      console.error('Error fetching files:', error);
+    }
+  };
 
-  if (error || fetchError) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen text-red-500">
-        <AlertCircle className="h-10 w-10 mb-4" />
-        <p>Error: {error || fetchError}</p>
-        <Button className="mt-4" onClick={fetchFiles}>Retry</Button>
-      </div>
-    );
-  }
+  const handleFileSelect = async (fileId: string): Promise<void> => {
+    try {
+      const response = await axios.get<FileResponse>(`http://localhost:5000/get-file/${userId}/${fileId}`);
+      if (response.data.type === 'structured') {
+        setFileData(response.data.data);
+        setColumns(response.data.columns);
+        setSelectedFile(fileId);
+      }
+    } catch (error) {
+      console.error('Error loading file:', error);
+    }
+  };
 
-  return (
-    <div className="flex h-screen bg-white">
-      <div className="w-64 bg-gray-100 p-4 border-r overflow-y-auto">
-        <h2 className="text-2xl font-bold mb-4">Saved Charts</h2>
-        {savedCharts.map((chart, index) => (
-          <Card key={index} className="mb-4 hover:shadow-lg transition-shadow duration-200">
-            <CardHeader className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">{chart.type} Chart</h3>
-              <Button size="sm" onClick={() => addChartToDashboard(chart)}>
-                Add to Dashboard
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600">Columns: {chart.columns.join(', ')}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      <div className="flex-grow p-6 overflow-hidden relative">
-        {dashboardCharts.map((chart) => (
-          <Draggable
-            key={chart.id}
-            defaultPosition={chart.position}
-            onStop={(e, data) => onDragStop(e, data, chart.id)}
-            bounds="parent"
+  const createChart = (): void => {
+    if (!selectedColumns.x || !selectedColumns.y) return;
+
+    const newChart: ChartConfig = {
+      id: Date.now(),
+      type: chartType,
+      data: fileData,
+      columns: selectedColumns,
+    };
+
+    setCharts([...charts, newChart]);
+    setShowChartModal(false);
+  };
+
+  const filterData = (data: Record<string, any>[]): Record<string, any>[] => {
+    if (!filterValue) return data;
+    return data.filter(row => 
+      Object.values(row).some(value => 
+        String(value).toLowerCase().includes(filterValue.toLowerCase())
+      )
+    );
+  };
+
+  const renderChart = (chart: ChartConfig): JSX.Element => {
+    return (
+      <Card className="p-4 m-4" key={chart.id}>
+        <div className="flex justify-between mb-2">
+          <h3 className="text-lg font-semibold">
+            {chart.type.charAt(0).toUpperCase() + chart.type.slice(1)} Chart
+          </h3>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => {
+              setSelectedChart(chart);
+              setShowChartModal(true);
+            }}
           >
-            <ResizablePanelGroup
-              direction="horizontal"
-              onLayout={(sizes) => {
-                const newWidth = (sizes[0] * (chart.size?.width || DEFAULT_CHART_SIZE.width)) / 100;
-                onResize(chart.id, {
-                  width: newWidth || DEFAULT_CHART_SIZE.width,
-                  height: chart.size?.height || DEFAULT_CHART_SIZE.height
-                });
-              }}
-            >
-              <ResizablePanel defaultSize={100}>
-                <ResizablePanelGroup direction="vertical">
-                  <ResizablePanel defaultSize={100}>
-                    <div className="bg-white rounded-lg shadow-md p-4 cursor-move">
-                      <div className="flex justify-between items-center mb-2">
-                        <h3 className="text-lg font-semibold">{chart.type} Chart</h3>
-                        <Move size={20} />
-                      </div>
-                      {renderChart(chart)}
-                    </div>
-                  </ResizablePanel>
-                  <ResizableHandle />
-                </ResizablePanelGroup>
-              </ResizablePanel>
-              <ResizableHandle />
-            </ResizablePanelGroup>
-          </Draggable>
-        ))}
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+        </div>
+        {usePlotly ? renderPlotlyChart(chart) : renderRechartsChart(chart)}
+      </Card>
+    );
+  };
+  return (
+    <div className="flex h-screen bg-gray-50">
+      <div className="w-20 bg-white shadow-md flex flex-col items-center py-8 space-y-8">
+        <Dialog open={showFileModal} onOpenChange={setShowFileModal}>
+          <DialogTrigger asChild>
+            <div className="cursor-pointer">
+              <Database className="w-6 h-6 text-gray-500 hover:text-teal-500" />
+              <span className="text-xs mt-1">Data</span>
+            </div>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Select Data File</DialogTitle>
+            </DialogHeader>
+            <Select onValueChange={handleFileSelect}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a file" />
+              </SelectTrigger>
+              <SelectContent>
+                {files.map(file => (
+                  <SelectItem key={file.file_id} value={file.file_id}>
+                    {file.filename}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </DialogContent>
+        </Dialog>
+
+        <div className="cursor-pointer" onClick={() => setShowChartModal(true)}>
+          <PlusCircle className="w-6 h-6 text-gray-500 hover:text-teal-500" />
+          <span className="text-xs mt-1">Chart</span>
+        </div>
+
+        <div className="cursor-pointer">
+          <Filter className="w-6 h-6 text-gray-500 hover:text-teal-500" />
+          <span className="text-xs mt-1">Filter</span>
+        </div>
       </div>
+
+      <div className="flex-1 p-6">
+        <Input 
+          placeholder="Filter data..." 
+          value={filterValue}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterValue(e.target.value)}
+          className="mb-4"
+        />
+        <div className="flex items-center space-x-2 mb-4">
+          <span className="text-sm">Use Plotly</span>
+          <Switch
+            checked={usePlotly}
+            onCheckedChange={setUsePlotly}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          {charts.map(renderChart)}
+        </div>
+      </div>
+
+      <ChartModal 
+        open={showChartModal}
+        onOpenChange={setShowChartModal}
+        selectedChart={selectedChart}
+        chartType={chartType}
+        setChartType={setChartType}
+        columns={columns}
+        selectedColumns={selectedColumns}
+        setSelectedColumns={setSelectedColumns}
+        createChart={createChart}
+        usePlotly={usePlotly}
+        renderPlotlyChart={renderPlotlyChart}
+        renderRechartsChart={renderRechartsChart}
+      />
     </div>
   );
 };

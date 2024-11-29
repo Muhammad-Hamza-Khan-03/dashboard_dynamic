@@ -1,3 +1,5 @@
+#backend.py
+
 import tempfile
 import traceback
 from flask import Flask, Response, request, send_file, jsonify
@@ -75,6 +77,24 @@ def init_db():
 
 init_db()
 
+# Add this to the top of your backend.py file
+
+def debug_sql(query, params=None):
+    """Debug helper for SQL queries"""
+    app.logger.debug(f"SQL Query: {query}")
+    if params:
+        app.logger.debug(f"Parameters: {params}")
+        
+# Add this after creating the cursor in each route
+def get_table_info(cursor, table_name):
+    """Debug helper for table information"""
+    try:
+        cursor.execute(f'PRAGMA table_info("{table_name}")')
+        columns = cursor.fetchall()
+        app.logger.debug(f"Table {table_name} columns: {columns}")
+    except Exception as e:
+        app.logger.error(f"Error getting table info: {str(e)}")
+        
 @app.route('/upload/<user_id>', methods=['POST'])
 def upload_file(user_id):
     app.logger.info(f"Received upload request for user: {user_id}")
@@ -232,6 +252,222 @@ def upload_file(user_id):
         app.logger.error(f"Error during file upload: {str(e)}")
         return f'Error during file upload: {str(e)}', 500
 
+    finally:
+        conn.close()
+
+# Updated backend endpoints with proper SQL quoting
+
+@app.route('/update-row/<user_id>/<file_id>', methods=['POST'])
+def update_row(user_id, file_id):
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+    
+    try:
+        # Get file metadata
+        c.execute("""
+            SELECT f.is_structured, f.unique_key, s.table_name
+            FROM user_files f
+            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
+            WHERE f.file_id = ? AND f.user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        is_structured, unique_key, table_name = result
+        if not table_name:
+            return jsonify({'error': 'Table name not found'}), 404
+            
+        data = request.json
+        
+        if is_structured:
+            edit_item = data.get('editItem', {})
+            # Remove any empty or null values
+            edit_item = {k: v for k, v in edit_item.items() if v is not None and v != ''}
+            
+            if edit_item:
+                # Properly quote column names
+                quoted_table = f'"{table_name}"'
+                
+                if data.get('editIndex') is not None:  # Update existing row
+                    # Get the ROWID using the offset
+                    row_query = f'SELECT ROWID FROM {quoted_table} LIMIT 1 OFFSET ?'
+                    c.execute(row_query, (data['editIndex'],))
+                    row_result = c.fetchone()
+                    
+                    if row_result:
+                        row_id = row_result[0]
+                        # Quote all column names in the SET clause
+                        set_clause = ', '.join([f'"{k}" = ?' for k in edit_item.keys()])
+                        values = list(edit_item.values())
+                        
+                        update_query = f'''
+                            UPDATE {quoted_table} 
+                            SET {set_clause} 
+                            WHERE ROWID = ?
+                        '''
+                        c.execute(update_query, values + [row_id])
+                        
+                        # Fetch updated row
+                        c.execute(f'SELECT * FROM {quoted_table} WHERE ROWID = ?', [row_id])
+                        
+                else:  # Create new row
+                    # Quote column names in INSERT
+                    columns = [f'"{k}"' for k in edit_item.keys()]
+                    values = list(edit_item.values())
+                    placeholders = ','.join(['?' for _ in values])
+                    
+                    insert_query = f'''
+                        INSERT INTO {quoted_table} ({','.join(columns)})
+                        VALUES ({placeholders})
+                    '''
+                    c.execute(insert_query, values)
+                    
+                    # Fetch the new row
+                    c.execute(f'SELECT * FROM {quoted_table} WHERE ROWID = last_insert_rowid()')
+                
+                columns = [description[0] for description in c.description]
+                row = c.fetchone()
+                if row:
+                    updated_row = dict(zip(columns, row))
+                    conn.commit()
+                    return jsonify({
+                        'success': True,
+                        'data': updated_row
+                    })
+                else:
+                    raise Exception("Failed to retrieve updated row")
+            else:
+                return jsonify({'error': 'No valid data provided for update'}), 400
+            
+        else:  # Unstructured data handling remains the same
+            c.execute("""
+                SELECT content 
+                FROM unstructured_file_storage 
+                WHERE file_id = ? AND unique_key = ?
+            """, (file_id, unique_key))
+            
+            result = c.fetchone()
+            if not result:
+                return jsonify({'error': 'Content not found'}), 404
+                
+            content = result[0]
+            try:
+                content_str = content.decode('utf-8') if isinstance(content, bytes) else content
+                lines = content_str.split('\n')
+            except Exception as e:
+                app.logger.error(f"Error decoding content: {str(e)}")
+                lines = []
+            
+            edit_index = data.get('editIndex')
+            edit_item = data.get('editItem', {})
+            new_content = edit_item.get('content', '')
+            
+            if edit_index is not None and 0 <= edit_index < len(lines):
+                lines[edit_index] = new_content
+            else:
+                lines.append(new_content)
+                
+            final_content = '\n'.join(lines)
+            
+            c.execute("""
+                UPDATE unstructured_file_storage 
+                SET content = ? 
+                WHERE file_id = ? AND unique_key = ?
+            """, (final_content, file_id, unique_key))
+            
+            conn.commit()
+            return jsonify({
+                'success': True,
+                'data': {'content': new_content}
+            })
+            
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Error in row operation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/delete-rows/<user_id>/<file_id>', methods=['POST'])
+def delete_rows(user_id, file_id):
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+    
+    try:
+        # Get file metadata
+        c.execute("""
+            SELECT f.is_structured, f.unique_key, s.table_name
+            FROM user_files f
+            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
+            WHERE f.file_id = ? AND f.user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        is_structured, unique_key, table_name = result
+        if not table_name and is_structured:
+            return jsonify({'error': 'Table name not found'}), 404
+            
+        indices = request.json.get('indices', [])
+        
+        if not indices:
+            return jsonify({'error': 'No indices provided for deletion'}), 400
+        
+        if is_structured:
+            # Properly quote table name
+            quoted_table = f'"{table_name}"'
+            
+            # Delete rows one by one using ROWID
+            for index in indices:
+                # First get the ROWID for the index
+                c.execute(f'SELECT ROWID FROM {quoted_table} LIMIT 1 OFFSET ?', (index,))
+                row_result = c.fetchone()
+                if row_result:
+                    row_id = row_result[0]
+                    c.execute(f'DELETE FROM {quoted_table} WHERE ROWID = ?', (row_id,))
+            
+        else:
+            # Handle unstructured data
+            c.execute("""
+                SELECT content 
+                FROM unstructured_file_storage 
+                WHERE file_id = ? AND unique_key = ?
+            """, (file_id, unique_key))
+            
+            result = c.fetchone()
+            if not result:
+                return jsonify({'error': 'Content not found'}), 404
+                
+            content = result[0]
+            try:
+                content_str = content.decode('utf-8') if isinstance(content, bytes) else content
+                lines = content_str.split('\n')
+                
+                # Create new content without deleted lines
+                new_lines = [line for i, line in enumerate(lines) if i not in indices]
+                new_content = '\n'.join(new_lines)
+                
+                c.execute("""
+                    UPDATE unstructured_file_storage 
+                    SET content = ? 
+                    WHERE file_id = ? AND unique_key = ?
+                """, (new_content, file_id, unique_key))
+                
+            except Exception as e:
+                app.logger.error(f"Error processing content: {str(e)}")
+                return jsonify({'error': 'Error processing content'}), 500
+        
+        conn.commit()
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Error deleting rows: {str(e)}")
+        return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
 

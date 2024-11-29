@@ -1,3 +1,5 @@
+//page.tsx
+
 "use client"
 import React, { useState, useEffect, useCallback } from "react";
 import dynamic from 'next/dynamic';
@@ -73,7 +75,10 @@ interface FileResponse {
   editable?: boolean;
   pagination?: PaginationInfo;
 }
-
+interface RowOperation {
+  type: 'create' | 'update' | 'delete';
+  data: any;
+}
 const DataTablePage: React.FC = () => {
   const [data, setData] = useState<DataItem[]>([]);
   const [columns, setColumns] = useState<ColumnDef<DataItem, any>[]>([]);
@@ -284,32 +289,33 @@ useEffect(() => {
     });
   };
 
-  const generateColumns = (firstRow: FileData): ColumnDef<DataItem, any>[] => {
-    if (!firstRow) {
-      console.error("Empty or undefined data row");
-      return [];
-    }
+// Update the generateColumns function to include the cell update functionality
+const generateColumns = (firstRow: FileData): ColumnDef<DataItem, any>[] => {
+  if (!firstRow) {
+    console.error("Empty or undefined data row");
+    return [];
+  }
 
-    return Object.keys(firstRow).map((key) => ({
-      accessorKey: key,
-      header: key,
-      cell: ({ row }) => {
-        const value = row.getValue(key);
-        return (
-          <div className="flex items-center justify-between">
-            <span>{formatCellValue(value)}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleEdit(row.index, key, formatCellValue(value))}
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-          </div>
-        );
-      },
-    }));
-  };
+  return Object.keys(firstRow).map((key) => ({
+    accessorKey: key,
+    header: key,
+    cell: ({ row }) => {
+      const value = row.getValue(key);
+      return (
+        <div className="flex items-center justify-between">
+          <span>{formatCellValue(value)}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleEdit(row.index, key, formatCellValue(value))}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+        </div>
+      );
+    },
+  }));
+};
 
   const formatCellValue = (value: any): string => {
     if (value === null || value === undefined) {
@@ -428,61 +434,99 @@ const handlePageChange = (newPage: number) => {
     fetchFileData(selectedFile.file_id, selectedFile.filename, newPage);
   }
 };
-  const handleEdit = (index: number, field: string, value: string) => {
-    setEditItem({ [field]: value });
-    setEditIndex(index);
-    setEditField(field);
-    setIsSheetOpen(true);
-  };
+// Update these functions in your page.tsx
+
+const handleEdit = (index: number, field: string, value: any) => {
+  console.log("Editing row:", { index, field, value });
+  if (!data[index]) return;
+  
+  const currentRow = data[index];
+  console.log("Current row data:", currentRow);
+  
+  setEditItem(currentRow);  // Set the entire row data
+  setEditIndex(index);
+  setEditField(field);
+  setIsSheetOpen(true);
+};
+
+
+const handleCreate = () => {
+  const newItem: Partial<DataItem> = {};
+  columns.forEach(column => {
+    if ('accessorKey' in column) {
+      newItem[column.accessorKey as string] = "";
+    }
+  });
+  setEditItem(newItem);
+  setEditIndex(null);
+  setEditField(null);
+  setIsSheetOpen(true);
+};
 
 
 
-  const handleCreate = () => {
-    const newItem: Partial<DataItem> = {};
-    columns.forEach(column => {
-      if ('accessorKey' in column) {
-        newItem[column.accessorKey as string] = "";
-      }
+// Update handleSaveItem function
+// Update the handleSaveItem function
+const handleSaveItem = async () => {
+  if (!editItem || !user || !selectedFile) {
+    toast({
+      title: "Error",
+      description: "Missing required data for save operation",
+      variant: "destructive",
     });
-    setEditItem(newItem);
-    setEditIndex(null);
-    setEditField(null);
-    setIsSheetOpen(true);
-  };
+    return;
+  }
 
-  const handleSaveItem = async () => {
-    if (editItem) {
-      let updatedData = [...data];
-      if (editIndex !== null && editField) {
+  setLoading(true);
+  try {
+    console.log("Saving item:", {
+      editItem,
+      editIndex,
+      editField
+    });
+
+    const response = await axios.post(
+      `http://localhost:5000/update-row/${user.id}/${selectedFile.file_id}`,
+      {
+        editItem,
+        editIndex: editIndex
+      }
+    );
+
+    console.log("Save response:", response.data);
+
+    if (response.data.success) {
+      const updatedData = [...data];
+      if (editIndex !== null && editIndex < updatedData.length) {
         // Update existing item
-        updatedData[editIndex] = { ...updatedData[editIndex], [editField]: editItem[editField] };
+        updatedData[editIndex] = response.data.data;
       } else {
         // Add new item
-        updatedData.push(editItem as DataItem);
+        updatedData.push(response.data.data);
       }
+      setData(updatedData);
 
-      try {
-        await saveDataToBlob(updatedData);
-        setData(updatedData);
-        toast({
-          title: "Success",
-          description: "Item saved successfully",
-        });
-      } catch (error) {
-        console.error("Failed to save item:", error);
-        toast({
-          title: "Error",
-          description: "Failed to save item. Please try again.",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Success",
+        description: editIndex !== null ? "Item updated successfully" : "Item created successfully",
+      });
     }
+  } catch (error:any) {
+    console.error("Failed to save item:", error);
+    const errorMessage = error.response?.data?.error || "Failed to save item. Please try again.";
+    toast({
+      title: "Error",
+      description: errorMessage,
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
     setIsSheetOpen(false);
     setEditItem(null);
     setEditIndex(null);
     setEditField(null);
-  };
-
+  }
+};
   const saveDataToBlob = async (dataToSave: DataItem[]) => {
     if (!user || !selectedFile) {
       throw new Error("User not authenticated or no file selected");
@@ -504,12 +548,102 @@ const handlePageChange = (newPage: number) => {
     }
   };
 
-  const handleDelete = () => {
-    const selectedIndices = selectedRows.map(row => row.index);
-    setData(prevData => prevData.filter((_, index) => !selectedIndices.includes(index)));
-    setSelectedRows([]);
+  // const handleDelete = () => {
+  //   const selectedIndices = selectedRows.map(row => row.index);
+  //   setData(prevData => prevData.filter((_, index) => !selectedIndices.includes(index)));
+  //   setSelectedRows([]);
+  // };
+// Update handleDelete function
+
+const handleDelete = async () => {
+  if (!user || !selectedFile || !selectedRows.length) {
+    toast({
+      title: "Error",
+      description: "No rows selected for deletion",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  setLoading(true);
+  try {
+    // Get the indices of selected rows
+    const indices = selectedRows.map(row => row.index);
+    
+    const response = await axios.post(
+      `http://localhost:5000/delete-rows/${user.id}/${selectedFile.file_id}`,
+      { indices }
+    );
+
+    if (response.data.success) {
+      // Remove the deleted rows from the local data
+      const selectedIndices = new Set(indices);
+      setData(prevData => prevData.filter((_, index) => !selectedIndices.has(index)));
+      setSelectedRows([]);
+
+      toast({
+        title: "Success",
+        description: `Successfully deleted ${indices.length} row(s)`,
+      });
+    }
+  } catch (error:any) {
+    console.error("Failed to delete rows:", error);
+    const errorMessage = error.response?.data?.error || "Failed to delete rows. Please try again.";
+    toast({
+      title: "Error",
+      description: errorMessage,
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
+// Add this utility function to help with data validation
+const isValidData = (data: any): boolean => {
+  if (!data || typeof data !== 'object') return false;
+  // Add any additional validation as needed
+  return true;
+};
+
+// Add this function to handle cell updates
+const handleCellUpdate = async (rowIndex: number, field: string, value: any) => {
+  if (!user || !selectedFile) return;
+
+  const currentRow = data[rowIndex];
+  const updatedData = {
+    ...currentRow,
+    [field]: value,
+    row_id: rowIndex + 1
   };
 
+  try {
+    const response = await axios.put(
+      `http://localhost:5000/row/${user.id}/${selectedFile.file_id}`,
+      updatedData
+    );
+
+    if (response.data) {
+      setData(prevData => 
+        prevData.map((item, index) => 
+          index === rowIndex ? response.data.data : item
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: "Cell updated successfully",
+      });
+    }
+  } catch (error) {
+    console.error("Failed to update cell:", error);
+    toast({
+      title: "Error",
+      description: "Failed to update cell. Please try again.",
+      variant: "destructive",
+    });
+  }
+};
   const handleSave = async () => {
     if (!user || !selectedFile) {
       toast({
@@ -581,6 +715,32 @@ const handlePageChange = (newPage: number) => {
       </div>
     );
   }
+  const renderEditForm = () => (
+    <div className="grid gap-4 py-4">
+      {editItem && (
+        Object.entries(editItem)
+          .filter(([key]) => key !== 'id' && key !== 'rowId') // Exclude any internal fields
+          .map(([key, value]) => (
+            <div key={key} className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor={key} className="text-right">
+                {key}
+              </Label>
+              <Input
+                id={key}
+                value={value as string}
+                onChange={(e) => {
+                  setEditItem(prev => ({
+                    ...prev!,
+                    [key]: e.target.value
+                  }));
+                }}
+                className="col-span-3"
+              />
+            </div>
+          ))
+      )}
+    </div>
+  );
 
   return (
     <div className="max-w-screen-2xl mx-auto w-full pb-10 min-h-screen p-6">
@@ -740,51 +900,42 @@ const handlePageChange = (newPage: number) => {
       </Card>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>{editIndex !== null ? "Edit Item" : "Create New Item"}</SheetTitle>
-            <SheetDescription>
-              {editIndex !== null
-                ? "Edit the value for this field."
-                : "Fill in the values for the new item."}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="grid gap-4 py-4">
-            {editItem &&
-              (editField ? (
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor={editField} className="text-right">
-                    {editField}
-                  </Label>
-                  <Input
-                    id={editField}
-                    value={editItem[editField] as string}
-                    onChange={(e) => setEditItem({ ...editItem, [editField]: e.target.value })}
-                    className="col-span-3"
-                  />
-                </div>
-              ) : (
-                Object.entries(editItem).map(([key, value]) => (
-                  <div key={key} className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor={key} className="text-right">
-                      {key}
-                    </Label>
-                    <Input
-                      id={key}
-                      value={value as string}
-                      onChange={(e) => setEditItem({ ...editItem, [key]: e.target.value })}
-                      className="col-span-3"
-                    />
-                  </div>
-                ))
-              ))}
-          </div>
-          <div className="mt-4 flex justify-end space-x-2">
-            <Button onClick={() => setIsSheetOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveItem}>Save changes</Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+  <SheetContent className="sm:max-w-[425px]">
+    <SheetHeader>
+      <SheetTitle>
+        {editIndex !== null ? "Edit Item" : "Create New Item"}
+      </SheetTitle>
+      <SheetDescription>
+        {editIndex !== null
+          ? "Make changes to the item below."
+          : "Fill in the details for the new item."}
+      </SheetDescription>
+    </SheetHeader>
+    {renderEditForm()}
+    <div className="mt-4 flex justify-end space-x-2">
+      <Button
+        variant="outline"
+        onClick={() => setIsSheetOpen(false)}
+        disabled={loading}
+      >
+        Cancel
+      </Button>
+      <Button
+        onClick={handleSaveItem}
+        disabled={loading}
+      >
+        {loading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Saving...
+          </>
+        ) : (
+          'Save changes'
+        )}
+      </Button>
+    </div>
+  </SheetContent>
+</Sheet>
     </div>
   );
 };
