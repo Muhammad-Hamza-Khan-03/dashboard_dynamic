@@ -11,11 +11,12 @@ import {
   Line, Bar, AreaChart, Area, PieChart, Pie, ScatterChart, Scatter,
   ComposedChart, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { PlusCircle, Settings, Filter, Database, Cog, Maximize2 } from 'lucide-react';
+import { PlusCircle, Settings, Filter, Database } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
 import { ChartModal } from './chartmodal';
-
+import { DashboardGrid } from './Dashboard-grid';
+import { v4 as uuidv4 } from 'uuid';
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
 
 interface DataAnalysisWorkspaceProps {
@@ -40,6 +41,12 @@ interface ChartConfig {
   };
 }
 
+interface Dashboard {
+  id: string;
+  name: string;
+  charts: ChartConfig[];
+}
+
 interface FileResponse {
   type: string;
   data: Record<string, any>[];
@@ -47,18 +54,22 @@ interface FileResponse {
 }
 
 const DataAnalysisWorkspace: React.FC<DataAnalysisWorkspaceProps> = ({ userId }) => {
+
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileData, setFileData] = useState<Record<string, any>[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
   const [selectedColumns, setSelectedColumns] = useState<{ x: string; y: string }>({ x: '', y: '' });
-  const [charts, setCharts] = useState<ChartConfig[]>([]);
   const [showFileModal, setShowFileModal] = useState(false);
   const [showChartModal, setShowChartModal] = useState(false);
   const [filterValue, setFilterValue] = useState('');
   const [usePlotly, setUsePlotly] = useState(false);
   const [selectedChart, setSelectedChart] = useState<ChartConfig | null>(null);
   const [chartType, setChartType] = useState<ChartConfig['type']>('line');
+  const [dashboards, setDashboards] = useState<Dashboard[]>([
+    { id: 'default', name: 'Main Dashboard', charts: [] }
+  ]);
+  const [currentDashboard, setCurrentDashboard] = useState('default');
 
   useEffect(() => {
     fetchFiles();
@@ -111,7 +122,7 @@ const DataAnalysisWorkspace: React.FC<DataAnalysisWorkspaceProps> = ({ userId })
         data={data}
         layout={layout}
         useResizeHandler={true}
-        style={{ width: '100%', height: '400px' }}
+        style={{ width: '100%', height: '100%' }}
       />
     );
   };
@@ -210,7 +221,7 @@ const DataAnalysisWorkspace: React.FC<DataAnalysisWorkspaceProps> = ({ userId })
     }
   };
 
-  const fetchFiles = async (): Promise<void> => {
+  const fetchFiles = async () => {
     try {
       const response = await axios.get<{ files: FileItem[] }>(`http://localhost:5000/list_files/${userId}`);
       setFiles(response.data.files);
@@ -219,7 +230,7 @@ const DataAnalysisWorkspace: React.FC<DataAnalysisWorkspaceProps> = ({ userId })
     }
   };
 
-  const handleFileSelect = async (fileId: string): Promise<void> => {
+  const handleFileSelect = async (fileId: string) => {
     try {
       const response = await axios.get<FileResponse>(`http://localhost:5000/get-file/${userId}/${fileId}`);
       if (response.data.type === 'structured') {
@@ -232,7 +243,23 @@ const DataAnalysisWorkspace: React.FC<DataAnalysisWorkspaceProps> = ({ userId })
     }
   };
 
-  const createChart = (): void => {
+  const handleAddDashboard = (name: string) => {
+    const newDashboard: Dashboard = {
+      id: uuidv4(),
+      name,
+      charts: []
+    };
+    setDashboards([...dashboards, newDashboard]);
+  };
+
+  const handleCreateChart = (dashboardId: string) => {
+    setSelectedChart(null);
+    setShowChartModal(true);
+    setChartType('line');
+    setSelectedColumns({ x: '', y: '' });
+  };
+
+  const createChart = () => {
     if (!selectedColumns.x || !selectedColumns.y) return;
 
     const newChart: ChartConfig = {
@@ -242,7 +269,16 @@ const DataAnalysisWorkspace: React.FC<DataAnalysisWorkspaceProps> = ({ userId })
       columns: selectedColumns,
     };
 
-    setCharts([...charts, newChart]);
+    setDashboards(dashboards.map(dashboard => {
+      if (dashboard.id === currentDashboard) {
+        return {
+          ...dashboard,
+          charts: [...dashboard.charts, newChart]
+        };
+      }
+      return dashboard;
+    }));
+
     setShowChartModal(false);
   };
 
@@ -255,28 +291,11 @@ const DataAnalysisWorkspace: React.FC<DataAnalysisWorkspaceProps> = ({ userId })
     );
   };
 
-  const renderChart = (chart: ChartConfig): JSX.Element => {
-    return (
-      <Card className="p-4 m-4" key={chart.id}>
-        <div className="flex justify-between mb-2">
-          <h3 className="text-lg font-semibold">
-            {chart.type.charAt(0).toUpperCase() + chart.type.slice(1)} Chart
-          </h3>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => {
-              setSelectedChart(chart);
-              setShowChartModal(true);
-            }}
-          >
-            <Maximize2 className="h-4 w-4" />
-          </Button>
-        </div>
-        {usePlotly ? renderPlotlyChart(chart) : renderRechartsChart(chart)}
-      </Card>
-    );
+  const handleShowChartModal = (chart: ChartConfig) => {
+    setSelectedChart(chart);
+    setShowChartModal(true);
   };
+
   return (
     <div className="flex h-screen bg-gray-50">
       <div className="w-20 bg-white shadow-md flex flex-col items-center py-8 space-y-8">
@@ -306,50 +325,54 @@ const DataAnalysisWorkspace: React.FC<DataAnalysisWorkspaceProps> = ({ userId })
           </DialogContent>
         </Dialog>
 
-        <div className="cursor-pointer" onClick={() => setShowChartModal(true)}>
-          <PlusCircle className="w-6 h-6 text-gray-500 hover:text-teal-500" />
-          <span className="text-xs mt-1">Chart</span>
-        </div>
-
         <div className="cursor-pointer">
           <Filter className="w-6 h-6 text-gray-500 hover:text-teal-500" />
           <span className="text-xs mt-1">Filter</span>
         </div>
       </div>
 
-      <div className="flex-1 p-6">
-        <Input 
-          placeholder="Filter data..." 
-          value={filterValue}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterValue(e.target.value)}
-          className="mb-4"
-        />
-        <div className="flex items-center space-x-2 mb-4">
-          <span className="text-sm">Use Plotly</span>
-          <Switch
-            checked={usePlotly}
-            onCheckedChange={setUsePlotly}
+      <div className="flex-1">
+        <div className="p-4">
+          <Input 
+            placeholder="Filter data..." 
+            value={filterValue}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterValue(e.target.value)}
+            className="mb-4"
           />
+          <div className="flex items-center space-x-2 mb-4">
+            <span className="text-sm">Use Plotly</span>
+            <Switch
+              checked={usePlotly}
+              onCheckedChange={setUsePlotly}
+            />
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          {charts.map(renderChart)}
-        </div>
-      </div>
 
-      <ChartModal 
-        open={showChartModal}
-        onOpenChange={setShowChartModal}
-        selectedChart={selectedChart}
-        chartType={chartType}
-        setChartType={setChartType}
-        columns={columns}
-        selectedColumns={selectedColumns}
-        setSelectedColumns={setSelectedColumns}
-        createChart={createChart}
-        usePlotly={usePlotly}
-        renderPlotlyChart={renderPlotlyChart}
-        renderRechartsChart={renderRechartsChart}
-      />
+        <DashboardGrid
+          dashboards={dashboards}
+          currentDashboard={currentDashboard}
+          setCurrentDashboard={setCurrentDashboard}
+          onCreateChart={handleCreateChart}
+          onAddDashboard={handleAddDashboard}
+          onShowChartModal={handleShowChartModal}
+          renderChart={usePlotly ? renderPlotlyChart : renderRechartsChart}
+        />
+
+        <ChartModal 
+          open={showChartModal}
+          onOpenChange={setShowChartModal}
+          selectedChart={selectedChart}
+          chartType={chartType}
+          setChartType={setChartType}
+          columns={columns}
+          selectedColumns={selectedColumns}
+          setSelectedColumns={setSelectedColumns}
+          createChart={createChart}
+          usePlotly={usePlotly}
+          renderPlotlyChart={renderPlotlyChart}
+          renderRechartsChart={renderRechartsChart}
+        />
+      </div>
     </div>
   );
 };
