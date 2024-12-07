@@ -1,32 +1,27 @@
-"use client"
 import React, { useState, useEffect } from 'react';
 import Modal from "./S-Modal";
 import { BarChart as BarChartIcon, LineChart as LineChartIcon, PieChart as PieChartIcon } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-    LineChart,
-    Line,
-    BarChart,
-    Bar,
-    PieChart,
-    Pie,
-    Cell,
-    CartesianGrid,
-    XAxis,
-    YAxis,
-    Tooltip,
-    ResponsiveContainer,
-} from 'recharts';
 
-interface DataItem {
-    [key: string]: string | number;
+interface ChartData {
+    type: string;
+    columns: string[];
+    fileId: string;
+    data: any[];
+}
+
+interface ChartResult {
+    id: string;
+    title: string;
+    type: string;
+    graphUrl: string;
 }
 
 interface Column {
-    accessorKey: string;
     header: string;
+    accessorKey: string;
     isNumeric: boolean;
 }
 
@@ -35,6 +30,8 @@ interface S_ChartModalProps {
     columns: Column[];
     selectedColumns: string[];
     setSelectedColumns: React.Dispatch<React.SetStateAction<string[]>>;
+    fileId: string;
+    onExport: (chartData: ChartData) => Promise<ChartResult>;
 }
 
 export const chartTypes = [
@@ -43,14 +40,20 @@ export const chartTypes = [
     { type: 'pie', icon: PieChartIcon, label: 'Pie Chart' },
 ];
 
-const S_ChartModal: React.FC<S_ChartModalProps> = ({ data, columns, selectedColumns, setSelectedColumns }) => {
+
+const S_ChartModal: React.FC<S_ChartModalProps> = ({
+    data,
+    columns,
+    selectedColumns,
+    setSelectedColumns,
+    fileId,
+    onExport
+}) => {
     const [showModal, setShowModal] = useState(false);
     const [chartType, setChartType] = useState("line");
-    const [error, setError] = useState<string | null>(null);
     const [localSelectedColumns, setLocalSelectedColumns] = useState<string[]>([]);
 
     useEffect(() => {
-        // Initialize local state with the first column (usually the x-axis)
         if (columns.length > 0 && localSelectedColumns.length === 0) {
             setLocalSelectedColumns([columns[0].accessorKey]);
         }
@@ -59,7 +62,6 @@ const S_ChartModal: React.FC<S_ChartModalProps> = ({ data, columns, selectedColu
     const openModalHandler = () => setShowModal(true);
     const closeModalHandler = () => {
         setShowModal(false);
-        // Update the parent component's state when closing the modal
         setSelectedColumns(localSelectedColumns);
     };
 
@@ -73,51 +75,24 @@ const S_ChartModal: React.FC<S_ChartModalProps> = ({ data, columns, selectedColu
         );
     };
 
-    const renderChart = () => {
-        const ChartComponent = chartType === 'line' ? LineChart : chartType === 'bar' ? BarChart : PieChart;
-
-        return (
-            <ResponsiveContainer width="100%" height={400}>
-                <ChartComponent data={data}>
-                    {chartType !== 'pie' && (
-                        <>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey={localSelectedColumns[0]} />
-                            <YAxis />
-                            <Tooltip />
-                        </>
-                    )}
-                    {localSelectedColumns.slice(1).map((column, index) => {
-                        if (chartType === 'line') {
-                            return <Line key={column} type="monotone" dataKey={column} stroke={`hsl(${index * 60}, 70%, 50%)`} />;
-                        } else if (chartType === 'bar') {
-                            return <Bar key={column} dataKey={column} fill={`hsl(${index * 60}, 70%, 50%)`} />;
-                        } else {
-                            return (
-                                <Pie key={column} data={data} dataKey={column} nameKey={localSelectedColumns[0]} cx="50%" cy="50%" outerRadius={80} label>
-                                    {data.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={`hsl(${index * 30}, 70%, 50%)`} />
-                                    ))}
-                                </Pie>
-                            );
-                        }
-                    })}
-                </ChartComponent>
-            </ResponsiveContainer>
-        );
+    const handleExport = async () => {
+        try {
+            const chartData: ChartData = {
+                type: chartType,
+                columns: localSelectedColumns,
+                fileId: fileId,
+                data: data
+            };
+            await onExport(chartData);
+            closeModalHandler();
+        } catch (error) {
+            console.error('Error exporting chart:', error);
+        }
     };
-
-    if (error) {
-        return <div>Error fetching data: {error}</div>;
-    }
-
     return (
         <div>
             <Button onClick={openModalHandler}>Side Chart</Button>
-            <Modal
-                isOpen={showModal}
-                onDismiss={closeModalHandler}
-            >
+            <Modal isOpen={showModal} onDismiss={closeModalHandler}>
                 <div className="grid grid-cols-3 gap-4 mb-6">
                     {chartTypes.map(({ type, icon: Icon, label }) => (
                         <Card
@@ -147,10 +122,18 @@ const S_ChartModal: React.FC<S_ChartModalProps> = ({ data, columns, selectedColu
                         </div>
                     ))}
                 </div>
-                {renderChart()}
+                <div className="flex justify-end space-x-2">
+                    <Button variant="outline" onClick={closeModalHandler}>Cancel</Button>
+                    <Button 
+                        onClick={handleExport}
+                        disabled={localSelectedColumns.length < 2}
+                    >
+                        Export Chart
+                    </Button>
+                </div>
             </Modal>
         </div>
     );
-}
+};
 
 export default S_ChartModal;

@@ -14,6 +14,8 @@ import xml.etree.ElementTree as ET
 import PyPDF2
 from werkzeug.utils import secure_filename
 import uuid
+import plotly.express as px
+import plotly.graph_objects as go
 
 app = Flask(__name__)
 CORS(app)
@@ -72,6 +74,11 @@ def init_db():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     ''')
+    c.execute('''CREATE TABLE IF NOT EXISTS graph_cache (
+        graph_id TEXT PRIMARY KEY,
+        html_content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
     conn.commit()
     conn.close()
 
@@ -819,6 +826,142 @@ def update_blob(user_id, filename):
     except Exception as e:
         app.logger.error(f"Error updating blob content: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/generate-graph/<user_id>/<file_id>', methods=['POST'])
+def generate_graph(user_id, file_id):
+    try:
+        app.logger.debug(f"Received request: user_id={user_id}, file_id={file_id}")
+        data = request.json
+        app.logger.debug(f"Request data: {data}")
+
+        # Convert file_id to string if needed
+        file_id = str(file_id)
+        
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get file metadata
+        c.execute("""
+            SELECT f.is_structured, f.unique_key, s.table_name
+            FROM user_files f
+            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
+            WHERE f.file_id = ? AND f.user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        app.logger.debug(f"Query result: {result}")
+        
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        is_structured, unique_key, table_name = result
+        
+        if not is_structured or not table_name:
+            return jsonify({'error': 'Invalid file type'}), 400
+            
+        # Get data from the table
+        query = f'SELECT * FROM "{table_name}"'
+        app.logger.debug(f"SQL Query: {query}")
+        df = pd.read_sql_query(query, conn)
+        app.logger.debug(f"DataFrame shape: {df.shape}")
+        
+        chart_type = data.get('chartType')
+        selected_columns = data.get('selectedColumns', [])
+        app.logger.debug(f"Chart type: {chart_type}, Selected columns: {selected_columns}")
+        
+        # Create figure based on chart type
+        try:
+            if chart_type == 'line':
+                fig = px.line(df, x=selected_columns[0], y=selected_columns[1:])
+            elif chart_type == 'bar':
+                fig = px.bar(df, x=selected_columns[0], y=selected_columns[1:])
+            elif chart_type == 'pie':
+                fig = px.pie(df, values=selected_columns[1], names=selected_columns[0])
+            elif chart_type == 'scatter':
+                fig = px.scatter(df, x=selected_columns[0], y=selected_columns[1])
+            elif chart_type == 'box':
+                fig = px.box(df, y=selected_columns[1:])
+            else:
+                return jsonify({'error': f'Unsupported chart type: {chart_type}'}), 400
+        except Exception as e:
+            app.logger.error(f"Error creating plot: {str(e)}")
+            return jsonify({'error': f'Error creating plot: {str(e)}'}), 500
+
+        # Update layout for better appearance
+        fig.update_layout(
+            template='plotly_white',
+            margin=dict(l=40, r=40, t=40, b=40),
+            height=400
+        )
+        
+        # Generate HTML
+        html = fig.to_html(full_html=False, include_plotlyjs='cdn')
+        
+        # Save to temporary file or database
+        graph_id = str(uuid.uuid4())
+        c.execute("""
+            INSERT INTO graph_cache (graph_id, html_content, created_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        """, (graph_id, html))
+        
+        conn.commit()
+        return jsonify({
+            'graph_id': graph_id,
+            'url': f'/graph/{graph_id}'
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error generating graph: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+@app.route('/graph/<graph_id>', methods=['GET'])
+def serve_graph(graph_id):
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        c.execute("""
+            SELECT html_content
+            FROM graph_cache
+            WHERE graph_id = ?
+        """, (graph_id,))
+        
+        result = c.fetchone()
+        if not result:
+            return 'Graph not found', 404
+            
+        html_content = result[0]
+        
+        # Create a full HTML page with necessary styling
+        full_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{ margin: 0; padding: 0; overflow: hidden; }}
+                #graph {{ width: 100%; height: 100vh; }}
+            </style>
+        </head>
+        <body>
+            <div id="graph">
+                {html_content}
+            </div>
+        </body>
+        </html>
+        """
+        
+        return Response(full_html, mimetype='text/html')
+        
+    except Exception as e:
+        app.logger.error(f"Error serving graph: {str(e)}")
+        return str(e), 500
+    finally:
+        conn.close()
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
