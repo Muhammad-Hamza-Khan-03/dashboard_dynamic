@@ -712,26 +712,44 @@ def delete_file(user_id, file_id):
     conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
     try:
-        # Verify file ownership
+        # Verify file ownership and get metadata
         c.execute("""
-            SELECT is_structured, unique_key FROM user_files
-            WHERE file_id = ? AND user_id = ?
+            SELECT f.is_structured, f.unique_key, f.file_type, f.sheet_table, s.table_name
+            FROM user_files f
+            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
+            WHERE f.file_id = ? AND f.user_id = ?
         """, (file_id, user_id))
+        
         result = c.fetchone()
         if not result:
-            return 'File not found or access denied', 404
-        is_structured, unique_key = result
+            return jsonify({'error': 'File not found or access denied'}), 404
+            
+        is_structured, unique_key, file_type, sheet_table, table_name = result
         
         if is_structured:
-            # Delete from structured_file_storage and drop the table
-            c.execute("""
-                SELECT table_name FROM structured_file_storage
-                WHERE unique_key = ?
-            """, (unique_key,))
-            table_result = c.fetchone()
-            if table_result:
-                table_name = table_result[0]
-                c.execute(f"DROP TABLE IF EXISTS '{table_name}'")
+            if file_type in ['xlsx', 'xls'] and sheet_table:
+                # For Excel files with multiple sheets
+                c.execute("""
+                    SELECT table_name FROM structured_file_storage
+                    WHERE file_id = ?
+                """, (file_id,))
+                sheets = c.fetchall()
+                
+                # Drop all sheet tables
+                for sheet in sheets:
+                    sheet_table_name = sheet[0]
+                    c.execute(f"DROP TABLE IF EXISTS '{sheet_table_name}'")
+                
+                # Delete all sheet records
+                c.execute("""
+                    DELETE FROM structured_file_storage
+                    WHERE file_id = ?
+                """, (file_id,))
+                
+            else:
+                # For other structured files
+                if table_name:
+                    c.execute(f"DROP TABLE IF EXISTS '{table_name}'")
                 c.execute("""
                     DELETE FROM structured_file_storage
                     WHERE unique_key = ?
@@ -740,20 +758,76 @@ def delete_file(user_id, file_id):
             # Delete from unstructured_file_storage
             c.execute("""
                 DELETE FROM unstructured_file_storage
-                WHERE file_id = ?
-            """, (file_id,))
+                WHERE file_id = ? AND unique_key = ?
+            """, (file_id, unique_key))
         
-        # Delete from user_files
-        c.execute("""
-            DELETE FROM user_files
-            WHERE file_id = ?
-        """, (file_id,))
+        # Finally, delete from user_files
+        c.execute("DELETE FROM user_files WHERE file_id = ?", (file_id,))
         
         conn.commit()
-        return 'File deleted successfully', 200
+        return jsonify({'success': True, 'message': 'File deleted successfully'}), 200
+        
     except Exception as e:
+        conn.rollback()
         app.logger.error(f"Error deleting file: {str(e)}")
-        return f'Error deleting file: {str(e)}', 500
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+    
+@app.route('/split-column/<user_id>/<file_id>', methods=['POST'])
+def split_column(user_id, file_id):
+    try:
+        data = request.json
+        column_name = data.get('column')
+        delimiter = data.get('delimiter')
+        new_column_prefix = data.get('newColumnPrefix', 'split')
+        
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get table info
+        c.execute("""
+            SELECT f.unique_key, s.table_name
+            FROM user_files f
+            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
+            WHERE f.file_id = ? AND f.user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        unique_key, table_name = result
+        
+        # Read data into pandas
+        df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+        
+        # Perform split operation efficiently
+        split_df = df[column_name].str.split(delimiter, expand=True)
+        
+        # Name new columns
+        num_cols = len(split_df.columns)
+        new_columns = [f"{new_column_prefix}_{i+1}" for i in range(num_cols)]
+        split_df.columns = new_columns
+        
+        # Add new columns to original dataframe
+        for col in new_columns:
+            df[col] = split_df[col]
+        
+        # Update database
+        df.to_sql(table_name, conn, if_exists='replace', index=False)
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'newColumns': new_columns,
+            'data': df.to_dict('records')
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error in split_column: {str(e)}")
+        return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
 

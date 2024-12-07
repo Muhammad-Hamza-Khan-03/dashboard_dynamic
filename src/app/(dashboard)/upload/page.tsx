@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import FileUpload from "./fileupload";
 import FileDelete from "@/features/sqlite/components/file-delete";
+import { SplitDialog } from "./split-dialog";
 
 const DataTable = dynamic<DataTableProps<FileData>>(() =>
   import('@/components/data-table').then((mod) => mod.DataTable), {
@@ -765,7 +766,7 @@ const handleCellUpdate = async (rowIndex: number, field: string, value: any) => 
               }
             />
             <FileDelete
-              fileList={fileList?.map(file => file.filename) || []}
+              fileList={fileList || []}
               onDeleteSuccess={handleDeleteSuccess}
             />
           </div>
@@ -831,6 +832,21 @@ const handleCellUpdate = async (rowIndex: number, field: string, value: any) => 
               <PlusCircle className="mr-2 h-4 w-4" />
               Create New
             </Button>
+            {columns.length > 0 && (
+      <SplitDialog
+        columns={columns.map(col => (col.accessorKey as string))}
+        fileId={selectedFile?.file_id || ''}
+        userId={user.id}
+        onSplitComplete={(newData) => {
+          setData(newData);
+          setColumns(generateColumns(newData[0]));
+          toast({
+            title: "Success",
+            description: "Column split successfully",
+          });
+        }}
+      />
+    )}
             {selectedRows.length > 0 && (
               <Button
                 variant="destructive"
@@ -856,6 +872,7 @@ const handleCellUpdate = async (rowIndex: number, field: string, value: any) => 
               <RefreshCw className="mr-2 h-4 w-4" />
               Reset All
             </Button>
+            
             <Sheet open={isAnalysisDrawerOpen} onOpenChange={setIsAnalysisDrawerOpen}>
               <SheetTrigger asChild>
                 <Button className="bg-purple-500 text-white hover:bg-purple-600">
