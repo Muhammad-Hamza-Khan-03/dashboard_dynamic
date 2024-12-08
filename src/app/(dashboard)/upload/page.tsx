@@ -32,6 +32,7 @@ import {
 import FileUpload from "./fileupload";
 import FileDelete from "@/features/sqlite/components/file-delete";
 import { SplitDialog } from "./split-dialog";
+import AnalysisModal from "./data-analysis-modal-component";
 
 const DataTable = dynamic<DataTableProps<FileData>>(() =>
   import('@/components/data-table').then((mod) => mod.DataTable), {
@@ -101,6 +102,7 @@ const DataTablePage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [paginationInfo, setPaginationInfo] = useState<PaginationInfo | null>(null);
   const [unstructuredContent, setUnstructuredContent] = useState<string>('');
+  const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
@@ -873,17 +875,23 @@ const handleCellUpdate = async (rowIndex: number, field: string, value: any) => 
               Reset All
             </Button>
             
-            <Sheet open={isAnalysisDrawerOpen} onOpenChange={setIsAnalysisDrawerOpen}>
-              <SheetTrigger asChild>
-                <Button className="bg-purple-500 text-white hover:bg-purple-600">
+            {/* <Sheet open={isAnalysisDrawerOpen} onOpenChange={setIsAnalysisDrawerOpen}> */}
+              {/* <SheetTrigger asChild> */}
+              <Button className="bg-purple-500 text-white hover:bg-purple-600" onClick={() => setIsAnalysisModalOpen(true)}>
                   <BarChart className="mr-2 h-4 w-4" />
                   Analyze Data
                 </Button>
-              </SheetTrigger>
-              <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
+              {/* </SheetTrigger> */}
+              {/* <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto"> */}
                 {/* Analysis content */}
-              </SheetContent>
-            </Sheet>
+              {/* </SheetContent> */}
+            {/* </Sheet> */}
+            <AnalysisModal 
+  fileId={selectedFile?.file_id || ''}
+  userId={user?.id || ''}
+  isOpen={isAnalysisModalOpen}
+  onClose={() => setIsAnalysisModalOpen(false)}
+/>
           </div>
         </CardHeader>
 

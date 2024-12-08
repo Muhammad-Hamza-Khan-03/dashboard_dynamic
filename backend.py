@@ -831,7 +831,292 @@ def split_column(user_id, file_id):
     finally:
         conn.close()
 
+# Add these imports at the top
+from scipy import stats
+import numpy as np
+from typing import Dict, List, Any
+import plotly.express as px
+import plotly.graph_objects as go
+import json
 
+def calculate_basic_stats(df: pd.DataFrame) -> Dict[str, Any]:
+    """Calculate basic statistics for the dataset."""
+    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+    
+    return {
+        'describe': df.describe().to_dict(),
+        'missing_values': df.isnull().sum().to_dict(),
+        'unique_counts': df.nunique().to_dict(),
+        'numeric_summaries': {
+            col: {
+                'mean': df[col].mean(),
+                'median': df[col].median(),
+                'std': df[col].std(),
+                'quartiles': df[col].quantile([0.25, 0.75]).to_dict()
+            } for col in numeric_cols
+        }
+    }
+
+def calculate_advanced_stats(df: pd.DataFrame) -> Dict[str, Any]:
+    """Calculate advanced statistics for the dataset."""
+    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+    categorical_cols = df.select_dtypes(include=['object']).columns
+    
+    # Correlation matrix with p-values
+    def correlation_with_pvalue(x: pd.Series, y: pd.Series):
+        return stats.pearsonr(x.dropna(), y.dropna())
+    
+    correlation_matrix = {}
+    for col1 in numeric_cols:
+        correlation_matrix[col1] = {}
+        for col2 in numeric_cols:
+            if col1 != col2:
+                corr, p_value = correlation_with_pvalue(df[col1], df[col2])
+                correlation_matrix[col1][col2] = {'correlation': corr, 'p_value': p_value}
+    
+    # Calculate statistical tests and distributions
+    distribution_tests = {}
+    for col in numeric_cols:
+        clean_data = df[col].dropna()
+        distribution_tests[col] = {
+            'normality': {
+                'shapiro': stats.shapiro(clean_data[:5000]),  # Limit sample size for performance
+                'skewness': stats.skew(clean_data),
+                'kurtosis': stats.kurtosis(clean_data)
+            },
+            'outliers': identify_outliers(clean_data)
+        }
+    
+    # Categorical analysis
+    categorical_analysis = {}
+    for col in categorical_cols:
+        value_counts = df[col].value_counts()
+        categorical_analysis[col] = {
+            'frequencies': value_counts.to_dict(),
+            'proportions': (value_counts / len(df)).to_dict(),
+            'chi_square': calculate_chi_square(df, col) if len(value_counts) < 50 else None
+        }
+    
+    return {
+        'correlation_matrix': correlation_matrix,
+        'distribution_tests': distribution_tests,
+        'categorical_analysis': categorical_analysis,
+        'summary_statistics': df.describe(include='all').to_dict()
+    }
+
+def identify_outliers(series: pd.Series) -> Dict[str, Any]:
+    """Identify outliers using IQR method."""
+    Q1 = series.quantile(0.25)
+    Q3 = series.quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    outliers = series[(series < lower_bound) | (series > upper_bound)]
+    
+    return {
+        'count': len(outliers),
+        'percentage': (len(outliers) / len(series)) * 100,
+        'bounds': {'lower': lower_bound, 'upper': upper_bound},
+        'outlier_values': outliers.head(10).to_dict()  # Return first 10 outliers
+    }
+
+def calculate_chi_square(df: pd.DataFrame, column: str) -> Dict[str, Any]:
+    """Perform chi-square test of independence."""
+    observed = df[column].value_counts()
+    n = len(df)
+    expected = pd.Series([n/len(observed)] * len(observed), index=observed.index)
+    chi_square_stat, p_value = stats.chisquare(observed, expected)
+    
+    return {
+        'statistic': chi_square_stat,
+        'p_value': p_value,
+        'dof': len(observed) - 1
+    }
+
+def generate_visualizations(df: pd.DataFrame) -> Dict[str, Any]:
+    """Generate various visualizations for the dataset."""
+    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+    categorical_cols = df.select_dtypes(include=['object']).columns
+    
+    visualizations = {}
+    
+    # Distribution plots for numeric columns
+    for col in numeric_cols[:5]:  # Limit to first 5 columns
+        fig = px.histogram(df, x=col, marginal="box")
+        visualizations[f'{col}_distribution'] = fig.to_json()
+    
+    # Correlation heatmap
+    correlation = df[numeric_cols].corr()
+    fig = go.Figure(data=go.Heatmap(
+        z=correlation.values,
+        x=correlation.columns,
+        y=correlation.columns
+    ))
+    visualizations['correlation_heatmap'] = fig.to_json()
+    
+    # Bar plots for categorical columns
+    for col in categorical_cols[:5]:
+        fig = px.bar(df[col].value_counts().head(10))
+        visualizations[f'{col}_distribution'] = fig.to_json()
+    
+    return visualizations
+
+# @app.route('/analyze/<user_id>/<file_id>', methods=['POST'])
+# def analyze_data(user_id: str, file_id: str):
+#     """Main analysis endpoint supporting different types of analysis."""
+#     try:
+#         data = request.json
+#         analysis_type = data.get('analysis_type')
+#         options = data.get('options', [])
+
+#         # Database connection and data retrieval
+#         conn = sqlite3.connect('user_files.db')
+#         cursor = conn.cursor()
+
+#         # Get file metadata and table name
+#         cursor.execute("""
+#             SELECT f.unique_key, s.table_name
+#             FROM user_files f
+#             LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
+#             WHERE f.file_id = ? AND f.user_id = ?
+#         """, (file_id, user_id))
+        
+#         result = cursor.fetchone()
+#         if not result:
+#             return jsonify({'error': 'File not found'}), 404
+
+#         _, table_name = result
+
+#         # Read data in chunks if it's a large dataset
+#         chunk_size = 100000  # Adjust based on memory constraints
+#         chunks = []
+#         for chunk in pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn, chunksize=chunk_size):
+#             chunks.append(chunk)
+#         df = pd.concat(chunks)
+
+#         response = {}
+        
+#         if analysis_type == 'basic' or 'basic' in options:
+#             response['basic'] = calculate_basic_stats(df)
+            
+#         if analysis_type == 'advanced' or 'advanced' in options:
+#             response['advanced'] = calculate_advanced_stats(df)
+            
+#         if analysis_type == 'custom':
+#             # Process each requested option
+#             for option in options:
+#                 if option in ['correlation', 'distributions', 'outliers']:
+#                     response[option] = calculate_advanced_stats(df).get(option)
+#                 elif option == 'visualizations':
+#                     response['visualizations'] = generate_visualizations(df)
+        
+#         # Add metadata about the analysis
+#         response['metadata'] = {
+#             'rows': len(df),
+#             'columns': len(df.columns),
+#             'memory_usage': df.memory_usage(deep=True).sum(),
+#             'timestamp': pd.Timestamp.now().isoformat()
+#         }
+
+#         return jsonify(response)
+
+#     except Exception as e:
+#         app.logger.error(f"Error in analysis: {str(e)}")
+#         return jsonify({'error': str(e)}), 500
+#     finally:
+#         if 'conn' in locals():
+#             conn.close()
+
+# Add these helper functions at the top of your backend.py
+def convert_numpy_types(obj):
+    """Convert numpy types to Python native types for JSON serialization."""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, pd.Series):
+        return convert_numpy_types(obj.to_dict())
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    else:
+        return obj
+
+def prepare_response_data(data):
+    """Prepare data for JSON response by converting numpy types."""
+    return convert_numpy_types(data)
+
+@app.route('/analyze/<user_id>/<file_id>', methods=['POST'])
+def analyze_data(user_id: str, file_id: str):
+    """Main analysis endpoint supporting different types of analysis."""
+    try:
+        data = request.json
+        analysis_type = data.get('analysis_type')
+        options = data.get('options', [])
+
+        conn = sqlite3.connect('user_files.db')
+        cursor = conn.cursor()
+
+        # Get file metadata and table name
+        cursor.execute("""
+            SELECT f.unique_key, s.table_name
+            FROM user_files f
+            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
+            WHERE f.file_id = ? AND f.user_id = ?
+        """, (file_id, user_id))
+        
+        result = cursor.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+
+        _, table_name = result
+
+        # Read data in chunks if it's a large dataset
+        chunk_size = 100000  # Adjust based on memory constraints
+        chunks = []
+        for chunk in pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn, chunksize=chunk_size):
+            chunks.append(chunk)
+        df = pd.concat(chunks)
+
+        response = {}
+        
+        if analysis_type == 'basic' or 'basic' in options:
+            response['basic'] = prepare_response_data(calculate_basic_stats(df))
+            
+        if analysis_type == 'advanced' or 'advanced' in options:
+            response['advanced'] = prepare_response_data(calculate_advanced_stats(df))
+            
+        if analysis_type == 'custom':
+            custom_response = {}
+            for option in options:
+                if option in ['correlation', 'distributions', 'outliers']:
+                    stats = calculate_advanced_stats(df)
+                    custom_response[option] = stats.get(option)
+                elif option == 'visualizations':
+                    custom_response['visualizations'] = generate_visualizations(df)
+            response = prepare_response_data(custom_response)
+        
+        # Add metadata about the analysis
+        response['metadata'] = prepare_response_data({
+            'rows': len(df),
+            'columns': len(df.columns),
+            'memory_usage': int(df.memory_usage(deep=True).sum()),
+            'timestamp': pd.Timestamp.now().isoformat()
+        })
+
+        return jsonify(response)
+
+    except Exception as e:
+        app.logger.error(f"Error in analysis: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+            
 @app.route('/update_blob/<user_id>/<filename>', methods=['POST'])
 def update_blob(user_id, filename):
     app.logger.info(f"Received update blob request for user: {user_id}, file: {filename}")
