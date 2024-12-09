@@ -6,65 +6,47 @@ interface FileData {
 }
 
 export const handleUseCSV = async (
-filename: string, userId: string | undefined, setLoading: (loading: boolean) => void, setError: (error: string | null) => void, onUpload: (data: FileData[]) => void, sheet?: string, table?: string) => {
+  fileId: string,
+  userId: string,
+  setLoading: (loading: boolean) => void,
+  setError: (error: string | null) => void,
+  onUpload: (data: FileData[]) => void
+) => {
   setLoading(true);
   setError(null);
 
   try {
-    console.log("Sending request to backend...");
-
-    const response = await axios.get(`http://localhost:5000/get_file/${userId}/${filename}`, {
-      responseType: 'text',
-    });
-
-    console.log("Raw Response Data:", response.data);
-
+    const response = await axios.get(`http://localhost:5000/get-file/${userId}/${fileId}`);
     const fileData = response.data;
 
-    if (!fileData || fileData.trim() === '') {
+    if (!fileData || !fileData.data) {
       throw new Error("No data found in the file");
     }
 
-    console.log("File Data:", fileData);
-
-    // Parse the data (assuming it's CSV-like format from the backend)
-    const rows = fileData.trim().split('\n');
-    console.log("Data Rows:", rows);
-    const headers = rows[0].split(',');
-    console.log("Data Headers:", headers);
-    const data: FileData[] = rows.slice(1).map((row: string) => {
-      const values = row.split(',');
-      const record: FileData = {};
-      headers.forEach((header: string, index: number) => {
-        record[header.trim()] = values[index] ? values[index].trim() : '';
+    if (fileData.type === 'structured') {
+      // For structured data
+      if (!fileData.columns) {
+        throw new Error("No columns found in structured data");
+      }
+      const processedData = fileData.data.map((row: any) => {
+        const processedRow: FileData = {};
+        fileData.columns.forEach((column: string) => {
+          processedRow[column] = row[column];
+        });
+        return processedRow;
       });
-      return record;
-    });
-
-    console.log("Parsed Data:", data);
-
-    if (data.length === 0) {
-      throw new Error("No data found after parsing");
-    }
-
-    onUpload(data);
-toast({
-      title: 'File selected',
-      description: 'Data Processed Successfully.',
-      duration: 3000,
-    });
-    } catch (err) {
-    console.error("Error processing file:", err);
-    if (axios.isAxiosError(err)) {
-      setError(`Network error: ${err.message}. Status: ${err.response?.status}`);
+      onUpload(processedData);
     } else {
-      setError(err instanceof Error ? err.message : 'Failed to process file data');
+      // Handle unstructured data...
+      const content = fileData.content;
+      if (!content) {
+        throw new Error("No content found in file");
+      }
+      onUpload([{ content }]);
     }
-    toast({
-      title: 'Error',
-      description: 'Failed to process file data. Check console for details.',
-      duration: 3000,
-    });
+  } catch (err) {
+    console.error("Error processing file:", err);
+    setError(err instanceof Error ? err.message : 'Failed to process file data');
   } finally {
     setLoading(false);
   }

@@ -17,7 +17,11 @@ import axios from 'axios';
 import { useUser } from '@clerk/nextjs';
 
 interface FileDeleteProps {
-  fileList: string[];
+  fileList: {
+    file_id: string;
+    filename: string;
+    is_structured: boolean;
+  }[];
   onDeleteSuccess: () => void;
 }
 
@@ -26,11 +30,11 @@ const FileDelete: React.FC<FileDeleteProps> = ({ fileList, onDeleteSuccess }) =>
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { user } = useUser();
 
-  const handleCheckboxChange = (filename: string) => {
+  const handleCheckboxChange = (fileId: string) => {
     setSelectedFiles(prev => 
-      prev.includes(filename)
-        ? prev.filter(f => f !== filename)
-        : [...prev, filename]
+      prev.includes(fileId)
+        ? prev.filter(f => f !== fileId)
+        : [...prev, fileId]
     );
   };
 
@@ -38,8 +42,8 @@ const FileDelete: React.FC<FileDeleteProps> = ({ fileList, onDeleteSuccess }) =>
     if (!user) return;
 
     try {
-      await Promise.all(selectedFiles.map(filename => 
-        axios.delete(`http://localhost:5000/delete_file/${user.id}/${filename}`)
+      await Promise.all(selectedFiles.map(fileId => 
+        axios.delete(`http://localhost:5000/delete-file/${user.id}/${fileId}`)
       ));
 
       toast({
@@ -78,14 +82,14 @@ const FileDelete: React.FC<FileDeleteProps> = ({ fileList, onDeleteSuccess }) =>
         </DialogHeader>
         <ScrollArea className="mt-4 h-[200px] rounded-md border p-4">
           {fileList.map((file) => (
-            <div key={file} className="flex items-center space-x-2 py-2">
+            <div key={file.file_id} className="flex items-center space-x-2 py-2">
               <Checkbox
-                id={file}
-                checked={selectedFiles.includes(file)}
-                onCheckedChange={() => handleCheckboxChange(file)}
+                id={file.file_id}
+                checked={selectedFiles.includes(file.file_id)}
+                onCheckedChange={() => handleCheckboxChange(file.file_id)}
               />
-              <label htmlFor={file} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                {file}
+              <label htmlFor={file.file_id} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                {file.filename}
               </label>
             </div>
           ))}

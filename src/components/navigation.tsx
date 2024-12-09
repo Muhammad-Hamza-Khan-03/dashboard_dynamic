@@ -17,11 +17,14 @@ const routes = [
         label: "Home",
     },
 
+    // {
+    //     href: "../Home",
+    //     label: "Home-Main"
+    // },
     {
         href: "/upload",
         label: "Data Table"
     },
-
 
 
     {
