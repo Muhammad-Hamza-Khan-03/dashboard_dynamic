@@ -1,19 +1,31 @@
-"use client"
-import React, { useCallback, useState } from 'react';
+"use client";
+
+import React, { useState, useCallback } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { Loader, AlertCircle } from 'lucide-react';
 import useFilesList from '@/features/sqlite/api/file-list';
-import DashboardComponent from './Dashboard-component';
-import ChartModal from '@/features/board/Chart-Modal/Chart-Modal';
-import S_ChartModal from '@/features/board/Sidebar/S-ChartModal';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { handleUseCSV } from '@/features/sqlite/api/file-content';
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle, Loader, Menu, Plus } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import DraggableChart from './drag-chart';
+import ChartModal from './chartmodal';
 
-interface FileData {
-  [key: string]: unknown;
+// Interfaces
+interface Position {
+  x: number;
+  y: number;
 }
 
+interface Chart {
+  id: string;
+  type: string;
+  title: string;
+  graphUrl: string;
+  position: Position;
+}
 
 interface Column {
   header: string;
@@ -21,118 +33,166 @@ interface Column {
   isNumeric: boolean;
 }
 
-interface ChartData {
+interface FileData {
+  id: string;
+  data: Array<Record<string, unknown>>;
+  columns: Column[];
+}
+
+interface Dashboard {
+  id: string;
+  name: string;
+  charts: Chart[];
+}
+
+interface ChartCreationData {
   type: string;
   columns: string[];
-  fileId: string;
-  data: any[];
+  title?: string;
 }
 
-interface ChartResult {
-  id: string;
-  title: string;
-  type: string;
-  graphUrl: string;
-}
-
-interface DashboardChart {
-  id: string;
-  type: string;
-  title: string;
-  graphUrl: string;
-}
-const Board_Main = () => {
+const BoardMain: React.FC = () => {
   const { user, isLoaded: userLoaded } = useUser();
   const userId = user?.id;
   const { fileList, error: fileListError, loading: filesLoading } = useFilesList(userId);
-  
-  // State for file and data management
-  const [selectedFile, setSelectedFile] = useState<{ id: string; data: FileData[] } | null>(null);
-  const [columns, setColumns] = useState<Column[]>([]);
-  const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
-  const [dataLoading, setDataLoading] = useState(false);
-  const [dataError, setDataError] = useState<string | null>(null);
-  
-  // State for dashboard charts
-  const [dashboardCharts, setDashboardCharts] = useState<DashboardChart[]>([]);
 
+  // State
+  const [selectedFile, setSelectedFile] = useState<FileData | null>(null);
+  const [dataLoading, setDataLoading] = useState<boolean>(false);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [showChartModal, setShowChartModal] = useState<boolean>(false);
+  const [clickPosition, setClickPosition] = useState<Position>({ x: 0, y: 0 });
+  const [charts, setCharts] = useState<Chart[]>([]);
+  const [maximizedChart, setMaximizedChart] = useState<string | null>(null);
+  const [selectedDashboard, setSelectedDashboard] = useState<string | null>(null);
+  const [dashboards, setDashboards] = useState<Dashboard[]>([]);
+  const [newDashboardName, setNewDashboardName] = useState<string>('');
+
+  // Handle chart position change
+  const handleChartPosition = useCallback((chartId: string, newPosition: Position) => {
+    setCharts(prev => prev.map(chart => 
+      chart.id === chartId ? { ...chart, position: newPosition } : chart
+    ));
+  }, []);
+
+  // Handle chart remove
+  const handleRemoveChart = useCallback((chartId: string) => {
+    setCharts(prev => prev.filter(chart => chart.id !== chartId));
+    if (maximizedChart === chartId) {
+      setMaximizedChart(null);
+    }
+  }, [maximizedChart]);
+
+  // Handle maximize toggle
+  const handleMaximizeToggle = useCallback((chartId: string) => {
+    setMaximizedChart(prev => prev === chartId ? null : chartId);
+  }, []);
+
+  // Graph area click handler
+  const handleGraphAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!selectedFile || maximizedChart) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const position = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    };
+    
+    setClickPosition(position);
+    setShowChartModal(true);
+  }, [selectedFile, maximizedChart]);
+
+  // File selection handler
   const handleFileSelection = useCallback(async (fileId: string) => {
     if (!userId) return;
     
     setDataLoading(true);
     setDataError(null);
-    setSelectedColumns([]);
 
     try {
-        await handleUseCSV(
-            fileId,
-            userId,
-            setDataLoading,
-            setDataError,
-            (data: FileData[]) => {
-                if (data.length > 0) {
-                    const headers = Object.keys(data[0]);
-                    setColumns(headers.map(header => ({
-                        header,
-                        accessorKey: header,
-                        isNumeric: typeof data[0][header] === 'number'
-                    })));
-                    setSelectedFile({ id: fileId, data });
-                }
-            }
-        );
+      await handleUseCSV(
+        fileId,
+        userId,
+        setDataLoading,
+        setDataError,
+        (data: Record<string, unknown>[]) => {
+          if (data.length > 0) {
+            const headers = Object.keys(data[0]);
+            const columns: Column[] = headers.map(header => ({
+              header,
+              accessorKey: header,
+              isNumeric: typeof data[0][header] === 'number'
+            }));
+            setSelectedFile({
+              id: fileId,
+              data,
+              columns
+            });
+          }
+        }
+      );
     } catch (error) {
-        console.error('Error loading file:', error);
-        setDataError(error instanceof Error ? error.message : 'Error loading file');
+      console.error('Error loading file:', error);
+      setDataError(error instanceof Error ? error.message : 'Error loading file');
     } finally {
-        setDataLoading(false);
+      setDataLoading(false);
     }
-}, [userId]);
+  }, [userId]);
 
-const handleExport = useCallback(async (chartData: ChartData): Promise<ChartResult> => {
-  if (!userId) throw new Error('User not authenticated');
+  // Create chart handler
+  const handleChartCreate = useCallback(async (chartData: ChartCreationData) => {
+    if (!userId || !selectedFile) return;
 
-  try {
-    const response = await fetch(`http://localhost:5000/generate-graph/${userId}/${chartData.fileId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chartType: chartData.type,
-        selectedColumns: chartData.columns,
-      }),
-    });
+    try {
+      const response = await fetch(`http://localhost:5000/generate-graph/${userId}/${selectedFile.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chartType: chartData.type,
+          selectedColumns: chartData.columns,
+        }),
+      });
 
-    console.log('Response:', await response.clone().text()); // Debug response
+      if (!response.ok) {
+        throw new Error('Failed to generate chart');
+      }
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to generate graph');
+      const { graph_id, url } = await response.json() as { graph_id: string; url: string };
+      
+      const newChart: Chart = {
+        id: graph_id,
+        type: chartData.type,
+        title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
+        graphUrl: `http://localhost:5000${url}`,
+        position: clickPosition
+      };
+
+      setCharts(prev => [...prev, newChart]);
+      setShowChartModal(false);
+    } catch (error) {
+      console.error('Error creating chart:', error);
+      setDataError('Failed to create chart');
     }
+  }, [userId, selectedFile, clickPosition]);
 
-    const { graph_id, url } = await response.json();
-    const newChart = {
-      id: graph_id,
-      title: `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
-      type: chartData.type,
-      graphUrl: `http://localhost:5000${url}`,
+  // Create dashboard handler
+  const handleCreateDashboard = useCallback(() => {
+    if (!newDashboardName.trim()) return;
+
+    const newDashboard: Dashboard = {
+      id: Date.now().toString(),
+      name: newDashboardName.trim(),
+      charts: []
     };
-    console.log('Chart data:', newChart); // Debug chart data
-  setDashboardCharts(prev => [...prev, newChart]);
-    return newChart;
-  } catch (error) {
-    console.error('Export error details:', error);
-    throw error;
-  }
-  
-}, [userId]);
 
-const handleRemoveChart = useCallback((chartId: string) => {
-setDashboardCharts(prev => prev.filter(chart => chart.id !== chartId));
-}, []);
+    setDashboards(prev => [...prev, newDashboard]);
+    setSelectedDashboard(newDashboard.id);
+    setNewDashboardName('');
+  }, [newDashboardName]);
 
-if (!userLoaded || !userId) {
+  if (!userLoaded || !userId) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader className="animate-spin w-8 h-8 text-blue-500" />
@@ -141,102 +201,130 @@ if (!userLoaded || !userId) {
   }
 
   return (
-    <div className='flex flex-col bg-white rounded-lg mx-4 p-6 shadow-lg h-screen'>
-      {fileListError && (
-        <Alert variant="destructive" className="mb-4">
+    <div className="h-screen flex flex-col">
+      {/* Top Navigation */}
+      <div className="bg-white border-b p-4 flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          {/* File Selection */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon">
+                <Menu className="h-4 w-4" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left">
+              <SheetHeader>
+                <SheetTitle>Select File</SheetTitle>
+              </SheetHeader>
+              <div className="py-4">
+                {filesLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader className="animate-spin w-6 h-6 text-blue-500" />
+                  </div>
+                ) : !fileList?.length ? (
+                  <p className="text-gray-500 text-center py-4">No files available</p>
+                ) : (
+                  fileList.map((file) => (
+                    <Button
+                      key={file.file_id}
+                      variant="ghost"
+                      className="w-full justify-start"
+                      onClick={() => handleFileSelection(file.file_id)}
+                    >
+                      {file.filename}
+                    </Button>
+                  ))
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          {/* Dashboard Selection */}
+          <Select value={selectedDashboard || ''} onValueChange={setSelectedDashboard}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select Dashboard" />
+            </SelectTrigger>
+            <SelectContent>
+              {dashboards.map(dashboard => (
+                <SelectItem key={dashboard.id} value={dashboard.id}>
+                  {dashboard.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* New Dashboard Creation */}
+          <div className="flex items-center space-x-2">
+            <Input
+              placeholder="New Dashboard Name"
+              value={newDashboardName}
+              onChange={(e) => setNewDashboardName(e.target.value)}
+              className="w-[200px]"
+            />
+            <Button
+              variant="outline"
+              onClick={handleCreateDashboard}
+              disabled={!newDashboardName.trim()}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Graph Area */}
+      <div className="flex-1 relative bg-gray-50 overflow-hidden">
+        <div
+          className="absolute inset-0"
+          onClick={handleGraphAreaClick}
+        >
+          {charts.map(chart => (
+            <DraggableChart
+              key={chart.id}
+              id={chart.id}
+              title={chart.title}
+              graphUrl={chart.graphUrl}
+              position={chart.position}
+              onPositionChange={handleChartPosition}
+              onRemove={handleRemoveChart}
+              isMaximized={maximizedChart === chart.id}
+              onMaximizeToggle={handleMaximizeToggle}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Chart Modal */}
+      {showChartModal && selectedFile && (
+        <ChartModal
+          isOpen={showChartModal}
+          onClose={() => setShowChartModal(false)}
+          onExport={handleChartCreate}
+          position={clickPosition}
+          columns={selectedFile.columns}
+          data={selectedFile.data}
+        />
+      )}
+
+      {/* Error Messages */}
+      {(fileListError || dataError) && (
+        <Alert variant="destructive" className="fixed bottom-4 right-4">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Error loading files: {fileListError}
+            {fileListError || dataError}
           </AlertDescription>
         </Alert>
       )}
 
-      <div className='flex flex-1 min-h-0'>
-        <div className='w-1/4 flex flex-col gap-y-6 pr-6 border-r border-gray-200'>
-          {/* File Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Files</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 space-y-2">
-              {filesLoading ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader className="animate-spin w-6 h-6 text-blue-500" />
-                </div>
-              ) : fileList?.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No files available</p>
-              ) : (
-                fileList?.map((file) => (
-                  <button
-                    key={file.file_id}
-                    onClick={() => handleFileSelection(file.file_id)}
-                    className={`w-full text-left p-2 rounded transition-colors
-                      ${selectedFile?.id === file.file_id ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
-                  >
-                    {file.filename}
-                  </button>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Chart Controls */}
-          {selectedFile && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Chart Controls</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-4">
-                <ChartModal
-                  data={selectedFile.data}
-                  columns={columns}
-                  selectedColumns={selectedColumns}
-                  setSelectedColumns={setSelectedColumns}
-                  fileId={selectedFile.id}
-                  onExport={handleExport}
-                />
-                <S_ChartModal
-                  data={selectedFile.data}
-                  columns={columns}
-                  selectedColumns={selectedColumns}
-                  setSelectedColumns={setSelectedColumns}
-                  fileId={selectedFile.id}
-                  onExport={handleExport}
-                />
-              </CardContent>
-            </Card>
-          )}
+      {/* Loading Overlay */}
+      {dataLoading && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
+          <Loader className="animate-spin w-8 h-8 text-white" />
         </div>
-
-        {/* Dashboard Area */}
-        <div className='w-3/4 pl-6 overflow-hidden'>
-          {dataLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader className="animate-spin w-8 h-8 text-blue-500" />
-            </div>
-          ) : dataError ? (
-            <Alert variant="destructive" className="mb-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Error loading data: {dataError}
-              </AlertDescription>
-            </Alert>
-          ) : dashboardCharts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500">
-              <AlertCircle className="w-12 h-12 mb-4" />
-              <p className="text-xl font-semibold">No Charts Yet</p>
-              <p className="mt-2">Create a chart using the controls on the left</p>
-            </div>
-          ) : (
-            <DashboardComponent
-              charts={dashboardCharts}
-              onRemoveChart={handleRemoveChart}
-            />
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 };
 
-export default Board_Main;
+export default BoardMain;

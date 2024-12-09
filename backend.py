@@ -1,5 +1,6 @@
 #backend.py
 
+import re
 import tempfile
 import traceback
 from flask import Flask, Response, request, send_file, jsonify
@@ -16,6 +17,12 @@ from werkzeug.utils import secure_filename
 import uuid
 import plotly.express as px
 import plotly.graph_objects as go
+import pypdf
+from pdfminer.high_level import extract_text
+from pdfminer.layout import LAParams
+import tempfile
+import os
+import sqlite3
 
 app = Flask(__name__)
 CORS(app)
@@ -24,6 +31,7 @@ logging.basicConfig(level=logging.DEBUG)
 def init_db():
     conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
+
     c.execute('''CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     -- username TEXT NOT NULL,
@@ -36,15 +44,27 @@ def init_db():
               (file_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT REFERENCES users(user_id),
     filename TEXT NOT NULL,
-    file_type TEXT CHECK(file_type IN ('csv', 'xlsx','xls', 'db', 'tsv', 'doc', 'docx', 'txt', 'xml','pdf')),
+    file_type TEXT, --CHECK(file_type IN ('csv', 'xlsx','xls', 'db', 'tsv', 'doc', 'docx', 'txt', 'xml','pdf')),
     is_structured BOOLEAN,
     sheet_table TEXT, -- For Excel sheets or DB tables
     unique_key TEXT,  -- Random unique identifier for structured data storage table
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id)
-              );
+    );
               ''')
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+    
+    # Check if parent_file_id column exists
+    c.execute("PRAGMA table_info(user_files)")
+    columns = [row[1] for row in c.fetchall()]
+    
+    if 'parent_file_id' not in columns:
+        # Add parent_file_id column
+        c.execute('''ALTER TABLE user_files 
+                    ADD COLUMN parent_file_id INTEGER 
+                    REFERENCES user_files(file_id)''')
     
     c.execute('''
     CREATE TABLE IF NOT EXISTS  structured_file_storage (
@@ -61,6 +81,7 @@ def init_db():
     unique_key TEXT PRIMARY KEY,
     content BLOB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_text TEXT,
     FOREIGN KEY (file_id) REFERENCES user_files(file_id)
     );
     ''')
@@ -102,166 +123,220 @@ def get_table_info(cursor, table_name):
     except Exception as e:
         app.logger.error(f"Error getting table info: {str(e)}")
         
+def process_pdf_content(pdf_content):
+    """Process PDF content and return text with formatting preserved"""
+    try:
+        # Create a temporary file to write PDF content
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+            temp_file.write(pdf_content)
+            temp_path = temp_file.name
+
+        try:
+            # Use pdfminer for better text extraction
+            text = extract_text(
+                temp_path,
+                laparams=LAParams(
+                    line_margin=0.5,
+                    word_margin=0.1,
+                    boxes_flow=0.5,
+                    detect_vertical=True
+                )
+            )
+            
+            # Clean up extracted text
+            text = '\n'.join(line.strip() for line in text.split('\n') if line.strip())
+            return text
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_path)
+
+    except Exception as e:
+        logging.error(f"Error processing PDF: {str(e)}")
+        return None
+
+def handle_sqlite_upload(file, user_id, filename, c, conn):
+    """Handle SQLite file by extracting tables and storing them similarly to Excel sheets."""
+    try:
+        content = file.read()
+        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as temp_file:
+            temp_file.write(content)
+            temp_path = temp_file.name
+
+        # Connect to the uploaded (temporary) SQLite database
+        temp_conn = sqlite3.connect(temp_path)
+        temp_cursor = temp_conn.cursor()
+
+        # Fetch all tables except internal sqlite_* tables
+        tables_query = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
+        temp_cursor.execute(tables_query)
+        tables = temp_cursor.fetchall()
+
+        if not tables:
+            raise ValueError("No tables found in the uploaded SQLite database.")
+
+        # Create parent file entry with no specific table
+        parent_unique_key = str(uuid.uuid4())
+        c.execute("""
+            INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, filename, 'db', True, parent_unique_key))
+        parent_file_id = c.lastrowid
+
+        # Process each table and create separate entries in user_files
+        for table_name, in tables:
+            try:
+                # Read table data
+                df = pd.read_sql_query(f"SELECT * FROM '{table_name}'", temp_conn)
+                
+                # Generate unique key for this table
+                table_unique_key = str(uuid.uuid4())
+                
+                # Create new table name
+                new_table_name = f"table_{table_unique_key}"
+                
+                # Store data in new table
+                df.to_sql(new_table_name, conn, index=False, if_exists='replace')
+                
+                # Create entry in user_files for this table
+                c.execute("""
+                    INSERT INTO user_files (
+                        user_id, filename, file_type, is_structured, 
+                        unique_key, sheet_table, parent_file_id
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (user_id, f"{filename}:{table_name}", 'db', True, 
+                      table_unique_key, table_name, parent_file_id))
+
+            except Exception as e:
+                app.logger.error(f"Error processing table {table_name}: {str(e)}")
+                continue
+
+        temp_conn.close()
+        os.unlink(temp_path)
+
+        conn.commit()
+        return parent_file_id
+
+    except Exception as e:
+        app.logger.error(f"Error in handle_sqlite_upload: {str(e)}")
+        if 'temp_conn' in locals():
+            temp_conn.close()
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            os.unlink(temp_path)
+        raise
+
+
 @app.route('/upload/<user_id>', methods=['POST'])
 def upload_file(user_id):
     app.logger.info(f"Received upload request for user: {user_id}")
-    app.logger.debug(f"Request files: {request.files}")
-
+    
     if 'file' not in request.files:
         app.logger.warning("No file part in the request")
-        return 'No file part', 400
+        return jsonify({'error': 'No file part'}), 400
 
     file = request.files['file']
-    app.logger.info(f"File name: {file.filename}")
-
     if file.filename == '':
         app.logger.warning("No selected file")
-        return 'No selected file', 400
+        return jsonify({'error': 'No selected file'}), 400
 
+    filename = secure_filename(file.filename)# was not in earlier one
+    extension = filename.split('.')[-1].lower()
+    
     allowed_extensions = {'csv', 'xlsx', 'xls', 'db', 'txt', 'tsv', 'pdf', 'xml', 'docx', 'doc'}
-    structured_extensions = {'csv', 'xlsx', 'xls', 'db', 'tsv'}
+    structured_extensions = {'csv', 'xlsx', 'xls', 'db', 'tsv','sqlite','sqlite3'}
     unstructured_extensions = {'txt', 'pdf', 'xml', 'docx', 'doc'}
-
-    extension = file.filename.split('.')[-1].lower()
-
-    # Invalid file extension
+    
     if extension not in allowed_extensions:
-        app.logger.warning("Invalid file type")
-        return 'Invalid file type', 400
+        return jsonify({'error': 'Invalid file type'}), 400
 
-    # Connect to the main SQLite database
     conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
 
-    # Ensure the user exists in the 'users' table
-    c.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
-
     try:
-        # For structured files
-        if extension in structured_extensions:
-            # Generate a unique key for the structured data
-            unique_key = str(uuid.uuid4())
-            if extension in {'csv', 'tsv'}:
-                # Read CSV or TSV file into a DataFrame
-                delimiter = ',' if extension == 'csv' else '\t'
-                df = pd.read_csv(file, delimiter=delimiter)
+        # Ensure user exists
+        c.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
 
-                # Create a new table for the structured data
+        file_id = None
+        if extension in structured_extensions:
+            # Handle different file types
+            if extension in ['xlsx', 'xls']: #2
+                file_id = handle_excel_upload(file, user_id, filename, c, conn)
+            elif extension in ['db', 'sqlite', 'sqlite3']:
+                file_id = handle_sqlite_upload(file, user_id, filename, c, conn)
+            elif extension in {'csv','tsv'}: #1
+                # Handle CSV files (implement similar parent-child structure if needed)
+                unique_key = str(uuid.uuid4())
+                df = pd.read_csv(file)
                 table_name = f"table_{unique_key}"
                 df.to_sql(table_name, conn, if_exists='replace', index=False)
 
-                # Insert metadata into 'user_files'
                 c.execute("""
                     INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
                     VALUES (?, ?, ?, ?, ?)
-                """, (user_id, file.filename, extension, True, unique_key))
+                """, (user_id, filename, 'csv', True, unique_key))
                 file_id = c.lastrowid
-
                 # Insert into 'structured_file_storage'
                 c.execute("""
                     INSERT INTO structured_file_storage (unique_key, file_id, table_name)
                     VALUES (?, ?, ?)
                 """, (unique_key, file_id, table_name))
 
-            elif extension in {'xlsx', 'xls'}:
-                # Read Excel file and process each sheet
-                excel_file = pd.ExcelFile(file)
-                for sheet_name in excel_file.sheet_names:
-                    df = excel_file.parse(sheet_name)
-                    sheet_unique_key = str(uuid.uuid4())
-                    table_name = f"table_{sheet_unique_key}"
-                    df.to_sql(table_name, conn, if_exists='replace', index=False)
-
-                    # Insert metadata into 'user_files'
-                    c.execute("""
-                        INSERT INTO user_files (user_id, filename, file_type, is_structured, sheet_table, unique_key)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (user_id, file.filename, extension, True, sheet_name, sheet_unique_key))
-                    file_id = c.lastrowid
-
-                    # Insert into 'structured_file_storage'
-                    c.execute("""
-                        INSERT INTO structured_file_storage (unique_key, file_id, table_name)
-                        VALUES (?, ?, ?)
-                    """, (sheet_unique_key, file_id, table_name))
-
-            elif extension == 'db':
-                # Read the content of the uploaded .db file
-                file_content = file.read()
-
-                # Load the uploaded .db file into an in-memory SQLite database
-                in_memory_db = sqlite3.connect(':memory:')
-                in_memory_db.executescript(file_content.decode('utf-8', errors='ignore'))
-                temp_cursor = in_memory_db.cursor()
-
-                # Get all table names from the in-memory database
-                temp_cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-                tables = temp_cursor.fetchall()
-
-                # Copy each table from the in-memory database to 'user_files.db'
-                for table in tables:
-                    table_name_in_db = table[0]
-
-                    # Fetch the CREATE TABLE statement
-                    temp_cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table_name_in_db}';")
-                    create_table_sql = temp_cursor.fetchone()[0]
-
-                    # Generate a unique key and create a new table in 'user_files.db'
-                    unique_key = str(uuid.uuid4())
-                    table_name = f"table_{unique_key}"
-                    c.execute(create_table_sql.replace(table_name_in_db, table_name))
-
-                    # Copy data from the in-memory table to the new table
-                    temp_cursor.execute(f"SELECT * FROM {table_name_in_db}")
-                    rows = temp_cursor.fetchall()
-                    if rows:
-                        placeholders = ','.join('?' * len(rows[0]))
-                        insert_query = f"INSERT INTO {table_name} VALUES ({placeholders})"
-                        c.executemany(insert_query, rows)
-
-                    # Insert metadata into 'user_files'
-                    c.execute("""
-                        INSERT INTO user_files (user_id, filename, file_type, is_structured, sheet_table, unique_key)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (user_id, file.filename, extension, True, table_name_in_db, unique_key))
-                    file_id = c.lastrowid
-
-                    # Insert into 'structured_file_storage'
-                    c.execute("""
-                        INSERT INTO structured_file_storage (unique_key, file_id, table_name)
-                        VALUES (?, ?, ?)
-                    """, (unique_key, file_id, table_name))
-
-                in_memory_db.close()
-
-        # For unstructured files
+            conn.commit()
+            return jsonify({
+                'success': True,
+                'file_id': file_id,
+                'message': 'File uploaded successfully'
+            }), 200
         elif extension in unstructured_extensions:
-            content = file.read()
-            unique_key = str(uuid.uuid4())
-            # Insert metadata into 'user_files'
-            c.execute("""
-                INSERT INTO user_files (user_id, filename, file_type, is_structured,unique_key)
-                VALUES (?, ?, ?, ?,?)
-            """, (user_id, file.filename, extension, False,unique_key))
-            file_id = c.lastrowid
+            if extension =='pdf':
+               content = file.read()
+            
+               # Process PDF content immediately during upload
+               processed_text = process_pdf_content(content)
+               if not processed_text:
+                   return 'Error processing PDF', 500
+                   
+               unique_key = str(uuid.uuid4())
+               
+               # Store file metadata
+               c.execute("""
+                   INSERT INTO user_files 
+                   (user_id, filename, file_type, is_structured, unique_key)
+                   VALUES (?, ?, ?, ?, ?)
+               """, (user_id, file.filename, extension, False, unique_key))
+               file_id = c.lastrowid
+                   # Store processed text content
+               c.execute("""
+                   INSERT INTO unstructured_file_storage 
+                   (file_id, unique_key, content)
+                   VALUES (?, ?, ?)
+               """, (file_id, unique_key, processed_text))
+            else:   
+                content = file.read()
+                unique_key = str(uuid.uuid4())
+                # Insert metadata into 'user_files'
+                c.execute("""
+                    INSERT INTO user_files (user_id, filename, file_type, is_structured,unique_key)
+                    VALUES (?, ?, ?, ?,?)
+                """, (user_id, file.filename, extension, False,unique_key))
+                file_id = c.lastrowid
 
-            # Insert the content into 'unstructured_file_storage'
-            c.execute("""
-                INSERT INTO unstructured_file_storage (file_id,unique_key, content)
-                VALUES (?,?, ?)
-            """, (file_id, unique_key, content))
-
+                # Insert the content into 'unstructured_file_storage'
+                c.execute("""
+                    INSERT INTO unstructured_file_storage (file_id,unique_key, content)
+                    VALUES (?,?, ?)
+                """, (file_id, unique_key, content)) 
         conn.commit()
         app.logger.info(f"File uploaded successfully for user {user_id}")
-        return 'File uploaded successfully', 200
-
+        return 'File Uploaded successfully',200
     except Exception as e:
+        conn.rollback()
         app.logger.error(f"Error during file upload: {str(e)}")
-        return f'Error during file upload: {str(e)}', 500
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
 
     finally:
         conn.close()
-
 # Updated backend endpoints with proper SQL quoting
 
 @app.route('/update-row/<user_id>/<file_id>', methods=['POST'])
@@ -397,6 +472,55 @@ def update_row(user_id, file_id):
     finally:
         conn.close()
 
+@app.route('/search-pdf/<user_id>/<file_id>', methods=['POST'])
+def search_pdf(user_id, file_id):
+    query = request.json.get('query', '').lower()
+    if not query:
+        return jsonify({'error': 'No search query provided'}), 400
+
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+
+    try:
+        # Get PDF content
+        c.execute("""
+            SELECT ufs.content
+            FROM unstructured_file_storage ufs
+            JOIN user_files uf ON ufs.file_id = uf.file_id
+            WHERE uf.file_id = ? AND uf.user_id = ? AND uf.file_type = 'pdf'
+        """, (file_id, user_id))
+
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'PDF not found'}), 404
+
+        content = result[0]
+        
+        # Search for query in content
+        lines = content.split('\n')
+        matches = []
+        
+        for i, line in enumerate(lines):
+            if query in line.lower():
+                context_start = max(0, i - 2)
+                context_end = min(len(lines), i + 3)
+                matches.append({
+                    'line_number': i + 1,
+                    'context': '\n'.join(lines[context_start:context_end]),
+                    'matched_text': line
+                })
+
+        return jsonify({
+            'matches': matches,
+            'total_matches': len(matches)
+        })
+
+    except Exception as e:
+        logging.error(f"Error searching PDF: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+    finally:
+        conn.close()
 @app.route('/delete-rows/<user_id>/<file_id>', methods=['POST'])
 def delete_rows(user_id, file_id):
     conn = sqlite3.connect('user_files.db')
@@ -506,69 +630,153 @@ def list_files(user_id):
     finally:
         conn.close()
 #############################################
-# Modified get-file route in backend.py
+
+def handle_excel_upload(file, user_id, filename, c, conn):
+    """Handle Excel file by extracting sheets and storing them similarly to DB tables."""
+    try:
+        # Read Excel file
+        df_excel = pd.ExcelFile(file)
+        sheet_names = df_excel.sheet_names
+        
+        if not sheet_names:
+            raise ValueError("No sheets found in the Excel file.")
+
+        # Create parent file entry
+        parent_unique_key = str(uuid.uuid4())
+        c.execute("""
+            INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, filename, filename.split('.')[-1].lower(), True, parent_unique_key))
+        parent_file_id = c.lastrowid
+        
+        app.logger.info(f"Created parent entry for Excel file: {parent_file_id}")
+
+        # Process each sheet
+        for sheet_name in sheet_names:
+            try:
+                # Read sheet data
+                df = pd.read_excel(df_excel, sheet_name=sheet_name)
+                
+                # Generate unique key for this sheet
+                sheet_unique_key = str(uuid.uuid4())
+                
+                # Create new table name
+                table_name = f"table_{sheet_unique_key}"
+                
+                # Store sheet data in new table
+                df.to_sql(table_name, conn, index=False, if_exists='replace')
+                
+                # Create entry in user_files for this sheet
+                c.execute("""
+                    INSERT INTO user_files (
+                        user_id, filename, file_type, is_structured, 
+                        unique_key, sheet_table, parent_file_id
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (user_id, f"{filename}:{sheet_name}", filename.split('.')[-1].lower(), 
+                      True, sheet_unique_key, sheet_name, parent_file_id))
+
+                app.logger.info(f"Processed sheet {sheet_name} as {table_name}")
+
+            except Exception as e:
+                app.logger.error(f"Error processing sheet {sheet_name}: {str(e)}")
+                continue
+
+        conn.commit()
+        return parent_file_id
+
+    except Exception as e:
+        app.logger.error(f"Error in handle_excel_upload: {str(e)}")
+        raise
+
 @app.route('/get-file/<user_id>/<file_id>', methods=['GET'])
 def get_file(user_id, file_id):
-    page = request.args.get('page', 1, type=int)
+    
+    page = request.args.get('page',1,type=int)
     page_size = request.args.get('page_size', 50, type=int)
     conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
-
+    
     try:
         # Get file metadata
         c.execute("""
-            SELECT filename, file_type, is_structured, unique_key
+            SELECT filename, file_type, is_structured, unique_key, sheet_table,parent_file_id
             FROM user_files
             WHERE file_id = ? AND user_id = ?
         """, (file_id, user_id))
         
-        file_metadata = c.fetchone()
-        if not file_metadata:
+        file_info = c.fetchone()
+        app.logger.debug(f"File info: {file_info}")
+        
+        if not file_info:
             return jsonify({'error': 'File not found'}), 404
-
-        filename, file_type, is_structured, unique_key = file_metadata
+            
+        filename, file_type, is_structured, unique_key,sheet_table, parent_file_id = file_info
 
         if is_structured:
-            # Get the table name from structured_file_storage
-            c.execute("""
-                SELECT table_name FROM structured_file_storage
-                WHERE unique_key = ?
-            """, (unique_key,))
-            result = c.fetchone()
-            
-            if not result:
-                return jsonify({'error': 'Structured data not found'}), 404
-            
-            table_name = result[0]
-            
-            # Get total count of rows
+            # Handle parent files (Excel workbooks or DB files)
+            if parent_file_id is None and file_type in ['xlsx', 'xls', 'db', 'sqlite', 'sqlite3']:
+                c.execute("""
+                    SELECT file_id, sheet_table, filename
+                    FROM user_files
+                    WHERE parent_file_id = ? AND user_id = ?
+                    ORDER BY sheet_table
+                """, (file_id, user_id))
+
+                sheets = c.fetchall()
+                app.logger.debug(f"Found child entries: {sheets}")
+
+                return jsonify({
+                    'type': 'structured',
+                    'file_type': file_type,
+                    'tables': [{
+                        'id': str(row[0]),
+                        'name': row[1],
+                        'full_name': row[2]
+                    } for row in sheets]
+                })
+
+
+            # Get the table name for this sheet/table
+            table_name = f"table_{unique_key}"
+            app.logger.debug(f"Looking for table: {table_name}")
+
+            # Verify table exists
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+            if not c.fetchone():
+                return jsonify({'error': f'Table not found: {table_name}'}), 404
+
+            # Get pagination parameters
+            page = request.args.get('page', 1, type=int)
+            page_size = request.args.get('page_size', 50, type=int)
+            offset = (page - 1) * page_size
+
+            # Get total rows
             c.execute(f"SELECT COUNT(*) FROM '{table_name}'")
             total_rows = c.fetchone()[0]
-            
+
             # Get columns
             c.execute(f"PRAGMA table_info('{table_name}')")
             columns = [col[1] for col in c.fetchall()]
-            
-            # Calculate offset
-            offset = (page - 1) * page_size
-            
-            # Fetch paginated data
+
+            # Get paginated data
             c.execute(f"""
                 SELECT * FROM '{table_name}'
                 LIMIT ? OFFSET ?
             """, (page_size, offset))
-            
+
             rows = c.fetchall()
-            
-            # Convert to list of dictionaries with column names
+            app.logger.debug(f"Retrieved {len(rows)} rows from {table_name}")
+
+            # Convert to list of dictionaries
             data = []
             for row in rows:
                 row_dict = {}
                 for i, value in enumerate(row):
                     row_dict[columns[i]] = value
                 data.append(row_dict)
-            
-            response_data = {
+
+            return jsonify({
                 'type': 'structured',
                 'file_type': file_type,
                 'columns': columns,
@@ -579,23 +787,20 @@ def get_file(user_id, file_id):
                     'page_size': page_size,
                     'total_pages': (total_rows + page_size - 1) // page_size
                 }
-            }
-            
-            return jsonify(response_data)
-        else:
-            # Handle unstructured data
+            })
+
+        else: #unstructered data
             c.execute("""
-                SELECT content FROM unstructured_file_storage
-                WHERE file_id = ? AND unique_key = ?
-            """, (file_id, unique_key))
+                 SELECT content FROM unstructured_file_storage
+                 WHERE file_id = ? AND unique_key = ?
+             """, (file_id, unique_key))
             result = c.fetchone()
             
             if not result:
                 return jsonify({'error': 'Unstructured data not found'}), 404
                 
             content = result[0]
-            
-            # For text-based unstructured files
+
             if file_type in ['txt', 'docx', 'doc']:
                 try:
                     decoded_content = content.decode('utf-8')
@@ -609,24 +814,137 @@ def get_file(user_id, file_id):
                     'editable': True
                 }
             elif file_type == 'pdf':
-                # For PDF files, return base64 encoded content
-                import base64
-                encoded_content = base64.b64encode(content).decode('utf-8')
+                c.execute("""
+                SELECT content FROM unstructured_file_storage
+                WHERE file_id = ? AND unique_key = ?
+                """, (file_id, unique_key))
+            
+                result = c.fetchone()
+                if not result:
+                    return jsonify({'error': 'PDF content not found'}), 404
+
+                content = result[0]
+
+                # Content is already processed text, return directly
                 response_data = {
                     'type': 'unstructured',
                     'file_type': file_type,
-                    'content': encoded_content,
+                    'content': content,
                     'editable': True
                 }
-            
-            return jsonify(response_data)
 
+                return jsonify(response_data)
     except Exception as e:
         app.logger.error(f"Error retrieving file: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+    finally:
+        conn.close()
+
+@app.route('/get-tables/<user_id>/<file_id>', methods=['GET'])
+def get_tables(user_id, file_id):
+    """Get available tables/sheets for a file."""
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+    
+    try:
+        # Get file type first
+        c.execute("""
+            SELECT file_type, is_structured
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        file_info = c.fetchone()
+        if not file_info:
+            app.logger.error(f"File not found: {file_id}")
+            return jsonify({'error': 'File not found'}), 404
+            
+        file_type, is_structured = file_info
+        app.logger.info(f"File type: {file_type}, Is structured: {is_structured}")
+
+        # For SQLite files, get tables from structured_file_storage
+        if file_type == 'db':
+            c.execute("""
+                SELECT table_name
+                FROM structured_file_storage
+                WHERE file_id = ?
+            """, (file_id,))
+            tables = c.fetchall()
+            app.logger.info(f"Found {len(tables)} tables for DB file")
+            
+            return jsonify({
+                'tables': [{
+                    'id': file_id,
+                    'name': row[0],
+                    'full_name': f"{file_id}_{row[0]}"
+                } for row in tables]
+            })
+        
+        # For Excel files, get sheets from user_files
+        elif file_type in ['xlsx', 'xls']:
+            c.execute("""
+                SELECT file_id, sheet_table
+                FROM user_files
+                WHERE parent_file_id = ? AND user_id = ?
+                ORDER BY sheet_table
+            """, (file_id, user_id))
+            
+            sheets = c.fetchall()
+            app.logger.info(f"Found {len(sheets)} sheets for Excel file")
+            
+            return jsonify({
+                'tables': [{
+                    'id': str(row[0]),
+                    'name': row[1],
+                    'full_name': f"{file_id}_{row[1]}"
+                } for row in sheets]
+            })
+        
+        else:
+            return jsonify({'error': 'Unsupported file type'}), 400
+            
+    except Exception as e:
+        app.logger.error(f"Error getting tables: {str(e)}")
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
 
+@app.route('/get-sheets/<user_id>/<file_id>', methods=['GET'])
+def get_sheets(user_id, file_id):
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+    
+    try:
+        # Get file metadata and check if it's an Excel file
+        c.execute("""
+            SELECT filename, unique_key, file_type
+            FROM user_files
+            WHERE file_id = ? AND user_id = ? AND file_type IN ('xlsx', 'xls')
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'Excel file not found'}), 404
+            
+        _, unique_key, _ = result
+        
+        # Get all sheets for this file
+        c.execute("""
+            SELECT sheet_table
+            FROM user_files
+            WHERE unique_key = ? AND sheet_table IS NOT NULL
+        """, (unique_key,))
+        
+        sheets = [row[0] for row in c.fetchall()]
+        return jsonify({'sheets': sheets})
+        
+    except Exception as e:
+        app.logger.error(f"Error getting sheets: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 ################################################      
 
 # Add a new route for saving unstructured content
@@ -1186,7 +1504,6 @@ def update_blob(user_id, filename):
         app.logger.error(f"Error updating blob content: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/generate-graph/<user_id>/<file_id>', methods=['POST'])
 def generate_graph(user_id, file_id):
     try:
@@ -1200,25 +1517,65 @@ def generate_graph(user_id, file_id):
         conn = sqlite3.connect('user_files.db')
         c = conn.cursor()
         
-        # Get file metadata
+        # First, check if this is a parent file
         c.execute("""
-            SELECT f.is_structured, f.unique_key, s.table_name
-            FROM user_files f
-            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
-            WHERE f.file_id = ? AND f.user_id = ?
+            SELECT file_type
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
         """, (file_id, user_id))
         
-        result = c.fetchone()
-        app.logger.debug(f"Query result: {result}")
-        
-        if not result:
+        file_info = c.fetchone()
+        if not file_info:
             return jsonify({'error': 'File not found'}), 404
             
-        is_structured, unique_key, table_name = result
+        file_type = file_info[0]
         
-        if not is_structured or not table_name:
-            return jsonify({'error': 'Invalid file type'}), 400
+        # Get the actual table data based on file type
+        if file_type in ['xlsx', 'xls', 'db']:
+            # For Excel and DB files, get child file metadata
+            c.execute("""
+                SELECT f.file_id, f.unique_key, f.sheet_table
+                FROM user_files f
+                WHERE f.parent_file_id = ? AND f.user_id = ?
+            """, (file_id, user_id))
             
+            children = c.fetchall()
+            if children:
+                # Use the first child's data
+                child_id, unique_key, sheet_table = children[0]
+                table_name = f"table_{unique_key}"
+            else:
+                # If no children, try to get the file's own table
+                c.execute("""
+                    SELECT f.unique_key
+                    FROM user_files f
+                    WHERE f.file_id = ? AND f.user_id = ?
+                """, (file_id, user_id))
+                result = c.fetchone()
+                if result:
+                    unique_key = result[0]
+                    table_name = f"table_{unique_key}"
+                else:
+                    return jsonify({'error': 'No data table found'}), 400
+        else:
+            # For other structured files (CSV, etc.)
+            c.execute("""
+                SELECT f.unique_key
+                FROM user_files f
+                WHERE f.file_id = ? AND f.user_id = ?
+            """, (file_id, user_id))
+            result = c.fetchone()
+            if result:
+                unique_key = result[0]
+                table_name = f"table_{unique_key}"
+            else:
+                return jsonify({'error': 'No data table found'}), 400
+
+        # Verify table exists
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not c.fetchone():
+            return jsonify({'error': f'Table {table_name} not found'}), 404
+
         # Get data from the table
         query = f'SELECT * FROM "{table_name}"'
         app.logger.debug(f"SQL Query: {query}")
@@ -1243,33 +1600,34 @@ def generate_graph(user_id, file_id):
                 fig = px.box(df, y=selected_columns[1:])
             else:
                 return jsonify({'error': f'Unsupported chart type: {chart_type}'}), 400
+                
+            # Update layout for better appearance
+            fig.update_layout(
+                template='plotly_white',
+                margin=dict(l=40, r=40, t=40, b=40),
+                height=400
+            )
+            
+            # Generate HTML
+            html = fig.to_html(full_html=False, include_plotlyjs='cdn')
+            
+            # Save to graph cache
+            graph_id = str(uuid.uuid4())
+            c.execute("""
+                INSERT INTO graph_cache (graph_id, html_content, created_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            """, (graph_id, html))
+            
+            conn.commit()
+            return jsonify({
+                'graph_id': graph_id,
+                'url': f'/graph/{graph_id}'
+            })
+            
         except Exception as e:
             app.logger.error(f"Error creating plot: {str(e)}")
             return jsonify({'error': f'Error creating plot: {str(e)}'}), 500
-
-        # Update layout for better appearance
-        fig.update_layout(
-            template='plotly_white',
-            margin=dict(l=40, r=40, t=40, b=40),
-            height=400
-        )
-        
-        # Generate HTML
-        html = fig.to_html(full_html=False, include_plotlyjs='cdn')
-        
-        # Save to temporary file or database
-        graph_id = str(uuid.uuid4())
-        c.execute("""
-            INSERT INTO graph_cache (graph_id, html_content, created_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-        """, (graph_id, html))
-        
-        conn.commit()
-        return jsonify({
-            'graph_id': graph_id,
-            'url': f'/graph/{graph_id}'
-        })
-        
+            
     except Exception as e:
         app.logger.error(f"Error generating graph: {str(e)}")
         app.logger.error(traceback.format_exc())
@@ -1277,6 +1635,7 @@ def generate_graph(user_id, file_id):
     finally:
         if 'conn' in locals():
             conn.close()
+
 @app.route('/graph/<graph_id>', methods=['GET'])
 def serve_graph(graph_id):
     try:
