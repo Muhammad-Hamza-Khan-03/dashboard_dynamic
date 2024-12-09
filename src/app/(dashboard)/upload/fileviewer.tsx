@@ -92,7 +92,7 @@ const FileViewer: React.FC<FileDisplayProps> = ({
 
   return (
     <Card className="mt-4">
-      <CardContent className="p-4">
+      {/* <CardContent className="p-4">
         <div className="flex justify-between items-center mb-4">
           <span className="text-sm text-gray-500">
             Displaying {getFileType(fileName)} file
@@ -106,7 +106,7 @@ const FileViewer: React.FC<FileDisplayProps> = ({
             Refresh
           </Button>
         </div>
-      </CardContent>
+      </CardContent> */}
     </Card>
   );
 };

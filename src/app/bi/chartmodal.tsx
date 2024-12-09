@@ -1,11 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as echarts from 'echarts/core';
-import {
-  TitleComponent,
-  TooltipComponent,
-  LegendComponent,
-  GridComponent
-} from 'echarts/components';
+import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components';
 import { BarChart, LineChart, PieChart } from 'echarts/charts';
 import { UniversalTransition } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -17,19 +12,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 
-// Register ECharts components
-echarts.use([
-  TitleComponent,
-  TooltipComponent,
-  LegendComponent,
-  GridComponent,
-  BarChart,
-  LineChart,
-  PieChart,
-  CanvasRenderer,
-  UniversalTransition
-]);
+echarts.use([TitleComponent, TooltipComponent, LegendComponent, GridComponent, BarChart, LineChart, PieChart, CanvasRenderer, UniversalTransition]);
+
 
 interface Position {
   x: number;
@@ -56,17 +42,45 @@ interface PreviewData {
     data: number[];
   }>;
 }
+interface ChartOptions {
+  binSize?: number;
+  showOutliers?: boolean;
+  stackType?: 'stacked' | 'grouped';
+}
+
+interface ChartData {
+  type: string;
+  columns: string[];
+  title?: string;
+  position: Position;
+  options?: ChartOptions;
+}
+
+interface Position {
+  x: number;
+  y: number;
+}
+
+interface Chart extends ChartData {
+  id: string;
+  graphUrl: string;
+}
+
+interface ChartCreationData {
+  type: string;
+  columns: string[];
+  title?: string;
+  options?: ChartOptions;
+}
 
 interface ChartModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onExport: (chartData: ChartData) => void;
-  position: Position;
-  columns: Column[];
-  data: Record<string, any>[];
+  onExport: (chartData: ChartCreationData & { position: Position; options?: ChartOptions; }) => void;
+  position: { x: number; y: number };
+  columns: Array<{ header: string; accessorKey: string; isNumeric: boolean }>;
+  data: Array<Record<string, any>>;
 }
-
-type ChartType = 'line' | 'bar' | 'pie';
 
 const ChartModal: React.FC<ChartModalProps> = ({
   isOpen,
@@ -76,99 +90,63 @@ const ChartModal: React.FC<ChartModalProps> = ({
   columns,
   data
 }) => {
-  const [chartType, setChartType] = useState<ChartType>('line');
+  const [chartType, setChartType] = useState<string>('line');
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+  const [options, setOptions] = useState<ChartOptions>({});
   const [previewError, setPreviewError] = useState<string | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
 
-  // Clean up chart instance on unmount
   useEffect(() => {
     return () => {
-      if (chartInstance.current) {
-        chartInstance.current.dispose();
-      }
+      if (chartInstance.current) chartInstance.current.dispose();
     };
   }, []);
 
-  // Update preview when selections change
   useEffect(() => {
     if (!chartRef.current || selectedColumns.length < 2) return;
-
     try {
-      if (!chartInstance.current) {
-        chartInstance.current = echarts.init(chartRef.current);
-      }
-
+      if (!chartInstance.current) chartInstance.current = echarts.init(chartRef.current);
       const xAxisColumn = selectedColumns[0];
       const yAxisColumns = selectedColumns.slice(1);
-
-      const previewData: PreviewData = {
-        xAxis: data.map(row => String(row[xAxisColumn])),
-        series: yAxisColumns.map(column => ({
-          name: column,
-          data: data.map(row => Number(row[column]))
-        }))
-      };
-
       const option = {
-        title: {
-          text: 'Chart Preview',
-          left: 'center'
-        },
-        tooltip: {
-          trigger: 'axis'
-        },
-        legend: {
-          data: yAxisColumns,
-          bottom: 0
-        },
-        grid: {
-          left: '3%',
-          right: '4%',
-          bottom: '10%',
-          containLabel: true
-        },
-        xAxis: {
-          type: 'category',
-          data: previewData.xAxis
-        },
-        yAxis: {
-          type: 'value'
-        },
-        series: previewData.series.map(series => ({
-          name: series.name,
+        title: { text: 'Preview', left: 'center', top: 10 },
+        tooltip: { trigger: 'axis' },
+        legend: { data: yAxisColumns, bottom: 10 },
+        grid: { left: '5%', right: '5%', top: '15%', bottom: '15%' },
+        xAxis: { type: 'category', data: data.map(row => String(row[xAxisColumn])) },
+        yAxis: { type: 'value' },
+        series: yAxisColumns.map(col => ({
+          name: col,
           type: chartType,
-          data: series.data
+          data: data.map(row => Number(row[col]))
         }))
       };
-
       chartInstance.current.setOption(option);
       setPreviewError(null);
     } catch (error) {
-      setPreviewError('Error generating preview: Invalid data format');
-      console.error('Preview error:', error);
+      setPreviewError('Invalid data format');
+      console.error(error);
     }
   }, [chartType, selectedColumns, data]);
 
   const handleColumnToggle = (columnKey: string) => {
-    setSelectedColumns(prev => {
-      if (prev.includes(columnKey)) {
-        return prev.filter(key => key !== columnKey);
-      }
-      return [...prev, columnKey];
-    });
+    setSelectedColumns(prev => 
+      prev.includes(columnKey) 
+        ? prev.filter(key => key !== columnKey)
+        : [...prev, columnKey]
+    );
   };
 
   const handleExport = () => {
     if (selectedColumns.length < 2) {
-      setPreviewError('Please select at least two columns (X-axis and Y-axis)');
+      setPreviewError('Select at least two columns');
       return;
     }
-
     onExport({
       type: chartType,
       columns: selectedColumns,
+      options,
       title: `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart`,
       position
     });
@@ -177,92 +155,120 @@ const ChartModal: React.FC<ChartModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="max-w-[700px]">
         <DialogHeader>
           <DialogTitle>Create Chart</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          <div className="flex items-center gap-4">
-            <Select value={chartType} onValueChange={(value: ChartType) => setChartType(value)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select chart type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="line">Line Chart</SelectItem>
-                <SelectItem value="bar">Bar Chart</SelectItem>
-                <SelectItem value="pie">Pie Chart</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Column Selection */}
-          <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-[250px,1fr] gap-6 py-4">
+          <div className="space-y-6">
             <div>
-              <Label>X-Axis Column</Label>
-              {columns.map((column) => (
-                <div key={column.accessorKey} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`x-${column.accessorKey}`}
-                    checked={selectedColumns[0] === column.accessorKey}
-                    onCheckedChange={() => {
-                      setSelectedColumns([column.accessorKey, ...selectedColumns.slice(1)]);
-                    }}
-                  />
-                  <label
-                    htmlFor={`x-${column.accessorKey}`}
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    {column.header}
-                  </label>
-                </div>
-              ))}
+              <Label className="text-sm font-medium mb-2 block">Chart Type</Label>
+              <Select value={chartType} onValueChange={setChartType}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="line">Line Chart</SelectItem>
+                  <SelectItem value="bar">Bar Chart</SelectItem>
+                  <SelectItem value="pie">Pie Chart</SelectItem>
+                  <SelectItem value="box">Box Plot</SelectItem>
+                  <SelectItem value="histogram">Histogram</SelectItem>
+                  <SelectItem value="segmented-bar">Segmented Bar</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            <div>
-              <Label>Y-Axis Columns</Label>
-              {columns.filter(column => column.isNumeric).map((column) => (
-                <div key={column.accessorKey} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`y-${column.accessorKey}`}
-                    checked={selectedColumns.slice(1).includes(column.accessorKey)}
-                    onCheckedChange={() => handleColumnToggle(column.accessorKey)}
-                    disabled={selectedColumns[0] === column.accessorKey}
-                  />
-                  <label
-                    htmlFor={`y-${column.accessorKey}`}
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    {column.header}
-                  </label>
-                </div>
-              ))}
+            {chartType === 'histogram' && (
+              <div>
+                <Label>Bin Size</Label>
+                <Input 
+                  type="number" 
+                  min="1"
+                  value={options.binSize || 10}
+                  onChange={(e) => setOptions({...options, binSize: Number(e.target.value)})}
+                  className="mt-1"
+                />
+              </div>
+            )}
+
+            {chartType === 'box' && (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="showOutliers"
+                  checked={!!options.showOutliers}
+                  onCheckedChange={(checked) => setOptions({...options, showOutliers: !!checked})}
+                />
+                <Label htmlFor="showOutliers">Show Outliers</Label>
+              </div>
+            )}
+
+            {chartType === 'segmented-bar' && (
+              <div>
+                <Label>Stack Type</Label>
+                <Select
+                  value={options.stackType || 'stacked'}
+                  onValueChange={(value: "stacked" | "grouped") => setOptions({...options, stackType: value})}
+                >
+                  <SelectContent>
+                    <SelectItem value="stacked">Stacked</SelectItem>
+                    <SelectItem value="grouped">Grouped</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">X-Axis</Label>
+                {columns.map((column) => (
+                  <div key={column.accessorKey} className="flex items-center gap-2 py-1">
+                    <Checkbox
+                      id={`x-${column.accessorKey}`}
+                      checked={selectedColumns[0] === column.accessorKey}
+                      onCheckedChange={() => {
+                        setSelectedColumns([column.accessorKey, ...selectedColumns.slice(1)]);
+                      }}
+                    />
+                    <Label htmlFor={`x-${column.accessorKey}`}>{column.header}</Label>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Y-Axis</Label>
+                {columns.filter(column => column.isNumeric).map((column) => (
+                  <div key={column.accessorKey} className="flex items-center gap-2 py-1">
+                    <Checkbox
+                      id={`y-${column.accessorKey}`}
+                      checked={selectedColumns.slice(1).includes(column.accessorKey)}
+                      onCheckedChange={() => handleColumnToggle(column.accessorKey)}
+                      disabled={selectedColumns[0] === column.accessorKey}
+                    />
+                    <Label htmlFor={`y-${column.accessorKey}`}>{column.header}</Label>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {previewError && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{previewError}</AlertDescription>
-            </Alert>
-          )}
+          <div className="space-y-4">
+            <Card className="p-4">
+              <div ref={chartRef} className="w-full h-[300px]" />
+            </Card>
 
-          {/* Preview Area */}
-          <Card className="p-4">
-            <div 
-              ref={chartRef} 
-              className="w-full h-[300px]"
-            />
-          </Card>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button onClick={handleExport}>
-              Add to Dashboard
-            </Button>
+            {previewError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{previewError}</AlertDescription>
+              </Alert>
+            )}
           </div>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-4 border-t">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleExport}>Add to Dashboard</Button>
         </div>
       </DialogContent>
     </Dialog>

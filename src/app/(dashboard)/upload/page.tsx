@@ -233,7 +233,10 @@ const handleDataLoad = useCallback((newData: any[], newColumns: any[]) => {
   const columnDefs = newColumns.map(col => ({
     accessorKey: col,
     header: col,
-    cell: ({ row }) => {
+    cell: ({ row }:{row:{
+      getValue:(col:any)=>any;
+      index:number;
+    }}) => {
       const value = row.getValue(col);
       return (
         <div className="flex items-center justify-between">

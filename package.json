@@ -43,6 +43,7 @@
     "chart.js": "^4.4.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "d3": "^7.9.0",
     "date-fns": "^4.1.0",
     "echarts": "^5.5.1",
     "framer-motion": "^11.3.30",
@@ -59,6 +60,7 @@
     "react-dom": "^18.3.1",
     "react-draggable": "^4.4.6",
     "react-dropzone": "^14.2.3",
+    "react-leaflet": "^4.2.1",
     "react-markdown": "^9.0.1",
     "react-papaparse": "^4.4.0",
     "react-plotly.js": "^2.6.0",
@@ -80,6 +82,7 @@
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^14.2.14",
+    "@types/d3": "^7.4.3",
     "@types/node": "^20",
     "@types/papaparse": "^5.3.14",
     "@types/react": "^18",

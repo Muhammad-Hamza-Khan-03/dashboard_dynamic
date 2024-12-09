@@ -194,10 +194,10 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
 
     return Object.entries(basicStats.numeric_summaries).map(([column, stats]: [string, any]) => {
         const plotData = {
-            type: "box", // Change this line
+            type: "box" as const, // Change this line
             name: column,
             y: stats.values,
-            boxpoints: 'outliers',
+            boxpoints: 'outliers' as "outliers",
             marker: {
               color: 'rgb(107, 107, 255)'
             }

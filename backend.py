@@ -1581,7 +1581,10 @@ def generate_graph(user_id, file_id):
         app.logger.debug(f"SQL Query: {query}")
         df = pd.read_sql_query(query, conn)
         app.logger.debug(f"DataFrame shape: {df.shape}")
-        
+        data = request.json
+        chart_type = data.get('chartType')
+        selected_columns = data.get('selectedColumns')
+        options = data.get('options', {})
         chart_type = data.get('chartType')
         selected_columns = data.get('selectedColumns', [])
         app.logger.debug(f"Chart type: {chart_type}, Selected columns: {selected_columns}")
@@ -1597,7 +1600,11 @@ def generate_graph(user_id, file_id):
             elif chart_type == 'scatter':
                 fig = px.scatter(df, x=selected_columns[0], y=selected_columns[1])
             elif chart_type == 'box':
-                fig = px.box(df, y=selected_columns[1:])
+                fig = px.box(df, y=selected_columns[1:],showfliers=options.get('showOutliers', True))
+            elif chart_type == 'histogram':
+                   fig = px.histogram(df, x=selected_columns[0], nbins=options.get('binSize', 10))
+            elif chart_type == 'segmented-bar':
+                   fig = px.bar(df, x=selected_columns[0], y=selected_columns[1:],barmode=options.get('stackType', 'stack'))            
             else:
                 return jsonify({'error': f'Unsupported chart type: {chart_type}'}), 400
                 
