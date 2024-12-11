@@ -37,3 +37,8 @@ next-env.d.ts
 
 user_csvs.db
 user_files.db
+
+dataframe.pkl
+debug.log
+
+__pycache__/mixtral.cpython-39.pyc
