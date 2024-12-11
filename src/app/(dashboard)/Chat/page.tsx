@@ -1,5 +1,6 @@
 "use client";
 // Import statements
+import { useUser } from "@clerk/nextjs";
 import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
 import dynamic from 'next/dynamic';
 import ReactMarkdown from 'react-markdown';
@@ -150,6 +151,7 @@ export default function ChatSection() {
   const [editContent, setEditContent] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const { user } = useUser();
 
   // New State Variables for Plotly Integration
   const [selectedColor, setSelectedColor] = useState('#0000ff'); // Marker color
@@ -712,8 +714,8 @@ export default function ChatSection() {
                 </Avatar>
                 <div
                   className={`rounded-lg p-3 ${message.sender === 'user'
-                      ? 'bg-primary text-primary-foreground shadow-lg'
-                      : 'bg-muted shadow-sm'
+                    ? 'bg-primary text-primary-foreground shadow-lg'
+                    : 'bg-muted shadow-sm'
                     }`}
                 >
                   {renderContent(message)}
@@ -827,7 +829,7 @@ export default function ChatSection() {
     <Card className="w-full max-w-4xl mx-auto shadow-md rounded-lg">
       <CardHeader>
         <CardTitle className="text-xl sm:text-2xl font-bold text-center mb-2">
-          Chat with Your Data
+          Welcome, {user?.firstName || 'Guest'}! Chat with Your Data
         </CardTitle>
       </CardHeader>
       <CardContent>
