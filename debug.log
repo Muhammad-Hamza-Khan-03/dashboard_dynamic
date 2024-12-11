@@ -1,0 +1,22 @@
+2024-12-11 09:27:36,973 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 09:27:36,979 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 09:27:37,843 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 09:27:37,843 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 09:27:38,283 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 09:27:38,283 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 09:27:38,544 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 09:27:38,551 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 09:27:39,191 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:7000
+2024-12-11 09:27:39,192 INFO [33mPress CTRL+C to quit[0m
+2024-12-11 09:35:34,310 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 09:35:34,312 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 09:35:34,607 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 09:35:34,608 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 09:35:35,081 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 09:35:35,083 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 09:35:35,403 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 09:35:35,405 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 09:35:35,884 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:7000
+2024-12-11 09:35:35,885 INFO [33mPress CTRL+C to quit[0m
