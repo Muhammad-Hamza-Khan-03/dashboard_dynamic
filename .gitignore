@@ -40,4 +40,5 @@ user_files.db
 
 dataframe.pkl
 debug.log
-__pycache__
+
+__pycache__/mixtral.cpython-39.pyc
