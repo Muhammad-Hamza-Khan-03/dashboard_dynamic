@@ -33,7 +33,8 @@ import FileUpload from "./fileupload";
 import FileDelete from "@/features/sqlite/components/file-delete";
 import { SplitDialog } from "./split-dialog";
 import AnalysisModal from "./data-analysis-modal-component";
-import FileViewer from "./fileviewer";
+import DataAnalysisModal from "./data-analysis-modal-component";
+
 
 const DataTable = dynamic<DataTableProps<FileData>>(() =>
   import('@/components/data-table').then((mod) => mod.DataTable), {
@@ -51,13 +52,47 @@ interface TableData {
     total_pages: number;
   };
 }
+interface TableInfo {
+  id: string;
+  name: string;
+  full_name: string;
+}
 
+interface FileContent {
+  type: 'structured' | 'unstructured';
+  file_type: string;
+  tables?: TableInfo[];
+  columns?: string[];
+  data?: any[];
+  content?: string;
+  editable?: boolean;
+  pagination?: {
+    total_rows: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+  };
+}
 interface DataTableProps<TData> {
   columns: ColumnDef<TData, any>[]
   data: TData[]
   filterkey: string
   onRowSelectionChange: (rows: Row<TData>[]) => void
   onReset: () => void
+}
+interface TableInfo {
+  id: string;
+  name: string;
+  full_name: string;
+}
+
+interface FileGroup {
+  baseFile: FileData;
+  tables: TableInfo[];
+}
+
+interface GroupedFiles {
+  [key: string]: FileGroup;
 }
 ///////
 // Add these interfaces
@@ -132,6 +167,11 @@ const DataTablePage: React.FC = () => {
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [currentTable, setCurrentTable] = useState<string | null>(null);
+  const [tablesList, setTablesList] = useState<TableInfo[]>([]);
+  const [groupedFiles, setGroupedFiles] = useState<GroupedFiles>({});
+const [selectedBaseName, setSelectedBaseName] = useState<string | null>(null);
+const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
+
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
       setSelectedFile({ file_id: fileList[0].file_id, filename: fileList[0].filename });
@@ -139,9 +179,19 @@ const DataTablePage: React.FC = () => {
   }, [isUserLoaded, user, fileList, selectedFile]);
 
   /////////////////////////////////////////////////////
+// Reset state helper function
+const resetState = () => {
+  setData([]);
+  setColumns([]);
+  setUnstructuredContent('');
+  setIsEditing(false);
+  setPaginationInfo(null);
+  setTablesList([]);
+  setSelectedTable(null);
+};
 
-  
 // Modify the fetchFileData function
+// Updated fetchFileData function
 const fetchFileData = useCallback(async (fileId: string, filename: string, page: number = 1) => {
   if (!user?.id) {
     setError("User ID not available");
@@ -152,11 +202,10 @@ const fetchFileData = useCallback(async (fileId: string, filename: string, page:
   setError(null);
   
   try {
-    const response = await axios.get<FileResponse>(
+    const response = await axios.get<FileContent>(
       `http://localhost:5000/get-file/${user.id}/${fileId}`,
       {
         params: { 
-          table: selectedTable,
           page: page,
           page_size: 50
         }
@@ -167,41 +216,51 @@ const fetchFileData = useCallback(async (fileId: string, filename: string, page:
       throw new Error('No data received from server');
     }
 
-    const responseData = response.data;
+    const fileData = response.data;
 
-    if (responseData.type === 'structured') {
-      setUnstructuredContent(''); // Clear unstructured content
-      setIsEditing(false); // Reset editing state
-      setData(responseData.data || []);
-      setPaginationInfo(responseData.pagination || null);
-      
-      if (responseData.columns && responseData.data && responseData.data.length > 0) {
-        setColumns(generateColumns(responseData.data[0]));
+    if (fileData.type === 'structured') {
+      // Handle multi-table files (Excel workbooks, DB files)
+      if (fileData.tables && fileData.tables.length > 0) {
+        setTablesList(fileData.tables);
+        // If no table is selected, select the first one
+        if (!selectedTable) {
+          setSelectedTable(fileData.tables[0].id);
+          // Fetch data for the first table
+          const tableResponse = await axios.get<FileContent>(
+            `http://localhost:5000/get-file/${user.id}/${fileData.tables[0].id}`,
+            { params: { page: 1, page_size: 50 } }
+          );
+          if (tableResponse.data.data && tableResponse.data.columns) {
+            setData(tableResponse.data.data);
+            setColumns(generateColumns(tableResponse.data.columns));
+            setPaginationInfo(tableResponse.data.pagination || null);
+          }
+        }
+      } else if (fileData.data && fileData.columns) {
+        // Handle single-table files (CSV, single sheets)
+        setData(fileData.data);
+        setColumns(generateColumns(fileData.columns));
+        setPaginationInfo(fileData.pagination || null);
       }
+      setUnstructuredContent('');
+      setIsEditing(false);
     } else {
-      // Clear structured data states
+      // Handle unstructured files
       setData([]);
-      setPaginationInfo(null);
       setColumns([]);
-      
-      // Set unstructured content
-      setUnstructuredContent(responseData.content || '');
-      setIsEditing(responseData.editable || false);
+      setPaginationInfo(null);
+      setUnstructuredContent(fileData.content || '');
+      setIsEditing(fileData.editable || false);
     }
   } catch (err) {
     console.error("Error in fetchFileData:", err);
     setError(err instanceof Error ? err.message : "Failed to process file data");
-    
-    // Reset all states on error
-    setData([]);
-    setColumns([]);
-    setUnstructuredContent('');
-    setIsEditing(false);
-    setPaginationInfo(null);
+    resetState();
   } finally {
     setLoading(false);
   }
-}, [user, selectedTable]);
+}, [user?.id, selectedTable]);
+
 // Helper function to parse CSV content
 const parseCSVContent = (content: string): DataItem[] => {
   const lines = content.trim().split('\n');
@@ -407,33 +466,28 @@ useEffect(() => {
   };
 
 // Update the generateColumns function to include the cell update functionality
-const generateColumns = (firstRow: FileData): ColumnDef<DataItem, any>[] => {
-  if (!firstRow) {
-    console.error("Empty or undefined data row");
-    return [];
-  }
-
-  return Object.keys(firstRow).map((key) => ({
-    accessorKey: key,
-    header: key,
+// Helper function to generate columns with consistent formatting
+const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
+  return columns.map(column => ({
+    accessorKey: column,
+    header: column,
     cell: ({ row }) => {
-      const value = row.getValue(key);
+      const value = row.getValue(column);
       return (
         <div className="flex items-center justify-between">
           <span>{formatCellValue(value)}</span>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => handleEdit(row.index, key, formatCellValue(value))}
+            onClick={() => handleEdit(row.index, column, formatCellValue(value))}
           >
             <Edit className="h-4 w-4" />
           </Button>
         </div>
       );
-    },
+    }
   }));
 };
-
   const formatCellValue = (value: any): string => {
     if (value === null || value === undefined) {
       return '';
@@ -473,6 +527,29 @@ const handleSaveUnstructured = async () => {
   } finally {
     setLoading(false);
   }
+};
+
+// Update the UI to include table selection when needed
+const renderTableSelector = () => {
+  if (!tablesList || tablesList.length === 0) return null;
+
+  return (
+    <Select 
+      onValueChange={setSelectedTable} 
+      value={selectedTable || undefined}
+    >
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Select a table" />
+      </SelectTrigger>
+      <SelectContent>
+        {tablesList.map(table => (
+          <SelectItem key={table.id} value={table.id}>
+            {table.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 };
 
 // Add this JSX for rendering unstructured content editor
@@ -581,9 +658,6 @@ const handleCreate = () => {
 };
 
 
-
-// Update handleSaveItem function
-// Update the handleSaveItem function
 const handleSaveItem = async () => {
   if (!editItem || !user || !selectedFile) {
     toast({
@@ -644,26 +718,26 @@ const handleSaveItem = async () => {
     setEditField(null);
   }
 };
-  const saveDataToBlob = async (dataToSave: DataItem[]) => {
-    if (!user || !selectedFile) {
-      throw new Error("User not authenticated or no file selected");
-    }
+  // const saveDataToBlob = async (dataToSave: DataItem[]) => {
+  //   if (!user || !selectedFile) {
+  //     throw new Error("User not authenticated or no file selected");
+  //   }
 
-    setLoading(true);
-    try {
-      const response = await axios.post(`http://localhost:5000/update_blob/${user.id}/${selectedFile}`, {
-        newContent: dataToSave,
-      });
-      if (response.status !== 200) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
-    } catch (error) {
-      console.error("Error updating blob content:", error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
+  //   setLoading(true);
+  //   try {
+  //     const response = await axios.post(`http://localhost:5000/update_blob/${user.id}/${selectedFile}`, {
+  //       newContent: dataToSave,
+  //     });
+  //     if (response.status !== 200) {
+  //       throw new Error(`Server responded with status ${response.status}`);
+  //     }
+  //   } catch (error) {
+  //     console.error("Error updating blob content:", error);
+  //     throw error;
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   // const handleDelete = () => {
   //   const selectedIndices = selectedRows.map(row => row.index);
@@ -724,43 +798,43 @@ const isValidData = (data: any): boolean => {
 };
 
 // Add this function to handle cell updates
-const handleCellUpdate = async (rowIndex: number, field: string, value: any) => {
-  if (!user || !selectedFile) return;
+// const handleCellUpdate = async (rowIndex: number, field: string, value: any) => {
+//   if (!user || !selectedFile) return;
 
-  const currentRow = data[rowIndex];
-  const updatedData = {
-    ...currentRow,
-    [field]: value,
-    row_id: rowIndex + 1
-  };
+//   const currentRow = data[rowIndex];
+//   const updatedData = {
+//     ...currentRow,
+//     [field]: value,
+//     row_id: rowIndex + 1
+//   };
 
-  try {
-    const response = await axios.put(
-      `http://localhost:5000/row/${user.id}/${selectedFile.file_id}`,
-      updatedData
-    );
+//   try {
+//     const response = await axios.put(
+//       `http://localhost:5000/row/${user.id}/${selectedFile.file_id}`,
+//       updatedData
+//     );
 
-    if (response.data) {
-      setData(prevData => 
-        prevData.map((item, index) => 
-          index === rowIndex ? response.data.data : item
-        )
-      );
+//     if (response.data) {
+//       setData(prevData => 
+//         prevData.map((item, index) => 
+//           index === rowIndex ? response.data.data : item
+//         )
+//       );
 
-      toast({
-        title: "Success",
-        description: "Cell updated successfully",
-      });
-    }
-  } catch (error) {
-    console.error("Failed to update cell:", error);
-    toast({
-      title: "Error",
-      description: "Failed to update cell. Please try again.",
-      variant: "destructive",
-    });
-  }
-};
+//       toast({
+//         title: "Success",
+//         description: "Cell updated successfully",
+//       });
+//     }
+//   } catch (error) {
+//     console.error("Failed to update cell:", error);
+//     toast({
+//       title: "Error",
+//       description: "Failed to update cell. Please try again.",
+//       variant: "destructive",
+//     });
+//   }
+// };
   const handleSave = async () => {
     if (!user || !selectedFile) {
       toast({
@@ -887,55 +961,47 @@ const handleCellUpdate = async (rowIndex: number, field: string, value: any) => 
             />
           </div>
         </CardHeader>
-        <CardContent className="p-4">
-          {fileListLoading ? (
-            <div className="flex items-center text-blue-500">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              <span>Loading files...</span>
-            </div>
-          ) : fileListError ? (
-            <span className="text-red-500">{fileListError}</span>
-          ) : fileList && fileList.length > 0 ? (
-            <div className="space-y-4">
-              <Select 
-                onValueChange={(value) => {
-                  const selectedFileData = fileList?.find(file => file.file_id === value);
-                  if (selectedFileData) {
-                    setSelectedFile({
-                      file_id: selectedFileData.file_id,
-                      filename: selectedFileData.filename
-                    });
-                  }
-                }} 
-                value={selectedFile?.file_id}
-              >
-  <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
-    <SelectValue placeholder="Select a file" />
-  </SelectTrigger>
-  <SelectContent>
-  {fileList?.map(file => (
-                      <SelectItem key={file.file_id} value={file.file_id}>
-                        {file.filename}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
 
-                {/* Add FileViewer component for DB and Excel files */}
-                {selectedFile && (
-                  <FileViewer
-                  fileId={selectedFile.file_id}
-                  userId={user?.id || ''}
-                  fileName={selectedFile.filename}
-                  onDataLoad={handleDataLoad}
-                  onError={handleViewerError}
-                  />
-                )}
-              </div>
-            ) : (
-              <span className="text-blue-500">No files available</span>
-            )}
-          </CardContent>
+        {/* // Add table selector to the card content */}
+<CardContent className="p-4">
+  {fileListLoading ? (
+    <div className="flex items-center text-blue-500">
+      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      <span>Loading files...</span>
+    </div>
+  ) : fileListError ? (
+    <span className="text-red-500">{fileListError}</span>
+  ) : fileList && fileList.length > 0 ? (
+    <div className="space-y-4">
+      <Select 
+        onValueChange={(value) => {
+          const selectedFileData = fileList?.find(file => file.file_id === value);
+          if (selectedFileData) {
+            setSelectedFile({
+              file_id: selectedFileData.file_id,
+              filename: selectedFileData.filename
+            });
+          }
+        }} 
+        value={selectedFile?.file_id}
+      >
+        <SelectTrigger className="w-full border-gray-300 focus:ring-blue-500">
+          <SelectValue placeholder="Select a file" />
+        </SelectTrigger>
+        <SelectContent>
+          {fileList?.map(file => (
+            <SelectItem key={file.file_id} value={file.file_id}>
+              {file.filename }
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {/* {renderTableSelector()} */}
+    </div>
+  ) : (
+    <span className="text-blue-500">No files available</span>
+  )}
+</CardContent>
         </Card>
  
       <Card className="shadow-lg rounded-lg overflow-hidden bg-white">
@@ -948,7 +1014,7 @@ const handleCellUpdate = async (rowIndex: number, field: string, value: any) => 
             </Button>
             {columns.length > 0 && (
       <SplitDialog
-        columns={columns.map(col => (col.accessorKey as string))}
+        columns={columns.map(col => (col.accessorKey))}
         fileId={selectedFile?.file_id || ''}
         userId={user.id}
         onSplitComplete={(newData) => {
@@ -998,7 +1064,7 @@ const handleCellUpdate = async (rowIndex: number, field: string, value: any) => 
                 {/* Analysis content */}
               {/* </SheetContent> */}
             {/* </Sheet> */}
-            <AnalysisModal 
+            <DataAnalysisModal
   fileId={selectedFile?.file_id || ''}
   userId={user?.id || ''}
   isOpen={isAnalysisModalOpen}

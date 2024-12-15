@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 echarts.use([TitleComponent, TooltipComponent, LegendComponent, GridComponent, BarChart, LineChart, PieChart, CanvasRenderer, UniversalTransition]);
 
@@ -218,36 +219,39 @@ const ChartModal: React.FC<ChartModalProps> = ({
               </div>
             )}
 
-            <div className="space-y-4">
+<div className="space-y-4">
               <div>
                 <Label className="text-sm font-medium mb-2 block">X-Axis</Label>
-                {columns.map((column) => (
-                  <div key={column.accessorKey} className="flex items-center gap-2 py-1">
-                    <Checkbox
-                      id={`x-${column.accessorKey}`}
-                      checked={selectedColumns[0] === column.accessorKey}
-                      onCheckedChange={() => {
-                        setSelectedColumns([column.accessorKey, ...selectedColumns.slice(1)]);
-                      }}
-                    />
-                    <Label htmlFor={`x-${column.accessorKey}`}>{column.header}</Label>
-                  </div>
-                ))}
+                <ScrollArea className="h-[120px] pr-4">
+                  {columns.map((column) => (
+                    <div key={column.accessorKey} className="flex items-center gap-2 py-1">
+                      <Checkbox
+                        id={`x-${column.accessorKey}`}
+                        checked={selectedColumns[0] === column.accessorKey}
+                        onCheckedChange={() => {
+                          setSelectedColumns([column.accessorKey, ...selectedColumns.slice(1)]);
+                        }}
+                      />
+                      <Label htmlFor={`x-${column.accessorKey}`}>{column.header}</Label>
+                    </div>
+                  ))}
+                </ScrollArea>
               </div>
-
               <div>
                 <Label className="text-sm font-medium mb-2 block">Y-Axis</Label>
-                {columns.filter(column => column.isNumeric).map((column) => (
-                  <div key={column.accessorKey} className="flex items-center gap-2 py-1">
-                    <Checkbox
-                      id={`y-${column.accessorKey}`}
-                      checked={selectedColumns.slice(1).includes(column.accessorKey)}
-                      onCheckedChange={() => handleColumnToggle(column.accessorKey)}
-                      disabled={selectedColumns[0] === column.accessorKey}
-                    />
-                    <Label htmlFor={`y-${column.accessorKey}`}>{column.header}</Label>
-                  </div>
-                ))}
+                <ScrollArea className="h-[120px] pr-4">
+                  {columns.map((column) => (
+                    <div key={column.accessorKey} className="flex items-center gap-2 py-1">
+                      <Checkbox
+                        id={`y-${column.accessorKey}`}
+                        checked={selectedColumns.slice(1).includes(column.accessorKey)}
+                        onCheckedChange={() => handleColumnToggle(column.accessorKey)}
+                        disabled={selectedColumns[0] === column.accessorKey}
+                      />
+                      <Label htmlFor={`y-${column.accessorKey}`}>{column.header}</Label>
+                    </div>
+                  ))}
+                </ScrollArea>
               </div>
             </div>
           </div>

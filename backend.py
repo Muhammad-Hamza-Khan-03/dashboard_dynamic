@@ -347,9 +347,8 @@ def update_row(user_id, file_id):
     try:
         # Get file metadata
         c.execute("""
-            SELECT f.is_structured, f.unique_key, s.table_name
+            SELECT f.is_structured, f.unique_key
             FROM user_files f
-            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
             WHERE f.file_id = ? AND f.user_id = ?
         """, (file_id, user_id))
         
@@ -357,7 +356,8 @@ def update_row(user_id, file_id):
         if not result:
             return jsonify({'error': 'File not found'}), 404
             
-        is_structured, unique_key, table_name = result
+        is_structured, unique_key = result
+        table_name = "table_" + unique_key
         if not table_name:
             return jsonify({'error': 'Table name not found'}), 404
             
@@ -608,7 +608,7 @@ def list_files(user_id):
     c = conn.cursor()
     try:
         c.execute("""
-            SELECT file_id, filename, file_type, is_structured, created_at,unique_key
+            SELECT file_id, filename, file_type, is_structured, created_at,unique_key,parent_file_id
             FROM user_files
             WHERE user_id = ?
         """, (user_id,))
@@ -1600,7 +1600,7 @@ def generate_graph(user_id, file_id):
             elif chart_type == 'scatter':
                 fig = px.scatter(df, x=selected_columns[0], y=selected_columns[1])
             elif chart_type == 'box':
-                fig = px.box(df, y=selected_columns[1:],showfliers=options.get('showOutliers', True))
+                fig = px.box(df, y=selected_columns[1:])
             elif chart_type == 'histogram':
                    fig = px.histogram(df, x=selected_columns[0], nbins=options.get('binSize', 10))
             elif chart_type == 'segmented-bar':

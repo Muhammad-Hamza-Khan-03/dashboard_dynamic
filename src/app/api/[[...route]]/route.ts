@@ -8,19 +8,19 @@ import { getAuth,clerkMiddleware } from '@hono/clerk-auth'
 const app = new Hono().basePath('/api');
 
 // app.get(/route,middleware,c)=>{}
-let csvData: any[] = [];
+// let csvData: any[] = [];
 
-app.post('/upload-csv', async (c) => {
-  const data = await c.req.json();
-  csvData = data;
-  return c.json({ message: 'Data received' });
-});
+// app.post('/upload-csv', async (c) => {
+//   const data = await c.req.json();
+//   csvData = data;
+//   return c.json({ message: 'Data received' });
+// });
 
-app.get('/get-csv-data', (c) => {
-  return c.json(csvData);
-});
+// app.get('/get-csv-data', (c) => {
+//   return c.json(csvData);
+// });
 
-export default app;
+// export default app;
 
 app
     .get(

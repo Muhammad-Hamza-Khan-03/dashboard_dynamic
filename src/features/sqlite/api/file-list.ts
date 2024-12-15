@@ -8,7 +8,8 @@ interface FileItem {
   file_type: string;
   is_structured: boolean;
   created_at: string;
-  unique_key:string
+  unique_key:string;
+  parent_file_id?:number;
 }
 
 const useFilesList = (userId: string | undefined) => {
