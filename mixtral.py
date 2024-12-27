@@ -20,7 +20,7 @@ class ImprovedMermaidGenerator:
             raise ValueError("GROQ_API_KEY not found in environment variables")
 
     def _setup_model(self):
-        self.model = ChatGroq(api_key=self.GROQ_API_KEY, model_name="llama3-groq-70b-8192-tool-use-preview")
+        self.model = ChatGroq(api_key=self.GROQ_API_KEY, model_name="llama-3.3-70b-specdec")
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

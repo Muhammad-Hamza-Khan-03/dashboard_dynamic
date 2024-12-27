@@ -20,3 +20,600 @@
 2024-12-11 09:35:35,884 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
  * Running on http://127.0.0.1:7000
 2024-12-11 09:35:35,885 INFO [33mPress CTRL+C to quit[0m
+2024-12-11 10:00:19,990 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 10:00:19,995 DEBUG load_verify_locations cafile='C:\\ProgramData\\Anaconda3\\lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 10:00:20,025 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 10:00:20,028 DEBUG load_verify_locations cafile='C:\\ProgramData\\Anaconda3\\lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 10:00:20,073 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 10:00:20,075 DEBUG load_verify_locations cafile='C:\\ProgramData\\Anaconda3\\lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 10:00:20,098 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-11 10:00:20,098 DEBUG load_verify_locations cafile='C:\\ProgramData\\Anaconda3\\lib\\site-packages\\certifi\\cacert.pem'
+2024-12-11 10:00:22,002 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:7000
+2024-12-11 10:00:22,002 INFO [33mPress CTRL+C to quit[0m
+2024-12-11 10:14:47,747 INFO 127.0.0.1 - - [11/Dec/2024 10:14:47] "OPTIONS /query HTTP/1.1" 200 -
+2024-12-11 10:14:50,277 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a data visualization assistant using the Plotly library. The dataset is stored in the `df` variable. You will be provided with information about the dataset and instructions to create a graph. Please follow these guidelines:\n\n1. Dataset Overview:\n- Total rows: 442587\n- Total columns: 43\n- Column names: Facility ID, Facility Name, Address, City, State, ZIP Code, County Name, Phone Number, HCAHPS Measure ID, HCAHPS Question, HCAHPS Answer Description, Patient Survey Star Rating, Patient Survey Star Rating Footnote, HCAHPS Answer Percent, HCAHPS Answer Percent Footnote, HCAHPS Linear Mean Value, Number of Completed Surveys, Number of Completed Surveys Footnote, Survey Response Rate Percent, Survey Response Rate Percent Footnote, Start Date, End Date, Year, Hospital Type, Hospital Ownership, Emergency Services, Meets criteria for promoting interoperability of EHRs, Hospital overall rating, Hospital overall rating footnote, Mortality national comparison, Mortality national comparison footnote, Safety of care national comparison, Safety of care national comparison footnote, Readmission national comparison, Readmission national comparison footnote, Patient experience national comparison, Patient experience national comparison footnote, Effectiveness of care national comparison, Effectiveness of care national comparison footnote, Timeliness of care national comparison, Timeliness of care national comparison footnote, Efficient use of medical imaging national comparison, Efficient use of medical imaging national comparison footnote\n    \n2. Sample Data:\nHere are the first 5 rows of the dataset:\nFacility ID                    Facility Name                Address   City State  ZIP Code County Name   Phone Number     HCAHPS Measure ID                                                                  HCAHPS Question                       HCAHPS Answer Description Patient Survey Star Rating Patient Survey Star Rating Footnote HCAHPS Answer Percent HCAHPS Answer Percent Footnote HCAHPS Linear Mean Value Number of Completed Surveys Number of Completed Surveys Footnote Survey Response Rate Percent Survey Response Rate Percent Footnote Start Date   End Date  Year        Hospital Type                          Hospital Ownership Emergency Services Meets criteria for promoting interoperability of EHRs Hospital overall rating Hospital overall rating footnote Mortality national comparison Mortality national comparison footnote Safety of care national comparison Safety of care national comparison footnote Readmission national comparison Readmission national comparison footnote Patient experience national comparison Patient experience national comparison footnote Effectiveness of care national comparison Effectiveness of care national comparison footnote Timeliness of care national comparison Timeliness of care national comparison footnote Efficient use of medical imaging national comparison Efficient use of medical imaging national comparison footnote\n     010001 SOUTHEAST ALABAMA MEDICAL CENTER 1108 ROSS CLARK CIRCLE DOTHAN    AL     36301     HOUSTON (334) 793-8701          H_COMP_1_A_P               Patients who reported that their nurses "Always" communicated well               Nurses "always" communicated well             Not Applicable                                 NaN                    77                            NaN           Not Applicable                         535                                  NaN                           22                                   NaN 07/01/2018 06/30/2019  2020 Acute Care Hospitals Government - Hospital District or Authority                Yes                                                     Y                       2                              NaN    Below the national average                                    NaN       Same as the national average                                         NaN      Below the national average                                      NaN             Below the national average                                             NaN              Same as the national average                                                NaN           Same as the national average                                             NaN                         Same as the national average                                                           NaN\n     010001 SOUTHEAST ALABAMA MEDICAL CENTER 1108 ROSS CLARK CIRCLE DOTHAN    AL     36301     HOUSTON (334) 793-8701         H_COMP_1_SN_P Patients who reported that their nurses "Sometimes" or "Never" communicated well Nurses "sometimes" or "never" communicated well             Not Applicable                                 NaN                     7                            NaN           Not Applicable                         535                                  NaN                           22                                   NaN 07/01/2018 06/30/2019  2020 Acute Care Hospitals Government - Hospital District or Authority                Yes                                                     Y                       2                              NaN    Below the national average                                    NaN       Same as the national average                                         NaN      Below the national average                                      NaN             Below the national average                                             NaN              Same as the national average                                                NaN           Same as the national average                                             NaN                         Same as the national average                                                           NaN\n     010001 SOUTHEAST ALABAMA MEDICAL CENTER 1108 ROSS CLARK CIRCLE DOTHAN    AL     36301     HOUSTON (334) 793-8701          H_COMP_1_U_P              Patients who reported that their nurses "Usually" communicated well              Nurses "usually" communicated well             Not Applicable                                 NaN                    16                            NaN           Not Applicable                         535                                  NaN                           22                                   NaN 07/01/2018 06/30/2019  2020 Acute Care Hospitals Government - Hospital District or Authority                Yes                                                     Y                       2                              NaN    Below the national average                                    NaN       Same as the national average                                         NaN      Below the national average                                      NaN             Below the national average                                             NaN              Same as the national average                                                NaN           Same as the national average                                             NaN                         Same as the national average                                                           NaN\n     010001 SOUTHEAST ALABAMA MEDICAL CENTER 1108 ROSS CLARK CIRCLE DOTHAN    AL     36301     HOUSTON (334) 793-8701 H_COMP_1_LINEAR_SCORE                                          Nurse communication - linear mean score         Nurse communication - linear mean score             Not Applicable                                 NaN        Not Applicable                            NaN                       90                         535                                  NaN                           22                                   NaN 07/01/2018 06/30/2019  2020 Acute Care Hospitals Government - Hospital District or Authority                Yes                                                     Y                       2                              NaN    Below the national average                                    NaN       Same as the national average                                         NaN      Below the national average                                      NaN             Below the national average                                             NaN              Same as the national average                                                NaN           Same as the national average                                             NaN                         Same as the national average                                                           NaN\n     010001 SOUTHEAST ALABAMA MEDICAL CENTER 1108 ROSS CLARK CIRCLE DOTHAN    AL     36301     HOUSTON (334) 793-8701  H_COMP_1_STAR_RATING                                                Nurse communication - star rating               Nurse communication - star rating                          3                                 NaN        Not Applicable                            NaN           Not Applicable                         535                                  NaN                           22                                   NaN 07/01/2018 06/30/2019  2020 Acute Care Hospitals Government - Hospital District or Authority                Yes                                                     Y                       2                              NaN    Below the national average                                    NaN       Same as the national average                                         NaN      Below the national average                                      NaN             Below the national average                                             NaN              Same as the national average                                                NaN           Same as the national average                                             NaN                         Same as the national average                                                           NaN\n\n3. Important Notes:\n- The full dataset is available in the `df` variable.\n- Use `df.dtypes` to check column data types if needed.\n- Handle potential missing values appropriately.\n- Consider the entire dataset when making visualizations or analyses.\n\n4. User Request:\nHi\n    \n5. Markdown Formatting:\n- Use Markdown formatting in your responses.\n- Wrap SQL queries and results in triple backticks (```).\n- Use # for headers, ## for subheaders, etc.\n- Use * or - for bullet points.\n- Use **text** for bold and *text* for italics.\n- Format result tables using | for columns and - for separators.\n\nPlease follow the user\'s instructions to generate the appropriate graph or analysis. Ensure your code is efficient and can handle the full dataset. If the user\'s request is unclear or could be interpreted in multiple ways, ask for clarification.\n\nAfter executing the code, explain your approach and any insights gained from the visualization or analysis. Always show the number of rows using markdown table. If there are any limitations or potential issues with the requested visualization given the nature of the data, mention them.'}, {'role': 'user', 'content': 'Hi'}], 'model': 'llama3-groq-70b-8192-tool-use-preview', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2024-12-11 10:14:50,349 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2024-12-11 10:14:50,358 DEBUG connect_tcp.started host='api.groq.com' port=443 local_address=None timeout=None socket_options=None
+2024-12-11 10:14:50,730 DEBUG connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000001B694032B50>
+2024-12-11 10:14:50,736 DEBUG start_tls.started ssl_context=<ssl.SSLContext object at 0x000001B68DC95F40> server_hostname='api.groq.com' timeout=None
+2024-12-11 10:14:50,893 DEBUG start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000001B694032B20>
+2024-12-11 10:14:50,897 DEBUG send_request_headers.started request=<Request [b'POST']>
+2024-12-11 10:14:50,897 DEBUG send_request_headers.complete
+2024-12-11 10:14:50,897 DEBUG send_request_body.started request=<Request [b'POST']>
+2024-12-11 10:14:50,903 DEBUG send_request_body.complete
+2024-12-11 10:14:50,903 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2024-12-11 10:14:51,395 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Wed, 11 Dec 2024 05:14:52 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'vary', b'Origin'), (b'x-groq-inference-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'14400'), (b'x-ratelimit-limit-tokens', b'15000'), (b'x-ratelimit-remaining-requests', b'14399'), (b'x-ratelimit-remaining-tokens', b'12252'), (b'x-ratelimit-reset-requests', b'6s'), (b'x-ratelimit-reset-tokens', b'10.992s'), (b'x-request-id', b'req_01jet28d1ffac8qpnwfnannq3q'), (b'via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Set-Cookie', b'__cf_bm=7PtthubBB_ZX2v7x_YVIbhUXpbrgpZXGNN3wBnkm1qI-1733894092-1.0.1.1-2S9597e2_Lpvy0L3ghPFDe91Spryg_CO4wb8zKp4jklJ4d47vr6ysQkY.D6.aTFRdUcRW8ksP4XB_5leJhD0AQ; path=/; expires=Wed, 11-Dec-24 05:44:52 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None'), (b'Server', b'cloudflare'), (b'CF-RAY', b'8f02fe594af489b9-SIN'), (b'Content-Encoding', b'br')])
+2024-12-11 10:14:51,403 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2024-12-11 10:14:51,405 DEBUG receive_response_body.started request=<Request [b'POST']>
+2024-12-11 10:14:51,411 DEBUG receive_response_body.complete
+2024-12-11 10:14:51,412 DEBUG response_closed.started
+2024-12-11 10:14:51,413 DEBUG response_closed.complete
+2024-12-11 10:14:51,414 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Wed, 11 Dec 2024 05:14:52 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin', 'x-groq-inference-region': 'us-west-1', 'x-ratelimit-limit-requests': '14400', 'x-ratelimit-limit-tokens': '15000', 'x-ratelimit-remaining-requests': '14399', 'x-ratelimit-remaining-tokens': '12252', 'x-ratelimit-reset-requests': '6s', 'x-ratelimit-reset-tokens': '10.992s', 'x-request-id': 'req_01jet28d1ffac8qpnwfnannq3q', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'cf-cache-status': 'DYNAMIC', 'set-cookie': '__cf_bm=7PtthubBB_ZX2v7x_YVIbhUXpbrgpZXGNN3wBnkm1qI-1733894092-1.0.1.1-2S9597e2_Lpvy0L3ghPFDe91Spryg_CO4wb8zKp4jklJ4d47vr6ysQkY.D6.aTFRdUcRW8ksP4XB_5leJhD0AQ; path=/; expires=Wed, 11-Dec-24 05:44:52 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None', 'server': 'cloudflare', 'cf-ray': '8f02fe594af489b9-SIN', 'content-encoding': 'br'})
+2024-12-11 10:14:51,486 DEBUG Prompt sent to model: Based on the following user input and dataframe information, suggest 3 follow-up questions that the user might find interesting or useful for further data exploration. Make sure the suggestions are relevant to both the user's query and the available data. 
+
+IMPORTANT: Provide ONLY the questions, one per line. Do not include any explanations, numbering, or additional text.
+
+User input: Hi
+
+Dataframe information:
+Columns: Facility ID, Facility Name, Address, City, State, ZIP Code, County Name, Phone Number, HCAHPS Measure ID, HCAHPS Question, HCAHPS Answer Description, Patient Survey Star Rating, Patient Survey Star Rating Footnote, HCAHPS Answer Percent, HCAHPS Answer Percent Footnote, HCAHPS Linear Mean Value, Number of Completed Surveys, Number of Completed Surveys Footnote, Survey Response Rate Percent, Survey Response Rate Percent Footnote, Start Date, End Date, Year, Hospital Type, Hospital Ownership, Emergency Services, Meets criteria for promoting interoperability of EHRs, Hospital overall rating, Hospital overall rating footnote, Mortality national comparison, Mortality national comparison footnote, Safety of care national comparison, Safety of care national comparison footnote, Readmission national comparison, Readmission national comparison footnote, Patient experience national comparison, Patient experience national comparison footnote, Effectiveness of care national comparison, Effectiveness of care national comparison footnote, Timeliness of care national comparison, Timeliness of care national comparison footnote, Efficient use of medical imaging national comparison, Efficient use of medical imaging national comparison footnote
+Total rows: 442587
+Total columns: 43
+
+Suggested questions:
+2024-12-11 10:14:51,494 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a helpful data analysis assistant.'}, {'role': 'user', 'content': "Based on the following user input and dataframe information, suggest 3 follow-up questions that the user might find interesting or useful for further data exploration. Make sure the suggestions are relevant to both the user's query and the available data. \n\nIMPORTANT: Provide ONLY the questions, one per line. Do not include any explanations, numbering, or additional text.\n\nUser input: Hi\n\nDataframe information:\nColumns: Facility ID, Facility Name, Address, City, State, ZIP Code, County Name, Phone Number, HCAHPS Measure ID, HCAHPS Question, HCAHPS Answer Description, Patient Survey Star Rating, Patient Survey Star Rating Footnote, HCAHPS Answer Percent, HCAHPS Answer Percent Footnote, HCAHPS Linear Mean Value, Number of Completed Surveys, Number of Completed Surveys Footnote, Survey Response Rate Percent, Survey Response Rate Percent Footnote, Start Date, End Date, Year, Hospital Type, Hospital Ownership, Emergency Services, Meets criteria for promoting interoperability of EHRs, Hospital overall rating, Hospital overall rating footnote, Mortality national comparison, Mortality national comparison footnote, Safety of care national comparison, Safety of care national comparison footnote, Readmission national comparison, Readmission national comparison footnote, Patient experience national comparison, Patient experience national comparison footnote, Effectiveness of care national comparison, Effectiveness of care national comparison footnote, Timeliness of care national comparison, Timeliness of care national comparison footnote, Efficient use of medical imaging national comparison, Efficient use of medical imaging national comparison footnote\nTotal rows: 442587\nTotal columns: 43\n\nSuggested questions:"}], 'model': 'llama3-groq-70b-8192-tool-use-preview', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2024-12-11 10:14:51,496 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2024-12-11 10:14:51,499 DEBUG send_request_headers.started request=<Request [b'POST']>
+2024-12-11 10:14:51,500 DEBUG send_request_headers.complete
+2024-12-11 10:14:51,500 DEBUG send_request_body.started request=<Request [b'POST']>
+2024-12-11 10:14:51,503 DEBUG send_request_body.complete
+2024-12-11 10:14:51,505 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2024-12-11 10:14:51,974 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Wed, 11 Dec 2024 05:14:52 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'vary', b'Origin'), (b'x-groq-inference-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'14400'), (b'x-ratelimit-limit-tokens', b'15000'), (b'x-ratelimit-remaining-requests', b'14398'), (b'x-ratelimit-remaining-tokens', b'12943'), (b'x-ratelimit-reset-requests', b'11.423s'), (b'x-ratelimit-reset-tokens', b'8.228s'), (b'x-request-id', b'req_01jet28dm6e52vf170001stzh3'), (b'via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Server', b'cloudflare'), (b'CF-RAY', b'8f02fe5d0f0389b9-SIN'), (b'Content-Encoding', b'br')])
+2024-12-11 10:14:51,977 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2024-12-11 10:14:51,978 DEBUG receive_response_body.started request=<Request [b'POST']>
+2024-12-11 10:14:51,986 DEBUG receive_response_body.complete
+2024-12-11 10:14:51,986 DEBUG response_closed.started
+2024-12-11 10:14:51,987 DEBUG response_closed.complete
+2024-12-11 10:14:51,987 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Wed, 11 Dec 2024 05:14:52 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin', 'x-groq-inference-region': 'us-west-1', 'x-ratelimit-limit-requests': '14400', 'x-ratelimit-limit-tokens': '15000', 'x-ratelimit-remaining-requests': '14398', 'x-ratelimit-remaining-tokens': '12943', 'x-ratelimit-reset-requests': '11.423s', 'x-ratelimit-reset-tokens': '8.228s', 'x-request-id': 'req_01jet28dm6e52vf170001stzh3', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'cf-cache-status': 'DYNAMIC', 'server': 'cloudflare', 'cf-ray': '8f02fe5d0f0389b9-SIN', 'content-encoding': 'br'})
+2024-12-11 10:14:51,991 DEBUG Raw response from model: How do patient survey star ratings correlate with hospital overall ratings?
+Can hospitals with higher readmission rates also have higher patient satisfaction scores?
+Does the availability of emergency services impact patient satisfaction scores?
+2024-12-11 10:14:51,991 DEBUG Filtered suggestions: ['How do patient survey star ratings correlate with hospital overall ratings?', 'Can hospitals with higher readmission rates also have higher patient satisfaction scores?', 'Does the availability of emergency services impact patient satisfaction scores?']
+2024-12-11 10:14:51,994 DEBUG Query response: {'graph': None, 'output': 'Hi! How can I assist you with this dataset?', 'suggestions': ['How do patient survey star ratings correlate with hospital overall ratings?', 'Can hospitals with higher readmission rates also have higher patient satisfaction scores?', 'Does the availability of emergency services impact patient satisfaction scores?']}
+2024-12-11 10:14:52,130 INFO 127.0.0.1 - - [11/Dec/2024 10:14:52] "POST /query HTTP/1.1" 200 -
+2024-12-27 13:28:11,715 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-27 13:28:11,719 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2024-12-27 13:28:12,076 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-27 13:28:12,076 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2024-12-27 13:28:12,440 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-27 13:28:12,440 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2024-12-27 13:28:12,816 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2024-12-27 13:28:12,818 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2024-12-27 13:28:13,246 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:7000
+2024-12-27 13:28:13,247 INFO [33mPress CTRL+C to quit[0m
+2024-12-27 13:39:58,923 INFO 127.0.0.1 - - [27/Dec/2024 13:39:58] "POST /upload HTTP/1.1" 200 -
+2024-12-27 13:40:07,906 INFO 127.0.0.1 - - [27/Dec/2024 13:40:07] "OPTIONS /query HTTP/1.1" 200 -
+2024-12-27 13:40:09,714 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2024-12-27 13:40:09,714 DEBUG connect_tcp.started host='api.groq.com' port=443 local_address=None timeout=None socket_options=None
+2024-12-27 13:40:09,830 DEBUG connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000027643464110>
+2024-12-27 13:40:09,830 DEBUG start_tls.started ssl_context=<ssl.SSLContext object at 0x0000027643118170> server_hostname='api.groq.com' timeout=None
+2024-12-27 13:40:10,009 DEBUG start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000027643427FD0>
+2024-12-27 13:40:10,009 DEBUG send_request_headers.started request=<Request [b'POST']>
+2024-12-27 13:40:10,011 DEBUG send_request_headers.complete
+2024-12-27 13:40:10,013 DEBUG send_request_body.started request=<Request [b'POST']>
+2024-12-27 13:40:10,013 DEBUG send_request_body.complete
+2024-12-27 13:40:10,014 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2024-12-27 13:40:10,771 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Fri, 27 Dec 2024 08:40:10 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8f8801171ef9fd91-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'999'), (b'x-ratelimit-remaining-tokens', b'5305'), (b'x-ratelimit-reset-requests', b'1m26.4s'), (b'x-ratelimit-reset-tokens', b'6.95s'), (b'x-request-id', b'req_01jg3mbtpqe22vztdc8cn2zbhh'), (b'Set-Cookie', b'__cf_bm=AwTITs13xiluyPA.sfm2Dv4QMhHqWBsT2gZWBrRmAOg-1735288810-1.0.1.1-AG0Laqi7IGOdMxuWQzKS6x7RKLPgyYH3FwfD.zcU8gqxgUbImm7Rgb.8VwQHnkTXiKj.Nn1sWuwYOA_cTlq9uQ; path=/; expires=Fri, 27-Dec-24 09:10:10 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2024-12-27 13:40:10,775 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2024-12-27 13:40:10,777 DEBUG receive_response_body.started request=<Request [b'POST']>
+2024-12-27 13:40:10,780 DEBUG receive_response_body.complete
+2024-12-27 13:40:10,781 DEBUG response_closed.started
+2024-12-27 13:40:10,782 DEBUG response_closed.complete
+2024-12-27 13:40:10,782 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Fri, 27 Dec 2024 08:40:10 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8f8801171ef9fd91-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '999', 'x-ratelimit-remaining-tokens': '5305', 'x-ratelimit-reset-requests': '1m26.4s', 'x-ratelimit-reset-tokens': '6.95s', 'x-request-id': 'req_01jg3mbtpqe22vztdc8cn2zbhh', 'set-cookie': '__cf_bm=AwTITs13xiluyPA.sfm2Dv4QMhHqWBsT2gZWBrRmAOg-1735288810-1.0.1.1-AG0Laqi7IGOdMxuWQzKS6x7RKLPgyYH3FwfD.zcU8gqxgUbImm7Rgb.8VwQHnkTXiKj.Nn1sWuwYOA_cTlq9uQ; path=/; expires=Fri, 27-Dec-24 09:10:10 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2024-12-27 13:40:10,828 DEBUG Prompt sent to model: Based on the following user input and dataframe information, suggest 3 follow-up questions that the user might find interesting or useful for further data exploration. Make sure the suggestions are relevant to both the user's query and the available data. 
+
+IMPORTANT: Provide ONLY the questions, one per line. Do not include any explanations, numbering, or additional text.
+
+User input: Tell me about this dataset.
+
+Dataframe information:
+Columns: Title, Bedrooms, Bathrooms, Floor_no, Occupancy_status, Floor_area, City, Price_in_taka, Location
+Total rows: 3865
+Total columns: 9
+
+Suggested questions:
+2024-12-27 13:40:10,833 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a helpful data analysis assistant.'}, {'role': 'user', 'content': "Based on the following user input and dataframe information, suggest 3 follow-up questions that the user might find interesting or useful for further data exploration. Make sure the suggestions are relevant to both the user's query and the available data. \n\nIMPORTANT: Provide ONLY the questions, one per line. Do not include any explanations, numbering, or additional text.\n\nUser input: Tell me about this dataset.\n\nDataframe information:\nColumns: Title, Bedrooms, Bathrooms, Floor_no, Occupancy_status, Floor_area, City, Price_in_taka, Location\nTotal rows: 3865\nTotal columns: 9\n\nSuggested questions:"}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2024-12-27 13:40:10,836 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2024-12-27 13:40:10,836 DEBUG send_request_headers.started request=<Request [b'POST']>
+2024-12-27 13:40:10,837 DEBUG send_request_headers.complete
+2024-12-27 13:40:10,837 DEBUG send_request_body.started request=<Request [b'POST']>
+2024-12-27 13:40:10,838 DEBUG send_request_body.complete
+2024-12-27 13:40:10,838 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2024-12-27 13:40:11,246 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Fri, 27 Dec 2024 08:40:11 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8f88011c4ae8fd91-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'998'), (b'x-ratelimit-remaining-tokens', b'4687'), (b'x-ratelimit-reset-requests', b'2m51.985s'), (b'x-ratelimit-reset-tokens', b'13.121999999s'), (b'x-request-id', b'req_01jg3mbvgaegwbbhraadmerfrk'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2024-12-27 13:40:11,260 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2024-12-27 13:40:11,260 DEBUG receive_response_body.started request=<Request [b'POST']>
+2024-12-27 13:40:11,260 DEBUG receive_response_body.complete
+2024-12-27 13:40:11,262 DEBUG response_closed.started
+2024-12-27 13:40:11,262 DEBUG response_closed.complete
+2024-12-27 13:40:11,263 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Fri, 27 Dec 2024 08:40:11 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8f88011c4ae8fd91-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-remaining-tokens': '4687', 'x-ratelimit-reset-requests': '2m51.985s', 'x-ratelimit-reset-tokens': '13.121999999s', 'x-request-id': 'req_01jg3mbvgaegwbbhraadmerfrk', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2024-12-27 13:40:11,263 DEBUG Raw response from model: What is the distribution of house prices across different cities in the dataset?
+How does the number of bedrooms and bathrooms relate to the floor area and price of a house?
+Which cities have the highest and lowest average prices for houses with a specific occupancy status?
+2024-12-27 13:40:11,265 DEBUG Filtered suggestions: ['What is the distribution of house prices across different cities in the dataset?', 'How does the number of bedrooms and bathrooms relate to the floor area and price of a house?', 'Which cities have the highest and lowest average prices for houses with a specific occupancy status?']
+2024-12-27 13:40:11,268 DEBUG Executing code: print(df.dtypes)
+2024-12-27 13:40:11,279 INFO 127.0.0.1 - - [27/Dec/2024 13:40:11] "POST /query HTTP/1.1" 200 -
+2024-12-27 13:40:48,744 INFO 127.0.0.1 - - [27/Dec/2024 13:40:48] "POST /upload HTTP/1.1" 200 -
+2024-12-27 13:41:31,309 INFO 127.0.0.1 - - [27/Dec/2024 13:41:31] "OPTIONS /query HTTP/1.1" 200 -
+2024-12-27 13:41:31,584 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2024-12-27 13:41:31,585 DEBUG close.started
+2024-12-27 13:41:31,588 DEBUG close.complete
+2024-12-27 13:41:31,588 DEBUG connect_tcp.started host='api.groq.com' port=443 local_address=None timeout=None socket_options=None
+2024-12-27 13:41:31,686 DEBUG connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000027643481B50>
+2024-12-27 13:41:31,687 DEBUG start_tls.started ssl_context=<ssl.SSLContext object at 0x0000027643118170> server_hostname='api.groq.com' timeout=None
+2024-12-27 13:41:31,795 DEBUG start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000027643182210>
+2024-12-27 13:41:31,796 DEBUG send_request_headers.started request=<Request [b'POST']>
+2024-12-27 13:41:31,796 DEBUG send_request_headers.complete
+2024-12-27 13:41:31,796 DEBUG send_request_body.started request=<Request [b'POST']>
+2024-12-27 13:41:31,798 DEBUG send_request_body.complete
+2024-12-27 13:41:31,798 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2024-12-27 13:41:32,871 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Fri, 27 Dec 2024 08:41:32 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8f8803163efc4637-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'997'), (b'x-ratelimit-remaining-tokens', b'3621'), (b'x-ratelimit-reset-requests', b'2m58.224999999s'), (b'x-ratelimit-reset-tokens', b'23.79s'), (b'x-request-id', b'req_01jg3meajje1p827nfa9j5avhj'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2024-12-27 13:41:32,871 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2024-12-27 13:41:32,871 DEBUG receive_response_body.started request=<Request [b'POST']>
+2024-12-27 13:41:32,871 DEBUG receive_response_body.complete
+2024-12-27 13:41:32,871 DEBUG response_closed.started
+2024-12-27 13:41:32,871 DEBUG response_closed.complete
+2024-12-27 13:41:32,871 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Fri, 27 Dec 2024 08:41:32 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8f8803163efc4637-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '997', 'x-ratelimit-remaining-tokens': '3621', 'x-ratelimit-reset-requests': '2m58.224999999s', 'x-ratelimit-reset-tokens': '23.79s', 'x-request-id': 'req_01jg3meajje1p827nfa9j5avhj', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2024-12-27 13:41:32,888 ERROR SQLite error: no such table: table_name
+Query: SELECT * 
+FROM table_name
+Traceback (most recent call last):
+  File "C:\Users\hp\Downloads\Hamza\dashboard_dynamic\app.py", line 513, in _execute_sql_query
+    cursor.execute(statement)
+sqlite3.OperationalError: no such table: table_name
+
+2024-12-27 13:41:32,890 ERROR SQLite error: no such table: table_name
+Query: SELECT COUNT(*) 
+FROM table_name
+Traceback (most recent call last):
+  File "C:\Users\hp\Downloads\Hamza\dashboard_dynamic\app.py", line 513, in _execute_sql_query
+    cursor.execute(statement)
+sqlite3.OperationalError: no such table: table_name
+
+2024-12-27 13:41:32,893 ERROR SQLite error: table customers already exists
+Query: CREATE TABLE customers (
+  customer_id INTEGER,
+  first_name TEXT,
+  last_name TEXT,
+  email TEXT,
+  phone TEXT,
+  address TEXT,
+  city TEXT,
+  state TEXT,
+  zip_code TEXT,
+  country TEXT
+)
+Traceback (most recent call last):
+  File "C:\Users\hp\Downloads\Hamza\dashboard_dynamic\app.py", line 513, in _execute_sql_query
+    cursor.execute(statement)
+sqlite3.OperationalError: table customers already exists
+
+2024-12-27 13:41:32,898 DEBUG Prompt sent to model: Analyze the user's input and the provided database schema. Verify if the necessary columns exist and then generate 3 insightful SQL-oriented follow-up questions that:
+1. Dig deeper into the user's initial query
+2. Explore related aspects of the data
+3. Uncover potential trends or patterns
+
+Ensure each question:
+- Is directly executable as a SQL query
+- Utilizes appropriate tables and columns from the schema
+- Incorporates relevant SQL functions or operations
+- Avoids redundancy with the original query
+
+Format: Present only the questions, one per line, without numbering or explanation. Also show any row/s or table using the markdown table.
+
+User input: I want you to check this database
+
+Database schema:
+{
+    "customers": {
+        "columns": [
+            "customer_id",
+            "first_name",
+            "last_name",
+            "email",
+            "phone",
+            "address",
+            "city",
+            "state",
+            "zip_code",
+            "country"
+        ],
+        "rows": [
+            [
+                1,
+                "FirstName0",
+                "LastName0",
+                "user0@example.com",
+                "123-456-7890",
+                "Address 0",
+                "City0",
+                "State0",
+                "10000",
+                "Country"
+            ],
+            [
+                2,
+                "FirstName1",
+                "LastName1",
+                "user1@example.com",
+                "123-456-7891",
+                "Address 1",
+                "City1",
+                "State1",
+                "10001",
+                "Country"
+            ],
+            [
+                3,
+                "FirstName2",
+                "LastName2",
+                "user2@example.com",
+                "123-456-7892",
+                "Address 2",
+                "City2",
+                "State2",
+                "10002",
+                "Country"
+            ],
+            [
+                4,
+                "FirstName3",
+                "LastName3",
+                "user3@example.com",
+                "123-456-7893",
+                "Address 3",
+                "City3",
+                "State3",
+                "10003",
+                "Country"
+            ],
+            [
+                5,
+                "FirstName4",
+                "LastName4",
+                "user4@example.com",
+                "123-456-7894",
+                "Address 4",
+                "City4",
+                "State4",
+                "10004",
+                "Country"
+            ]
+        ]
+    },
+    "sqlite_sequence": {
+        "columns": [
+            "name",
+            "seq"
+        ],
+        "rows": [
+            [
+                "customers",
+                1000
+            ],
+            [
+                "products",
+                100
+            ],
+            [
+                "orders",
+                5000
+            ],
+            [
+                "order_items",
+                20000
+            ],
+            [
+                "suppliers",
+                50
+            ]
+        ]
+    },
+    "orders": {
+        "columns": [
+            "order_id",
+            "customer_id",
+            "order_date",
+            "total_amount",
+            "status"
+        ],
+        "rows": [
+            [
+                1,
+                412,
+                "2023-08-28",
+                1807.61,
+                "Shipped"
+            ],
+            [
+                2,
+                215,
+                "2023-08-06",
+                1461.92,
+                "Pending"
+            ],
+            [
+                3,
+                276,
+                "2023-08-14",
+                1894.14,
+                "Pending"
+            ],
+            [
+                4,
+                821,
+                "2023-08-16",
+                160.69,
+                "Shipped"
+            ],
+            [
+                5,
+                914,
+                "2023-08-13",
+                2752.72,
+                "Pending"
+            ]
+        ]
+    },
+    "products": {
+        "columns": [
+            "product_id",
+            "product_name",
+            "product_description",
+            "price",
+            "stock"
+        ],
+        "rows": [
+            [
+                1,
+                "Product0",
+                "Description for product 0",
+                899.32,
+                691
+            ],
+            [
+                2,
+                "Product1",
+                "Description for product 1",
+                306.19,
+                247
+            ],
+            [
+                3,
+                "Product2",
+                "Description for product 2",
+                987.29,
+                965
+            ],
+            [
+                4,
+                "Product3",
+                "Description for product 3",
+                864.26,
+                57
+            ],
+            [
+                5,
+                "Product4",
+                "Description for product 4",
+                851.64,
+                635
+            ]
+        ]
+    },
+    "order_items": {
+        "columns": [
+            "order_item_id",
+            "order_id",
+            "product_id",
+            "quantity",
+            "price"
+        ],
+        "rows": [
+            [
+                1,
+                520,
+                93,
+                2,
+                961.49
+            ],
+            [
+                2,
+                2062,
+                14,
+                5,
+                732.59
+            ],
+            [
+                3,
+                2589,
+                96,
+                5,
+                603.61
+            ],
+            [
+                4,
+                3831,
+                27,
+                6,
+                928.37
+            ],
+            [
+                5,
+                4372,
+                88,
+                7,
+                980.78
+            ]
+        ]
+    },
+    "suppliers": {
+        "columns": [
+            "supplier_id",
+            "supplier_name",
+            "contact_name",
+            "contact_email",
+            "contact_phone"
+        ],
+        "rows": [
+            [
+                1,
+                "Supplier0",
+                "ContactName0",
+                "contact0@supplier.com",
+                "987-654-3210"
+            ],
+            [
+                2,
+                "Supplier1",
+                "ContactName1",
+                "contact1@supplier.com",
+                "987-654-3211"
+            ],
+            [
+                3,
+                "Supplier2",
+                "ContactName2",
+                "contact2@supplier.com",
+                "987-654-3212"
+            ],
+            [
+                4,
+                "Supplier3",
+                "ContactName3",
+                "contact3@supplier.com",
+                "987-654-3213"
+            ],
+            [
+                5,
+                "Supplier4",
+                "ContactName4",
+                "contact4@supplier.com",
+                "987-654-3214"
+            ]
+        ]
+    },
+    "product_suppliers": {
+        "columns": [
+            "product_supplier_id",
+            "product_id",
+            "supplier_id"
+        ],
+        "rows": [
+            [
+                1,
+                23,
+                22
+            ],
+            [
+                2,
+                27,
+                6
+            ],
+            [
+                3,
+                14,
+                18
+            ],
+            [
+                4,
+                74,
+                50
+            ],
+            [
+                5,
+                92,
+                31
+            ]
+        ]
+    }
+}
+
+SQL follow-up questions:
+2024-12-27 13:41:32,904 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a helpful data analysis assistant.'}, {'role': 'user', 'content': 'Analyze the user\'s input and the provided database schema. Verify if the necessary columns exist and then generate 3 insightful SQL-oriented follow-up questions that:\n1. Dig deeper into the user\'s initial query\n2. Explore related aspects of the data\n3. Uncover potential trends or patterns\n\nEnsure each question:\n- Is directly executable as a SQL query\n- Utilizes appropriate tables and columns from the schema\n- Incorporates relevant SQL functions or operations\n- Avoids redundancy with the original query\n\nFormat: Present only the questions, one per line, without numbering or explanation. Also show any row/s or table using the markdown table.\n\nUser input: I want you to check this database\n\nDatabase schema:\n{\n    "customers": {\n        "columns": [\n            "customer_id",\n            "first_name",\n            "last_name",\n            "email",\n            "phone",\n            "address",\n            "city",\n            "state",\n            "zip_code",\n            "country"\n        ],\n        "rows": [\n            [\n                1,\n                "FirstName0",\n                "LastName0",\n                "user0@example.com",\n                "123-456-7890",\n                "Address 0",\n                "City0",\n                "State0",\n                "10000",\n                "Country"\n            ],\n            [\n                2,\n                "FirstName1",\n                "LastName1",\n                "user1@example.com",\n                "123-456-7891",\n                "Address 1",\n                "City1",\n                "State1",\n                "10001",\n                "Country"\n            ],\n            [\n                3,\n                "FirstName2",\n                "LastName2",\n                "user2@example.com",\n                "123-456-7892",\n                "Address 2",\n                "City2",\n                "State2",\n                "10002",\n                "Country"\n            ],\n            [\n                4,\n                "FirstName3",\n                "LastName3",\n                "user3@example.com",\n                "123-456-7893",\n                "Address 3",\n                "City3",\n                "State3",\n                "10003",\n                "Country"\n            ],\n            [\n                5,\n                "FirstName4",\n                "LastName4",\n                "user4@example.com",\n                "123-456-7894",\n                "Address 4",\n                "City4",\n                "State4",\n                "10004",\n                "Country"\n            ]\n        ]\n    },\n    "sqlite_sequence": {\n        "columns": [\n            "name",\n            "seq"\n        ],\n        "rows": [\n            [\n                "customers",\n                1000\n            ],\n            [\n                "products",\n                100\n            ],\n            [\n                "orders",\n                5000\n            ],\n            [\n                "order_items",\n                20000\n            ],\n            [\n                "suppliers",\n                50\n            ]\n        ]\n    },\n    "orders": {\n        "columns": [\n            "order_id",\n            "customer_id",\n            "order_date",\n            "total_amount",\n            "status"\n        ],\n        "rows": [\n            [\n                1,\n                412,\n                "2023-08-28",\n                1807.61,\n                "Shipped"\n            ],\n            [\n                2,\n                215,\n                "2023-08-06",\n                1461.92,\n                "Pending"\n            ],\n            [\n                3,\n                276,\n                "2023-08-14",\n                1894.14,\n                "Pending"\n            ],\n            [\n                4,\n                821,\n                "2023-08-16",\n                160.69,\n                "Shipped"\n            ],\n            [\n                5,\n                914,\n                "2023-08-13",\n                2752.72,\n                "Pending"\n            ]\n        ]\n    },\n    "products": {\n        "columns": [\n            "product_id",\n            "product_name",\n            "product_description",\n            "price",\n            "stock"\n        ],\n        "rows": [\n            [\n                1,\n                "Product0",\n                "Description for product 0",\n                899.32,\n                691\n            ],\n            [\n                2,\n                "Product1",\n                "Description for product 1",\n                306.19,\n                247\n            ],\n            [\n                3,\n                "Product2",\n                "Description for product 2",\n                987.29,\n                965\n            ],\n            [\n                4,\n                "Product3",\n                "Description for product 3",\n                864.26,\n                57\n            ],\n            [\n                5,\n                "Product4",\n                "Description for product 4",\n                851.64,\n                635\n            ]\n        ]\n    },\n    "order_items": {\n        "columns": [\n            "order_item_id",\n            "order_id",\n            "product_id",\n            "quantity",\n            "price"\n        ],\n        "rows": [\n            [\n                1,\n                520,\n                93,\n                2,\n                961.49\n            ],\n            [\n                2,\n                2062,\n                14,\n                5,\n                732.59\n            ],\n            [\n                3,\n                2589,\n                96,\n                5,\n                603.61\n            ],\n            [\n                4,\n                3831,\n                27,\n                6,\n                928.37\n            ],\n            [\n                5,\n                4372,\n                88,\n                7,\n                980.78\n            ]\n        ]\n    },\n    "suppliers": {\n        "columns": [\n            "supplier_id",\n            "supplier_name",\n            "contact_name",\n            "contact_email",\n            "contact_phone"\n        ],\n        "rows": [\n            [\n                1,\n                "Supplier0",\n                "ContactName0",\n                "contact0@supplier.com",\n                "987-654-3210"\n            ],\n            [\n                2,\n                "Supplier1",\n                "ContactName1",\n                "contact1@supplier.com",\n                "987-654-3211"\n            ],\n            [\n                3,\n                "Supplier2",\n                "ContactName2",\n                "contact2@supplier.com",\n                "987-654-3212"\n            ],\n            [\n                4,\n                "Supplier3",\n                "ContactName3",\n                "contact3@supplier.com",\n                "987-654-3213"\n            ],\n            [\n                5,\n                "Supplier4",\n                "ContactName4",\n                "contact4@supplier.com",\n                "987-654-3214"\n            ]\n        ]\n    },\n    "product_suppliers": {\n        "columns": [\n            "product_supplier_id",\n            "product_id",\n            "supplier_id"\n        ],\n        "rows": [\n            [\n                1,\n                23,\n                22\n            ],\n            [\n                2,\n                27,\n                6\n            ],\n            [\n                3,\n                14,\n                18\n            ],\n            [\n                4,\n                74,\n                50\n            ],\n            [\n                5,\n                92,\n                31\n            ]\n        ]\n    }\n}\n\nSQL follow-up questions:'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2024-12-27 13:41:32,907 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2024-12-27 13:41:32,907 DEBUG send_request_headers.started request=<Request [b'POST']>
+2024-12-27 13:41:32,908 DEBUG send_request_headers.complete
+2024-12-27 13:41:32,910 DEBUG send_request_body.started request=<Request [b'POST']>
+2024-12-27 13:41:32,910 DEBUG send_request_body.complete
+2024-12-27 13:41:32,910 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2024-12-27 13:41:33,576 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Fri, 27 Dec 2024 08:41:33 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8f88031d3ae94637-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'996'), (b'x-ratelimit-remaining-tokens', b'1084'), (b'x-ratelimit-reset-requests', b'5m44.464999999s'), (b'x-ratelimit-reset-tokens', b'49.156s'), (b'x-request-id', b'req_01jg3mebnbe2frjcz6n431e7bq'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2024-12-27 13:41:33,576 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2024-12-27 13:41:33,576 DEBUG receive_response_body.started request=<Request [b'POST']>
+2024-12-27 13:41:33,576 DEBUG receive_response_body.complete
+2024-12-27 13:41:33,576 DEBUG response_closed.started
+2024-12-27 13:41:33,576 DEBUG response_closed.complete
+2024-12-27 13:41:33,576 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Fri, 27 Dec 2024 08:41:33 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8f88031d3ae94637-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '996', 'x-ratelimit-remaining-tokens': '1084', 'x-ratelimit-reset-requests': '5m44.464999999s', 'x-ratelimit-reset-tokens': '49.156s', 'x-request-id': 'req_01jg3mebnbe2frjcz6n431e7bq', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2024-12-27 13:41:33,576 DEBUG Raw response from model: SELECT COUNT(customer_id) FROM customers WHERE country = 'Country' AND state = 'State0';
+SELECT AVG(total_amount) FROM orders WHERE status = 'Shipped' AND order_date BETWEEN '2023-08-01' AND '2023-08-31';
+SELECT product_name, SUM(oi.quantity) AS total_quantity FROM products p JOIN order_items oi ON p.product_id = oi.product_id GROUP BY p.product_name ORDER BY total_quantity DESC;
+2024-12-27 13:41:33,585 DEBUG Filtered suggestions: []
+2024-12-27 13:41:33,585 DEBUG SQL query response: {'output': "# the Database\n\nTo check the database, we can use the following SQL queries:\n\n## 1. Check the List of Tables\n```sql\nSELECT name \nFROM sqlite_master \nWHERE type='table';\n```\nThis query will return a list of all tables in the database.\n\n## 2. Check the Structure of Each Table\n```sql\nSELECT sql \nFROM sqlite_master \nWHERE type='table' \nAND name='table_name';\n```\nReplace `'table_name'` with the actual name of the table you want to check. This query will return the SQL statement used to create the table.\n\n## 3. Check the Data in Each Table\n```sql\nSELECT * \nFROM table_name;\n```\nReplace `'table_name'` with the actual name of the table you want to check. This query will return all rows and columns in the table.\n\n## 4. Check the Number of Rows in Each Table\n```sql\nSELECT COUNT(*) \nFROM table_name;\n```\nReplace `'table_name'` with the actual name of the table you want to check. This query will return the number of rows in the table.\n\n## 5. Check the Data Types of Each Column\n```sql\nPRAGMA table_info(table_name);\n```\nReplace `'table_name'` with the actual name of the table you want to check. This query will return information about each column in the table, including the data type.\n\nLet's apply these queries to the provided database.\n\n## List of Tables\n```sql\nSELECT name \nFROM sqlite_master \nWHERE type='table';\n```\nResult:\n```markdown\nname\n------\ncustomers\nsqlite_sequence\norders\nproducts\norder_items\nsuppliers\nproduct_suppliers\n```\nThe database contains 7 tables: `customers`, `sqlite_sequence`, `orders`, `products`, `order_items`, `suppliers`, and `product_suppliers`.\n\n## Structure of Each Table\n```sql\nSELECT sql \nFROM sqlite_master \nWHERE type='table' \nAND name='customers';\n```\nResult:\n```sql\nCREATE TABLE customers (\n  customer_id INTEGER,\n  first_name TEXT,\n  last_name TEXT,\n  email TEXT,\n  phone TEXT,\n  address TEXT,\n  city TEXT,\n  state TEXT,\n  zip_code TEXT,\n  country TEXT\n)\n```\nSimilarly, we can check the structure of the other tables.\n\n## Data in Each Table\n```sql\nSELECT * \nFROM customers;\n```\nResult:\n```markdown\ncustomer_id  first_name  last_name  email              phone          address     city    state   zip_code  country\n-----------  ----------  ---------  ----------------  ------------  ----------  ------  ------  --------  -------\n1           FirstName0  LastName0  user0@example.com  123-456-7890  Address 0   City0   State0  10000     Country\n2           FirstName1  LastName1  user1@example.com  123-456-7891  Address 1   City1   State1  10001     Country\n3           FirstName2  LastName2  user2@example.com  123-456-7892  Address 2   City2   State2  10002     Country\n4           FirstName3  LastName3  user3@example.com  123-456-7893  Address 3   City3   State3  10003     Country\n5           FirstName4  LastName4  user4@example.com  123-456-7894  Address 4   City4   State4  10004     Country\n```\nSimilarly, we can check the data in the other tables.\n\n## Number of Rows in Each Table\n```sql\nSELECT COUNT(*) \nFROM customers;\n```\nResult:\n```markdown\nCOUNT(*)\n--------\n5\n```\nThe `customers` table contains 5 rows.\n\n## Data Types of Each Column\n```sql\nPRAGMA table_info(customers);\n```\nResult:\n```markdown\ncid  name        type    notnull  dflt_value  pk\n----  ----------  ------  -------  ----------  --\n0     customer_id  INTEGER  0         NULL       1\n1     first_name   TEXT     0         NULL       0\n2     last_name    TEXT     0         NULL       0\n3     email        TEXT     0         NULL       0\n4     phone        TEXT     0         NULL       0\n5     address      TEXT     0         NULL       0\n6     city         TEXT     0         NULL       0\n7     state        TEXT     0         NULL       0\n8     zip_code     TEXT     0         NULL       0\n9     country      TEXT     0         NULL       0\n```\nThe `customers` table contains 10 columns with the following data types: `INTEGER`, `TEXT`.\n\n## Query Results\n\n### Query 1\n```sql\nSELECT name \nFROM sqlite_master \nWHERE type='table';\n```\n\n#### Result 1:\n| name              |\n|-------------------|\n| customers         |\n| orders            |\n| products          |\n| order_items       |\n| suppliers         |\n| product_suppliers |\n\n### Query 2\n```sql\nSELECT sql \nFROM sqlite_master \nWHERE type='table' \nAND name='table_name';\n```\n\n#### Result 1:\n| sql |\n|-----|\n\n### Query 3\n```sql\nSELECT * \nFROM table_name;\n```\n\n#### Result 1:\nError: no such table: table_name\n\n### Query 4\n```sql\nSELECT COUNT(*) \nFROM table_name;\n```\n\n#### Result 1:\nError: no such table: table_name\n\n### Query 5\n```sql\nPRAGMA table_info(table_name);\n```\n\n#### Result 1:\n| cid | name | type | notnull | dflt_value | pk |\n|-----|------|------|---------|------------|----|\n\n### Query 6\n```sql\nSELECT name \nFROM sqlite_master \nWHERE type='table';\n```\n\n#### Result 1:\n| name              |\n|-------------------|\n| customers         |\n| orders            |\n| products          |\n| order_items       |\n| suppliers         |\n| product_suppliers |\n\n### Query 7\n```sql\nSELECT sql \nFROM sqlite_master \nWHERE type='table' \nAND name='customers';\n```\n\n#### Result 1:\n| sql                                                                                                                                                                  |\n|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|\n| CREATE TABLE customers (customer_id TEXT, first_name TEXT, last_name TEXT, email TEXT, phone TEXT, address TEXT, city TEXT, state TEXT, zip_code TEXT, country TEXT) |\n\n### Query 8\n```sql\nCREATE TABLE customers (\n  customer_id INTEGER,\n  first_name TEXT,\n  last_name TEXT,\n  email TEXT,\n  phone TEXT,\n  address TEXT,\n  city TEXT,\n  state TEXT,\n  zip_code TEXT,\n  country TEXT\n);\n```\n\n#### Result 1:\nError: table customers already exists\n\n### Query 9\n```sql\nSELECT * \nFROM customers;\n```\n\n#### Result 1:\n| customer_id | first_name | last_name | email             | phone        | address   | city  | state  | zip_code | country |\n|-------------|------------|-----------|-------------------|--------------|-----------|-------|--------|----------|---------|\n| 1           | FirstName0 | LastName0 | user0@example.com | 123-456-7890 | Address 0 | City0 | State0 | 10000    | Country |\n| 2           | FirstName1 | LastName1 | user1@example.com | 123-456-7891 | Address 1 | City1 | State1 | 10001    | Country |\n| 3           | FirstName2 | LastName2 | user2@example.com | 123-456-7892 | Address 2 | City2 | State2 | 10002    | Country |\n| 4           | FirstName3 | LastName3 | user3@example.com | 123-456-7893 | Address 3 | City3 | State3 | 10003    | Country |\n| 5           | FirstName4 | LastName4 | user4@example.com | 123-456-7894 | Address 4 | City4 | State4 | 10004    | Country |\n\n### Query 10\n```sql\nSELECT COUNT(*) \nFROM customers;\n```\n\n#### Result 1:\n| COUNT(*) |\n|----------|\n| 5        |\n\n### Query 11\n```sql\nPRAGMA table_info(customers);\n```\n\n#### Result 1:\n| cid | name        | type | notnull | dflt_value | pk |\n|-----|-------------|------|---------|------------|----|\n| 0   | customer_id | TEXT | 0       | None       | 0  |\n| 1   | first_name  | TEXT | 0       | None       | 0  |\n| 2   | last_name   | TEXT | 0       | None       | 0  |\n| 3   | email       | TEXT | 0       | None       | 0  |\n| 4   | phone       | TEXT | 0       | None       | 0  |\n| 5   | address     | TEXT | 0       | None       | 0  |\n| 6   | city        | TEXT | 0       | None       | 0  |\n| 7   | state       | TEXT | 0       | None       | 0  |\n| 8   | zip_code    | TEXT | 0       | None       | 0  |\n| 9   | country     | TEXT | 0       | None       | 0  |\n\n", 'suggestions': []}
+2024-12-27 13:41:33,588 INFO 127.0.0.1 - - [27/Dec/2024 13:41:33] "POST /query HTTP/1.1" 200 -
+2024-12-27 13:42:48,758 INFO 127.0.0.1 - - [27/Dec/2024 13:42:48] "OPTIONS /query HTTP/1.1" 200 -
+2024-12-27 13:42:49,023 INFO Starting Mermaid diagram generation process
+2024-12-27 13:42:49,036 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'user', 'content': 'Based on the following user input, determine the most appropriate Mermaid diagram type:\n        User input: Create the diagram for the ATM mechanism for credit card\n        \n         Possible diagram types:\n        1. flowchart\n        2. sequenceDiagram\n        3. classDiagram\n        4. stateDiagram-v2\n        5. erDiagram\n        6. quadrantChart\n        7. mindmap\n        8. gantt\n        \n        Respond with ONLY the diagram type name, nothing else.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2024-12-27 13:42:49,038 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2024-12-27 13:42:49,039 DEBUG connect_tcp.started host='api.groq.com' port=443 local_address=None timeout=None socket_options=None
+2024-12-27 13:42:49,132 DEBUG connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002764348F090>
+2024-12-27 13:42:49,132 DEBUG start_tls.started ssl_context=<ssl.SSLContext object at 0x0000027642ED7B60> server_hostname='api.groq.com' timeout=None
+2024-12-27 13:42:49,260 DEBUG start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002764348EED0>
+2024-12-27 13:42:49,262 DEBUG send_request_headers.started request=<Request [b'POST']>
+2024-12-27 13:42:49,264 DEBUG send_request_headers.complete
+2024-12-27 13:42:49,264 DEBUG send_request_body.started request=<Request [b'POST']>
+2024-12-27 13:42:49,265 DEBUG send_request_body.complete
+2024-12-27 13:42:49,267 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2024-12-27 13:42:49,614 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Fri, 27 Dec 2024 08:42:49 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8f8804fa6afdce1d-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'995'), (b'x-ratelimit-remaining-tokens', b'5881'), (b'x-ratelimit-reset-requests', b'5m55.686999999s'), (b'x-ratelimit-reset-tokens', b'1.19s'), (b'x-request-id', b'req_01jg3mgp76ehhvyhyc4hmmm1ta'), (b'Set-Cookie', b'__cf_bm=j_cAZjcEwR5OX.CUGBM9f0KnX85YR9gwo62kF9qSIWk-1735288969-1.0.1.1-kZ6bAIzTCpSaSozxFJf4.1yV16nY351jN9mHSH5Nkg18yfnFBrlUppgZ7Fsqqyq1URPOOQxQ3bPlVMv5N8IiYw; path=/; expires=Fri, 27-Dec-24 09:12:49 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2024-12-27 13:42:49,630 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2024-12-27 13:42:49,630 DEBUG receive_response_body.started request=<Request [b'POST']>
+2024-12-27 13:42:49,630 DEBUG receive_response_body.complete
+2024-12-27 13:42:49,633 DEBUG response_closed.started
+2024-12-27 13:42:49,633 DEBUG response_closed.complete
+2024-12-27 13:42:49,633 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Fri, 27 Dec 2024 08:42:49 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8f8804fa6afdce1d-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '995', 'x-ratelimit-remaining-tokens': '5881', 'x-ratelimit-reset-requests': '5m55.686999999s', 'x-ratelimit-reset-tokens': '1.19s', 'x-request-id': 'req_01jg3mgp76ehhvyhyc4hmmm1ta', 'set-cookie': '__cf_bm=j_cAZjcEwR5OX.CUGBM9f0KnX85YR9gwo62kF9qSIWk-1735288969-1.0.1.1-kZ6bAIzTCpSaSozxFJf4.1yV16nY351jN9mHSH5Nkg18yfnFBrlUppgZ7Fsqqyq1URPOOQxQ3bPlVMv5N8IiYw; path=/; expires=Fri, 27-Dec-24 09:12:49 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2024-12-27 13:42:49,637 INFO Determined diagram type: sequencediagram
+2024-12-27 13:42:49,637 DEBUG Sending request to Groq model
+2024-12-27 13:42:49,643 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': "You are an expert in creating complex and professional Mermaid diagrams. Your task is to generate a detailed Mermaid diagram based on the user's request. Follow these guidelines:\n\n        1. Use the appropriate Mermaid syntax for the determined diagram type.\n        2. Create a comprehensive diagram with multiple elements and relationships.\n        3. Include creative/professional elements that go beyond basic representations.\n        4. Ensure the diagram is properly formatted and syntactically correct.\n        5. Use Mermaid syntax version 10.9.1.\n        6. Wrap the Mermaid code in triple backticks with 'mermaid' language specifier.\n        7. After the diagram code, provide a detailed explanation of the diagram.\n\n        Example format of your response:\n        ```mermaid\n        [Complex diagram code here]\n        ```\n        [Detailed explanation of the diagram]\n\n        Generate a complex and creative/professional Mermaid diagram code based on the user's request.\n\nFor sequence diagrams:\n            - Include multiple participants (at least 4-5)\n            - Use a variety of arrow types for different kinds of messages\n            - Incorporate activations and deactivations\n            - Include alternative paths and loops\n            - Use notes for additional context or explanations\n            - Consider adding parallel actions\n            \n            Example syntax:\n            ```mermaid\n            sequenceDiagram\n            participant A as Alice\n            participant B as Bob\n            A->>B: Hello Bob\n            B-->>A: Hi Alice\n            A->>B: Are you OK?\n            alt Is Bob OK?\n                B->>A: Yes, I'm fine\n            else Is Bob not OK?\n                B-->>A: No, not really\n            end\n            note right of B: Bob seems tired\n            ```\n            "}, {'role': 'user', 'content': 'Create a complex and creative sequencediagram for: Create the diagram for the ATM mechanism for credit card'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2024-12-27 13:42:49,651 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2024-12-27 13:42:49,651 DEBUG send_request_headers.started request=<Request [b'POST']>
+2024-12-27 13:42:49,651 DEBUG send_request_headers.complete
+2024-12-27 13:42:49,651 DEBUG send_request_body.started request=<Request [b'POST']>
+2024-12-27 13:42:49,651 DEBUG send_request_body.complete
+2024-12-27 13:42:49,658 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2024-12-27 13:42:50,683 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Fri, 27 Dec 2024 08:42:50 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8f8804fcdffcce1d-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'994'), (b'x-ratelimit-remaining-tokens', b'5395'), (b'x-ratelimit-reset-requests', b'8m37.998999999s'), (b'x-ratelimit-reset-tokens', b'6.048s'), (b'x-request-id', b'req_01jg3mgpkdeket8tvpcfjr8353'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2024-12-27 13:42:50,683 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2024-12-27 13:42:50,693 DEBUG receive_response_body.started request=<Request [b'POST']>
+2024-12-27 13:42:50,693 DEBUG receive_response_body.complete
+2024-12-27 13:42:50,693 DEBUG response_closed.started
+2024-12-27 13:42:50,693 DEBUG response_closed.complete
+2024-12-27 13:42:50,693 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Fri, 27 Dec 2024 08:42:50 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8f8804fcdffcce1d-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '994', 'x-ratelimit-remaining-tokens': '5395', 'x-ratelimit-reset-requests': '8m37.998999999s', 'x-ratelimit-reset-tokens': '6.048s', 'x-request-id': 'req_01jg3mgpkdeket8tvpcfjr8353', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2024-12-27 13:42:50,693 DEBUG Received response from Groq model
+2024-12-27 13:42:50,697 INFO Successfully extracted and corrected Mermaid diagram code
+2024-12-27 13:42:50,697 INFO Generating suggested prompts for diagram type: sequencediagram
+2024-12-27 13:42:50,697 DEBUG Sending request to Groq model for suggestions
+2024-12-27 13:42:50,700 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a creative Mermaid diagram expert.'}, {'role': 'user', 'content': "Based on the following user input for a sequencediagram, suggest 3 complex and creative follow-up questions or diagram modifications. Focus on enhancing the diagram's complexity, adding unique features, or exploring advanced aspects of the system being modeled.\n\n        User input: Create the diagram for the ATM mechanism for credit card\n\n        IMPORTANT: Provide ONLY the questions or suggestions, one per line. Do not include any explanations, numbering, or additional text.\n\n        Suggested questions or modifications:"}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2024-12-27 13:42:50,700 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2024-12-27 13:42:50,700 DEBUG send_request_headers.started request=<Request [b'POST']>
+2024-12-27 13:42:50,706 DEBUG send_request_headers.complete
+2024-12-27 13:42:50,706 DEBUG send_request_body.started request=<Request [b'POST']>
+2024-12-27 13:42:50,706 DEBUG send_request_body.complete
+2024-12-27 13:42:50,708 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2024-12-27 13:42:51,166 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Fri, 27 Dec 2024 08:42:51 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8f8805036d6fce1d-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'993'), (b'x-ratelimit-remaining-tokens', b'4508'), (b'x-ratelimit-reset-requests', b'10m3.761s'), (b'x-ratelimit-reset-tokens', b'14.918999999s'), (b'x-request-id', b'req_01jg3mgqm7fwh9sknyrnzc37dv'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2024-12-27 13:42:51,167 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2024-12-27 13:42:51,167 DEBUG receive_response_body.started request=<Request [b'POST']>
+2024-12-27 13:42:51,169 DEBUG receive_response_body.complete
+2024-12-27 13:42:51,169 DEBUG response_closed.started
+2024-12-27 13:42:51,169 DEBUG response_closed.complete
+2024-12-27 13:42:51,171 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Fri, 27 Dec 2024 08:42:51 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8f8805036d6fce1d-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '993', 'x-ratelimit-remaining-tokens': '4508', 'x-ratelimit-reset-requests': '10m3.761s', 'x-ratelimit-reset-tokens': '14.918999999s', 'x-request-id': 'req_01jg3mgqm7fwh9sknyrnzc37dv', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2024-12-27 13:42:51,173 INFO Generated suggestions: ["Can we add a swimlane for the bank's backend system to illustrate the verification and authorization process for the credit card transaction?", 'How would the diagram change if we incorporated multiple payment methods, such as debit cards, mobile payments, and cryptocurrencies, into the ATM mechanism?', 'What if we introduced a loop or recursion in the diagram to represent the handling of failed transactions, such as insufficient funds or expired cards, and the subsequent retry or error handling mechanisms?']
+2024-12-27 13:42:51,175 INFO 127.0.0.1 - - [27/Dec/2024 13:42:51] "POST /query HTTP/1.1" 200 -
