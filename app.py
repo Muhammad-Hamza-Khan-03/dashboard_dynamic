@@ -12,8 +12,6 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 import sqlite3
 from flask import Flask, request, jsonify, send_file
-
-
 from flask_cors import CORS
 from pdfminer.high_level import extract_text
 from docx import Document

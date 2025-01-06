@@ -12,11 +12,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Send,
   Paperclip,
-  Mic,
+  ChevronUp,
   Edit,
   Check,
   X,
   ChevronLeft,
+  ChevronDown,
   ChevronRight,
   Download,
   BookmarkCheckIcon,
@@ -78,6 +79,10 @@ interface Message {
   currentVersionIndex: number;
 }
 
+interface CollapsibleCodeProps {
+  code: string;
+  language?: string;
+}
 interface FilePreview {
   columns: string[];
   rows: string[][];
@@ -110,6 +115,45 @@ const MermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
   return (
     <div className="mermaid w-full overflow-x-auto" ref={mermaidRef}>
       {chart}
+    </div>
+  );
+};
+
+const CollapsibleCode: React.FC<CollapsibleCodeProps> = ({ code, language }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="w-full">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full flex justify-between items-center mb-2 hover:bg-accent"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <span className="text-sm font-medium">
+          {isExpanded ? 'Hide Code' : 'Show Code'}
+        </span>
+        {isExpanded ? (
+          <ChevronUp className="h-4 w-4" />
+        ) : (
+          <ChevronDown className="h-4 w-4" />
+        )}
+      </Button>
+      {isExpanded && (
+        <div className="max-h-[200px] overflow-auto rounded-lg border border-gray-200">
+          <SyntaxHighlighter
+            style={tomorrow}
+            language={language || 'text'}
+            customStyle={{
+              background: '#f5f5f5',
+              padding: '10px',
+              fontSize: '14px',
+            }}
+          >
+            {code}
+          </SyntaxHighlighter>
+        </div>
+      )}
     </div>
   );
 };
@@ -645,21 +689,10 @@ export default function ChatSection() {
     }) {
       const match = /language-(\w+)/.exec(className || '');
       return !inline && match ? (
-        <div className="max-h-[200px] overflow-auto rounded-lg border border-gray-200">
-          <SyntaxHighlighter
-            style={tomorrow}
-            language={match[1]}
-            PreTag="div"
-            customStyle={{
-              background: '#f5f5f5',
-              padding: '10px',
-              fontSize: '14px',
-            }}
-            {...props}
-          >
-            {String(children).replace(/\n$/, '')}
-          </SyntaxHighlighter>
-        </div>
+        <CollapsibleCode
+          code={String(children).replace(/\n$/, '')}
+          language={match[1]}
+        />
       ) : (
         <code className="bg-gray-200 rounded px-1 py-0.5" {...props}>
           {children}
