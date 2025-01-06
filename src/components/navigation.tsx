@@ -39,10 +39,10 @@ const routes = [
         href: "/Chat",
         label: "InSightAI"
     },
-    {
-        href: "/overview",
-        label: "Overview"
-    },
+    // {
+    //     href: "/overview",
+    //     label: "Overview"
+    // },   
     // {
     //     href: "/custom_layout",
     //     label:"Custom Layouts"

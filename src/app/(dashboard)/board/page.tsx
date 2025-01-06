@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import useFilesList from '@/features/sqlite/api/file-list';
 import { handleUseCSV } from '@/features/sqlite/api/file-content';
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DraggableChart from './drag-chart';
 import ChartModal from './chartmodal';
+import FileSelectionPopover from './file-popover';
 
 // Interfaces
 interface Position {
@@ -44,11 +45,16 @@ interface Dashboard {
   name: string;
   charts: Chart[];
 }
-
+interface ChartOptions {
+  binSize?: number;
+  showOutliers?: boolean;
+  stackType?: 'stacked' | 'grouped';
+}
 interface ChartCreationData {
   type: string;
   columns: string[];
   title?: string;
+  options?: ChartOptions; // Add the 'options' property
 }
 
 const BoardMain: React.FC = () => {
@@ -67,6 +73,58 @@ const BoardMain: React.FC = () => {
   const [selectedDashboard, setSelectedDashboard] = useState<string | null>(null);
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [newDashboardName, setNewDashboardName] = useState<string>('');
+
+  useEffect(() => {
+    if (userId) {
+      const savedDashboards = localStorage.getItem(`dashboards_${userId}`);
+      if (savedDashboards) {
+        setDashboards(JSON.parse(savedDashboards));
+      }
+    }
+  }, [userId]);
+
+  // Save dashboards to localStorage
+  useEffect(() => {
+    if (userId) {
+      localStorage.setItem(`dashboards_${userId}`, JSON.stringify(dashboards));
+    }
+  }, [dashboards, userId]);
+
+  // Update charts when dashboard changes
+  useEffect(() => {
+    if (selectedDashboard) {
+      const dashboard = dashboards.find(d => d.id === selectedDashboard);
+      setCharts(dashboard?.charts || []);
+    } else {
+      setCharts([]);
+    }
+  }, [selectedDashboard, dashboards]);
+
+  // Save current dashboard state
+  const saveDashboardState = useCallback(() => {
+    if (selectedDashboard) {
+      setDashboards(prev => prev.map(dashboard => 
+        dashboard.id === selectedDashboard
+          ? { ...dashboard, charts }
+          : dashboard
+      ));
+    }
+  }, [selectedDashboard, charts]);
+
+  // Auto-save when charts change
+  useEffect(() => {
+    if (!selectedDashboard) return;
+    
+    const timeoutId = setTimeout(() => {
+      setDashboards(prev => prev.map(dashboard => 
+        dashboard.id === selectedDashboard
+          ? { ...dashboard, charts }
+          : dashboard
+      ));
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [charts, selectedDashboard]);
 
   // Handle chart position change
   const handleChartPosition = useCallback((chartId: string, newPosition: Position) => {
@@ -140,8 +198,8 @@ const BoardMain: React.FC = () => {
   }, [userId]);
 
   // Create chart handler
-  const handleChartCreate = useCallback(async (chartData: ChartCreationData) => {
-    if (!userId || !selectedFile) return;
+  const handleChartCreate = useCallback(async (chartData: ChartCreationData & { position: Position,options?:ChartOptions }) => {
+    if (!userId || !selectedFile || !selectedDashboard) return;
 
     try {
       const response = await fetch(`http://localhost:5000/generate-graph/${userId}/${selectedFile.id}`, {
@@ -152,6 +210,7 @@ const BoardMain: React.FC = () => {
         body: JSON.stringify({
           chartType: chartData.type,
           selectedColumns: chartData.columns,
+          options: chartData.options // New options for additional chart types
         }),
       });
 
@@ -159,9 +218,9 @@ const BoardMain: React.FC = () => {
         throw new Error('Failed to generate chart');
       }
 
-      const { graph_id, url } = await response.json() as { graph_id: string; url: string };
+      const { graph_id, url } = await response.json();
       
-      const newChart: Chart = {
+      const newChart = {
         id: graph_id,
         type: chartData.type,
         title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
@@ -175,8 +234,7 @@ const BoardMain: React.FC = () => {
       console.error('Error creating chart:', error);
       setDataError('Failed to create chart');
     }
-  }, [userId, selectedFile, clickPosition]);
-
+  }, [userId, selectedFile, selectedDashboard, clickPosition]);
   // Create dashboard handler
   const handleCreateDashboard = useCallback(() => {
     if (!newDashboardName.trim()) return;
@@ -238,6 +296,12 @@ const BoardMain: React.FC = () => {
               </div>
             </SheetContent>
           </Sheet>
+
+{/* <FileSelectionPopover 
+    files={fileList || []}
+    loading={filesLoading}
+    onSelect={handleFileSelection}
+  /> */}
 
           {/* Dashboard Selection */}
           <Select value={selectedDashboard || ''} onValueChange={setSelectedDashboard}>

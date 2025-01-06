@@ -157,7 +157,6 @@ const DataTablePage: React.FC = () => {
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [editField, setEditField] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<Row<DataItem>[]>([]);
-  const [isAnalysisDrawerOpen, setIsAnalysisDrawerOpen] = useState(false);
   const [tableKey, setTableKey] = useState(0);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [tableNames, setTableNames] = useState<string[]>([]);
@@ -168,9 +167,6 @@ const DataTablePage: React.FC = () => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [currentTable, setCurrentTable] = useState<string | null>(null);
   const [tablesList, setTablesList] = useState<TableInfo[]>([]);
-  const [groupedFiles, setGroupedFiles] = useState<GroupedFiles>({});
-const [selectedBaseName, setSelectedBaseName] = useState<string | null>(null);
-const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
@@ -179,7 +175,7 @@ const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   }, [isUserLoaded, user, fileList, selectedFile]);
 
   /////////////////////////////////////////////////////
-// Reset state helper function
+
 const resetState = () => {
   setData([]);
   setColumns([]);
@@ -190,8 +186,6 @@ const resetState = () => {
   setSelectedTable(null);
 };
 
-// Modify the fetchFileData function
-// Updated fetchFileData function
 const fetchFileData = useCallback(async (fileId: string, filename: string, page: number = 1) => {
   if (!user?.id) {
     setError("User ID not available");
@@ -835,37 +829,37 @@ const isValidData = (data: any): boolean => {
 //     });
 //   }
 // };
-  const handleSave = async () => {
-    if (!user || !selectedFile) {
-      toast({
-        title: "Error",
-        description: "User not authenticated or no file selected",
-        variant: "destructive",
-      });
-      return;
-    }
+  // const handleSave = async () => {
+  //   if (!user || !selectedFile) {
+  //     toast({
+  //       title: "Error",
+  //       description: "User not authenticated or no file selected",
+  //       variant: "destructive",
+  //     });
+  //     return;
+  //   }
 
-    setLoading(true);
-    try {
-      await axios.post(`http://localhost:5000/update_blob/${user.id}/${selectedFile}`, {
-        newContent: data,
-      });
+  //   setLoading(true);
+  //   try {
+  //     await axios.post(`http://localhost:5000/update_blob/${user.id}/${selectedFile}`, {
+  //       newContent: data,
+  //     });
 
-      toast({
-        title: "Success",
-        description: "File content updated successfully",
-      });
-    } catch (error) {
-      console.error("Error updating file content:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update file content. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  //     toast({
+  //       title: "Success",
+  //       description: "File content updated successfully",
+  //     });
+  //   } catch (error) {
+  //     console.error("Error updating file content:", error);
+  //     toast({
+  //       title: "Error",
+  //       description: "Failed to update file content. Please try again.",
+  //       variant: "destructive",
+  //     });
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const handleReset = () => {
     setTableKey(prevKey => prevKey + 1);
@@ -1037,14 +1031,14 @@ const isValidData = (data: any): boolean => {
                 Delete Selected ({selectedRows.length})
               </Button>
             )}
-            <Button
+            {/* <Button
               onClick={handleSave}
               className="bg-blue-500 text-white hover:bg-blue-600"
               disabled={loading}
             >
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Data
-            </Button>
+            </Button> */}
             <Button
               onClick={handleReset}
               className="bg-yellow-500 text-white hover:bg-yellow-600"
@@ -1119,7 +1113,7 @@ const isValidData = (data: any): boolean => {
       <Button
         variant="outline"
         onClick={() => setIsSheetOpen(false)}
-        disabled={loading}
+        disabled={loading}  
       >
         Cancel
       </Button>
