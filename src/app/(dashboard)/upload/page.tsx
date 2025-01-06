@@ -203,27 +203,27 @@ const DataTablePage: React.FC = () => {
       setError("User ID not available");
       return;
     }
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await axios.get<FileContent>(
         `http://localhost:5000/get-file/${user.id}/${fileId}`,
         {
-          params: { 
+          params: {
             page: page,
             page_size: 50
           }
         }
       );
-  
+
       if (!response.data) {
         throw new Error('No data received from server');
       }
-  
+
       const fileData = response.data;
-  
+
       if (fileData.type === 'structured') {
         if (fileData.tables && fileData.tables.length > 0) {
           setTablesList(fileData.tables);
@@ -496,7 +496,7 @@ const DataTablePage: React.FC = () => {
     setData(newData);
     dataRef.current = newData;
   };
-  
+
   const formatCellValue = (value: any): string => {
     if (value === null || value === undefined) {
       return '';
@@ -642,12 +642,12 @@ const DataTablePage: React.FC = () => {
   useEffect(() => {
     console.log("Current data state:", data);
   }, [data]);
-  
+
   // Modify the handleEdit function to better handle data validation
   const handleEdit = (index: number, field: string, value: any) => {
     console.log("Edit request:", { index, field, value });
     console.log("Current data state at edit time:", dataRef.current);
-  
+
     // Check data from ref instead of state
     if (!dataRef.current || dataRef.current.length === 0) {
       console.error("No data available in ref");
@@ -658,7 +658,7 @@ const DataTablePage: React.FC = () => {
       });
       return;
     }
-  
+
     if (index >= dataRef.current.length) {
       console.error(`Index ${index} is out of bounds for data length ${dataRef.current.length}`);
       toast({
@@ -668,23 +668,23 @@ const DataTablePage: React.FC = () => {
       });
       return;
     }
-  
+
     const currentRow = dataRef.current[index];
     console.log("Found row data:", currentRow);
-  
+
     setActiveRow({
       data: { ...currentRow },
       index,
       field,
       value
     });
-  
+
     // Force sheet to open in next tick to ensure state is updated
     setTimeout(() => {
       setEditSheetOpen(true);
     }, 0);
   };
-  
+
   // Add this effect to track when data changes
   useEffect(() => {
     if (data.length === 0) {
@@ -730,7 +730,7 @@ const DataTablePage: React.FC = () => {
       });
       return;
     }
-  
+
     if (!selectedFile?.file_id) {
       toast({
         title: "Error",
@@ -739,7 +739,7 @@ const DataTablePage: React.FC = () => {
       });
       return;
     }
-  
+
     if (!activeRow) {
       toast({
         title: "Error",
@@ -748,14 +748,14 @@ const DataTablePage: React.FC = () => {
       });
       return;
     }
-  
+
     setLoading(true);
     try {
       console.log("Saving item:", {
         editItem: activeRow.data,
         editIndex: activeRow.index
       });
-  
+
       const response = await axios.post(
         `http://localhost:5000/update-row/${user.id}/${selectedFile.file_id}`,
         {
@@ -763,9 +763,9 @@ const DataTablePage: React.FC = () => {
           editIndex: activeRow.index
         }
       );
-  
+
       console.log("Save response:", response.data);
-  
+
       if (response.data.success) {
         // Update the data in both state and ref
         const updatedData = [...dataRef.current];
@@ -777,12 +777,12 @@ const DataTablePage: React.FC = () => {
           updatedData.push(response.data.data);
         }
         updateData(updatedData);
-  
+
         toast({
           title: "Success",
           description: activeRow.index >= 0 ? "Item updated successfully" : "Item created successfully",
         });
-  
+
         // Close the sheet and reset edit states
         setEditSheetOpen(false);
         setActiveRow(null);
@@ -993,113 +993,113 @@ const DataTablePage: React.FC = () => {
         <h1 className="text-3xl font-bold">Data Hub</h1>
       </div>
       <Card className="mb-6 border-0 shadow-xl rounded-xl overflow-hidden bg-white">
-    <CardHeader className="flex flex-row items-center justify-between border-b border-gray-100 bg-white p-6">
-      <div className="space-y-1">
-        <CardTitle className="text-xl font-semibold flex items-center text-gray-800">
-          <FileIcon className="mr-2 h-5 w-5 text-blue-600" />
-          File Selection
-        </CardTitle>
-        <p className="text-sm text-gray-500">
-          Upload, select, or manage your data files
-        </p>
-      </div>
-      <div className="flex items-center space-x-3">
-        <FileUpload
-          onUploadSuccess={handleUploadSuccess}
-          triggerButton={
-            <Button 
-              className="flex items-center bg-blue-600 text-white hover:bg-blue-700 
+        <CardHeader className="flex flex-row items-center justify-between border-b border-gray-100 bg-white p-6">
+          <div className="space-y-1">
+            <CardTitle className="text-xl font-semibold flex items-center text-gray-800">
+              <FileIcon className="mr-2 h-5 w-5 text-blue-600" />
+              File Selection
+            </CardTitle>
+            <p className="text-sm text-gray-500">
+              Upload, select, or manage your data files
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <FileUpload
+              onUploadSuccess={handleUploadSuccess}
+              triggerButton={
+                <Button
+                  className="flex items-center bg-blue-600 text-white hover:bg-blue-700 
                          transition-colors duration-200 shadow-sm px-4 py-2
                          focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Upload File
-            </Button>
-          }
-        />
-        <FileDelete
-          fileList={fileList || []}
-          onDeleteSuccess={handleDeleteSuccess}
-        />
-      </div>
-    </CardHeader>
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload File
+                </Button>
+              }
+            />
+            <FileDelete
+              fileList={fileList || []}
+              onDeleteSuccess={handleDeleteSuccess}
+            />
+          </div>
+        </CardHeader>
 
-    <CardContent className="p-6 bg-white">
-      {fileListLoading ? (
-        <div className="flex items-center justify-center py-8 text-blue-600">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          <span className="text-sm font-medium">Loading files...</span>
-        </div>
-      ) : fileListError ? (
-        <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-          <span className="text-sm text-red-600">{fileListError}</span>
-        </div>
-      ) : fileList && fileList.length > 0 ? (
-        <div className="space-y-4">
-          <div className="relative">
-            <Select 
-              onValueChange={(value) => {
-                const selectedFileData = fileList?.find(file => file.file_id === value);
-                if (selectedFileData) {
-                  setSelectedFile({
-                    file_id: selectedFileData.file_id,
-                    filename: selectedFileData.filename
-                  });
-                }
-              }} 
-              value={selectedFile?.file_id}
-            >
-              <SelectTrigger 
-                className="w-full border-gray-200 rounded-lg h-11 
+        <CardContent className="p-6 bg-white">
+          {fileListLoading ? (
+            <div className="flex items-center justify-center py-8 text-blue-600">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              <span className="text-sm font-medium">Loading files...</span>
+            </div>
+          ) : fileListError ? (
+            <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+              <span className="text-sm text-red-600">{fileListError}</span>
+            </div>
+          ) : fileList && fileList.length > 0 ? (
+            <div className="space-y-4">
+              <div className="relative">
+                <Select
+                  onValueChange={(value) => {
+                    const selectedFileData = fileList?.find(file => file.file_id === value);
+                    if (selectedFileData) {
+                      setSelectedFile({
+                        file_id: selectedFileData.file_id,
+                        filename: selectedFileData.filename
+                      });
+                    }
+                  }}
+                  value={selectedFile?.file_id}
+                >
+                  <SelectTrigger
+                    className="w-full border-gray-200 rounded-lg h-11 
                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                            hover:border-blue-400 transition-colors duration-200"
-              >
-                <SelectValue placeholder="Select a file to view or edit" />
-              </SelectTrigger>
-              <SelectContent 
-                className="max-h-[300px] overflow-y-auto"
-              >
-                {fileList?.map(file => (
-                  <SelectItem 
-                    key={file.file_id} 
-                    value={file.file_id}
-                    className="py-2.5 hover:bg-blue-50"
                   >
-                    <div className="flex items-center">
-                      <FileIcon className="h-4 w-4 mr-2 text-blue-600" />
-                      <span>{file.filename}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                    <SelectValue placeholder="Select a file to view or edit" />
+                  </SelectTrigger>
+                  <SelectContent
+                    className="max-h-[300px] overflow-y-auto"
+                  >
+                    {fileList?.map(file => (
+                      <SelectItem
+                        key={file.file_id}
+                        value={file.file_id}
+                        className="py-2.5 hover:bg-blue-50"
+                      >
+                        <div className="flex items-center">
+                          <FileIcon className="h-4 w-4 mr-2 text-blue-600" />
+                          <span>{file.filename}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {selectedFile && (
-            <div className="pt-2 flex items-center justify-between text-sm text-gray-500">
-              <span>Selected: {selectedFile.filename}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSelectedFile(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                Clear selection
-              </Button>
+              {selectedFile && (
+                <div className="pt-2 flex items-center justify-between text-sm text-gray-500">
+                  <span>Selected: {selectedFile.filename}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedFile(null)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    Clear selection
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+              <FileIcon className="h-12 w-12 mb-4 text-gray-400" />
+              <p className="text-sm font-medium mb-2">No files available</p>
+              <p className="text-xs text-gray-400">
+                Upload a file to get started
+              </p>
             </div>
           )}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-          <FileIcon className="h-12 w-12 mb-4 text-gray-400" />
-          <p className="text-sm font-medium mb-2">No files available</p>
-          <p className="text-xs text-gray-400">
-            Upload a file to get started
-          </p>
-        </div>
-      )}
-    </CardContent>
-  </Card>
+        </CardContent>
+      </Card>
       <Card className="shadow-lg rounded-lg overflow-hidden bg-white">
         <CardHeader className="flex flex-row items-center justify-between bg-gray-50">
           <CardTitle className="text-2xl">File Content</CardTitle>
