@@ -705,7 +705,8 @@ const DataTablePage: React.FC = () => {
     setActiveRow({
       data: newItem,
       index: -1, // Use -1 to indicate new row
-      field: ''
+      field: '',
+      value: ''
     });
     setEditSheetOpen(true);
   };
@@ -1110,7 +1111,7 @@ const DataTablePage: React.FC = () => {
             </Button>
             {columns.length > 0 && (
               <SplitDialog
-                columns={columns.map(col => (col.accessorKey))}
+                columns={columns.map(col => col.id).filter((col): col is string => col !== undefined)}
                 fileId={selectedFile?.file_id || ''}
                 userId={user.id}
                 onSplitComplete={(newData) => {

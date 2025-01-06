@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -7,17 +7,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, BarChart2, TrendingUp, Settings, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Download } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Plot from 'react-plotly.js';
 import axios from 'axios';
 
+// Type definitions for better type safety
 interface AnalysisModalProps {
   fileId: string;
   userId: string;
@@ -25,213 +24,636 @@ interface AnalysisModalProps {
   onClose: () => void;
 }
 
+interface TableInfo {
+  id: string;
+  name: string;
+  full_name: string;
+}
+
+interface ColumnStats {
+  mean: number;
+  median: number;
+  mode: number;
+  std: number;
+  variance: number;
+  skewness: number;
+  kurtosis: number;
+  quartiles: [number, number];
+  iqr: number;
+  min: number;
+  max: number;
+  outliers: number[];
+  values: number[];
+  missing: number;
+  total: number;
+  dataType: string;
+}
+
+type DataStats = {
+  [key: string]: ColumnStats;
+};
+
 const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('basic');
-  const [basicStats, setBasicStats] = useState<any>(null);
-  const [advancedStats, setAdvancedStats] = useState<any>(null);
-  const [customOptions, setCustomOptions] = useState<string[]>([]);
-  const [customResults, setCustomResults] = useState<any>(null);
-  const [newHeader, setNewHeader] = useState('');
-  const [headerValue, setHeaderValue] = useState('');
+  const [data, setData] = useState<any[]>([]);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [fileType, setFileType] = useState<string>('');
+  const [tables, setTables] = useState<TableInfo[]>([]);
+  const [selectedTableId, setSelectedTableId] = useState<string>('');
 
+  // Helper function to determine data type of a column
+  const determineDataType = (values: any[]): string => {
+    const cleanValues = values.filter(v => v !== null && v !== undefined && v !== '');
+    if (cleanValues.length === 0) return 'empty';
 
-  const renderNumericSummary = (stats: any) => {
-    if (!stats) return null;
+    const types = cleanValues.map(v => {
+      if (typeof v === 'number') return 'number';
+      if (!isNaN(Date.parse(v))) return 'date';
+      if (typeof v === 'boolean') return 'boolean';
+      if (typeof v === 'string') {
+        if (!isNaN(Number(v))) return 'number';
+        if (/^(true|false)$/i.test(v)) return 'boolean';
+        return 'string';
+      }
+      return 'unknown';
+    });
 
-    return (
-      <div className="grid grid-cols-2 gap-4">
-        {Object.entries(stats).map(([column, columnStats]: [string, any]) => (
-          <div key={column} className="p-4 border rounded-lg">
-            <h4 className="font-medium mb-2">{column}</h4>
-            <dl className="grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <dt className="text-gray-600">Mean:</dt>
-                <dd className="font-mono">{Number(columnStats.mean).toFixed(2)}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-600">Median:</dt>
-                <dd className="font-mono">{Number(columnStats.median).toFixed(2)}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-600">Std Dev:</dt>
-                <dd className="font-mono">{Number(columnStats.std).toFixed(2)}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-600">Q1:</dt>
-                <dd className="font-mono">{Number(columnStats.quartiles[0]).toFixed(2)}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-600">Q3:</dt>
-                <dd className="font-mono">{Number(columnStats.quartiles[1]).toFixed(2)}</dd>
-              </div>
-            </dl>
-          </div>
-        ))}
-      </div>
-    );
+    const primaryType = types.reduce((acc: { [key: string]: number }, type) => {
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(primaryType)
+      .sort(([, a], [, b]) => b - a)[0][0];
   };
 
-  // Analysis options
-  const basicAnalysisOptions = [
-    'numeric_summaries',
-    'missing_values',
-    'unique_counts',
-    'distributions'
-  ];
-
-  const advancedAnalysisOptions = [
-    'correlation_matrix',
-    'distribution_tests',
-    'categorical_analysis',
-    'outliers'
-  ];
-
-  useEffect(() => {
-    if (isOpen && activeTab === 'basic') {
-      fetchBasicAnalysis();
+  // Helper function to safely convert values to numbers
+  const toNumber = (value: any): number | null => {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? null : parsed;
     }
-  }, [isOpen, fileId]);
-
-  const fetchBasicAnalysis = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await axios.post(`http://localhost:5000/analyze/${userId}/${fileId}`, {
-        analysis_type: 'basic'
-      });
-      setBasicStats(response.data.basic);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to fetch basic analysis');
-    } finally {
-      setLoading(false);
-    }
+    return null;
   };
 
-  const fetchAdvancedAnalysis = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await axios.post(`http://localhost:5000/analyze/${userId}/${fileId}`, {
-        analysis_type: 'advanced'
-      });
-      setAdvancedStats(response.data.advanced);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to fetch advanced analysis');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Calculate comprehensive statistics
+  const calculateStats = useMemo(() => {
+    if (!data.length || !columns.length) return null;
 
-  const handleCustomAnalysis = async () => {
-    if (customOptions.length === 0) return;
+    const stats: { [key: string]: ColumnStats } = {};
 
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await axios.post(`http://localhost:5000/analyze/${userId}/${fileId}`, {
-        analysis_type: 'custom',
-        options: customOptions
-      });
-      setCustomResults(response.data);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to perform custom analysis');
-    } finally {
-      setLoading(false);
-    }
-  };
+    columns.forEach(column => {
+      // Get all values and determine data type
+      const columnValues = data.map(row => row[column]);
+      const dataType = determineDataType(columnValues);
 
-  const handleAddHeader = async () => {
-    if (!newHeader || !headerValue) return;
+      // Initialize stats object for the column
+      stats[column] = {
+        mean: 0,
+        median: 0,
+        mode: 0,
+        std: 0,
+        variance: 0,
+        skewness: 0,
+        kurtosis: 0,
+        quartiles: [0, 0],
+        iqr: 0,
+        min: 0,
+        max: 0,
+        outliers: [],
+        values: [],
+        missing: columnValues.filter(v => v === null || v === undefined || v === '').length,
+        total: columnValues.length,
+        dataType
+      };
 
-    setLoading(true);
-    setError(null);
-    try {
-      await axios.post(`http://localhost:5000/add-header/${userId}/${fileId}`, {
-        header_name: newHeader,
-        header_value: headerValue
-      });
-      setNewHeader('');
-      setHeaderValue('');
-      fetchBasicAnalysis(); // Refresh stats after adding header
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to add header');
-    } finally {
-      setLoading(false);
-    }
-  };
+      // For numeric columns, calculate detailed statistics
+      if (dataType === 'number') {
+        const numericValues = columnValues
+          .map(toNumber)
+          .filter((v): v is number => v !== null);
 
-  const renderCorrelationHeatmap = () => {
-    if (!advancedStats?.correlation_matrix) return null;
+        if (numericValues.length > 0) {
+          const sorted = [...numericValues].sort((a, b) => a - b);
+          const n = numericValues.length;
+          const mean = numericValues.reduce((a, b) => a + b, 0) / n;
 
-    const { correlation_matrix } = advancedStats;
-    const columns = Object.keys(correlation_matrix);
-    const values = columns.map(col1 => 
-      columns.map(col2 => correlation_matrix[col1][col2]?.correlation || 0)
-    );
+          // Calculate variance and higher moments
+          const variance = numericValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
+          const std = Math.sqrt(variance);
+          const skewness = numericValues.reduce((a, b) =>
+            a + Math.pow((b - mean) / std, 3), 0) / n;
+          const kurtosis = numericValues.reduce((a, b) =>
+            a + Math.pow((b - mean) / std, 4), 0) / n - 3;
 
-    return (
-      <Plot
-        data={[{
-          z: values,
-          x: columns,
-          y: columns,
-          type: 'heatmap',
-          colorscale: 'RdBu'
-        }]}
-        layout={{
-          title: 'Correlation Matrix',
-          width: 600,
-          height: 500
-        }}
-      />
-    );
-  };
+          // Calculate quartiles
+          const q1 = sorted[Math.floor(n * 0.25)];
+          const q3 = sorted[Math.floor(n * 0.75)];
+          const iqr = q3 - q1;
 
-  const renderDistributionPlots = () => {
-    if (!basicStats?.numeric_summaries) return null;
+          // Identify outliers
+          const lowerBound = q1 - 1.5 * iqr;
+          const upperBound = q3 + 1.5 * iqr;
+          const outliers = numericValues.filter(v => v < lowerBound || v > upperBound);
 
-    return Object.entries(basicStats.numeric_summaries).map(([column, stats]: [string, any]) => {
-        const plotData = {
-            type: "box" as const, // Change this line
-            name: column,
-            y: stats.values,
-            boxpoints: 'outliers' as "outliers",
-            marker: {
-              color: 'rgb(107, 107, 255)'
-            }
+          // Find mode
+          const frequency: { [key: number]: number } = {};
+          numericValues.forEach(v => { frequency[v] = (frequency[v] || 0) + 1; });
+          const mode = Number(Object.entries(frequency)
+            .sort(([, a], [, b]) => b - a)[0][0]);
+
+          // Update stats object
+          stats[column] = {
+            ...stats[column],
+            mean,
+            median: sorted[Math.floor(n / 2)],
+            mode,
+            std,
+            variance,
+            skewness,
+            kurtosis,
+            quartiles: [q1, q3],
+            iqr,
+            min: sorted[0],
+            max: sorted[sorted.length - 1],
+            outliers,
+            values: numericValues
           };
+        }
+      }
+    });
+
+    return stats;
+  }, [data, columns]);
+
+  // Fetch file data with proper error handling
+  useEffect(() => {
+    const fetchFileMetadata = async () => {
+      if (!isOpen || !fileId || !userId) return;
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await axios.get(`http://localhost:5000/get-file/${userId}/${fileId}`);
+
+        if (response.data.type === 'structured') {
+          setFileType(response.data.file_type);
+
+          if (response.data.tables) {
+            setTables(response.data.tables);
+            if (response.data.tables.length > 0) {
+              setSelectedTableId(response.data.tables[0].id);
+              await fetchTableData(response.data.tables[0].id);
+            }
+          } else if (response.data.data) {
+            setData(response.data.data);
+            setColumns(response.data.columns || []);
+          }
+        }
+      } catch (err: any) {
+        console.error('Error fetching file metadata:', err);
+        setError(err.response?.data?.error || 'Failed to fetch file data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFileMetadata();
+  }, [isOpen, fileId, userId]);
+
+  // Fetch table data
+  const fetchTableData = async (tableId: string) => {
+    setLoading(true);
+    try {
+      const response = await axios.get(`http://localhost:5000/get-file/${userId}/${tableId}`);
+
+      if (response.data.type === 'structured' && response.data.data) {
+        setData(response.data.data);
+        setColumns(response.data.columns || []);
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to fetch table data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle table selection
+  const handleTableChange = (tableId: string) => {
+    setSelectedTableId(tableId);
+    fetchTableData(tableId);
+  };
+
+  // Render distribution analysis
+  const renderDistributionAnalysis = () => {
+    if (!calculateStats) return null;
+
+    return Object.entries(calculateStats).map(([column, stats]) => {
+      if (stats.dataType !== 'number') return null;
+
+      // Box plot trace
+      const boxTrace: Partial<Plotly.BoxPlotData> = {
+        y: stats.values,
+        type: 'box',
+        name: 'Box Plot',
+        boxpoints: 'outliers',
+        marker: { color: 'rgb(107, 107, 255)' }
+      };
+
+      // Histogram trace
+      const histTrace = {
+        x: stats.values,
+        type: 'histogram',
+        name: 'Distribution',
+        opacity: 0.75
+      };
+
+      // QQ plot trace
+      const sortedValues = [...stats.values].sort((a, b) => a - b);
+      const n = sortedValues.length;
+      const qqTrace = {
+        x: sortedValues,
+        y: Array.from({ length: n }, (_, i) =>
+          stats.mean + stats.std * Math.sqrt(2) *
+          Math.log((i + 0.5) / (n + 0.5))),
+        mode: 'markers' as const,
+        type: 'scatter' as const,
+        name: 'Q-Q Plot'
+      };
 
       return (
-        <Card key={column} className="mb-4">
-          <CardContent className="pt-6">
-            <h4 className="text-lg font-semibold mb-2">{column} Distribution</h4>
-            <Plot
-              data={[plotData]}
-              layout={{
-                title: `${column} Box Plot`,
-                width: 400,
-                height: 300,
-                margin: { t: 40, r: 20, l: 40, b: 30 }
-              }}
-              config={{ responsive: true }}
-            />
+        <Card key={column} className="mb-6">
+          <CardHeader>
+            <CardTitle>{column} Distribution Analysis</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="w-full">
+                <Plot
+                  data={[boxTrace]}
+                  layout={{
+                    title: 'Box Plot',
+                    height: 300,
+                    margin: { t: 30, r: 10, l: 40, b: 30 },
+                    showlegend: false
+                  }}
+                  config={{ responsive: true }}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div className="w-full">
+                <Plot
+                  data={[histTrace as Partial<Plotly.Data>]}
+                  layout={{
+                    title: 'Histogram',
+                    height: 300,
+                    margin: { t: 30, r: 10, l: 40, b: 30 },
+                    showlegend: false
+                  }}
+                  config={{ responsive: true }}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div className="w-full">
+                <Plot
+                  data={[qqTrace]}
+                  layout={{
+                    title: 'Q-Q Plot',
+                    height: 300,
+                    margin: { t: 30, r: 10, l: 40, b: 30 },
+                    showlegend: false
+                  }}
+                  config={{ responsive: true }}
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium mb-2">Basic Stats</h4>
+                <dl className="space-y-1 text-sm">
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">Mean:</dt>
+                    <dd className="font-mono">{stats.mean.toFixed(3)}</dd>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">Median:</dt>
+                    <dd className="font-mono">{stats.median.toFixed(3)}</dd>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">Mode:</dt>
+                    <dd className="font-mono">{stats.mode.toFixed(3)}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium mb-2">Spread</h4>
+                <dl className="space-y-1 text-sm">
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">Std Dev:</dt>
+                    <dd className="font-mono">{stats.std.toFixed(3)}</dd>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">IQR:</dt>
+                    <dd className="font-mono">{stats.iqr.toFixed(3)}</dd>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">Range:</dt>
+                    <dd className="font-mono">{(stats.max - stats.min).toFixed(3)}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium mb-2">Shape</h4>
+                <dl className="space-y-1 text-sm">
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">Skewness:</dt>
+                    <dd className="font-mono">{stats.skewness.toFixed(3)}</dd>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">Kurtosis:</dt>
+                    <dd className="font-mono">{stats.kurtosis.toFixed(3)}</dd>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">Missing:</dt>
+                    <dd className="font-mono">{stats.missing} ({((stats.missing / stats.total) * 100).toFixed(1)}%)</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium mb-2">Outliers</h4>
+                <dl className="space-y-1 text-sm">
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">Count:</dt>
+                    <dd className="font-mono">{stats.outliers.length}</dd>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">Lower:</dt>
+                    <dd className="font-mono">{(stats.quartiles[0] - 1.5 * stats.iqr).toFixed(3)}</dd>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <dt className="text-gray-600">Upper:</dt>
+                    <dd className="font-mono">{(stats.quartiles[1] + 1.5 * stats.iqr).toFixed(3)}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
           </CardContent>
         </Card>
       );
     });
   };
 
+  // Render advanced analysis
+  const renderAdvancedAnalysis = () => {
+    if (!calculateStats) return null;
+
+    const numericColumns = Object.entries(calculateStats)
+      .filter(([_, stats]) => stats.dataType === 'number');
+
+    // Prepare data for parallel coordinates plot
+    const parallelData = {
+      type: 'parcoords' as const,
+      line: {
+        color: 'blue'
+      },
+      dimensions: numericColumns.map(([column, stats]) => ({
+        label: column,
+        values: stats.values,
+        range: [stats.min, stats.max]
+      }))
+    };
+
+    const violinData = numericColumns.map(([column, stats]) => ({
+      type: 'violin' as const,
+      y: stats.values,
+      name: column,
+      box: {
+        visible: true
+      },
+      meanline: {
+        visible: true
+      }
+    }));
+
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Parallel Coordinates Analysis</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Plot
+              data={[parallelData]}
+              layout={{
+                height: 400,
+                margin: { t: 30, r: 20, l: 40, b: 30 },
+                showlegend: false
+              }}
+              config={{ responsive: true }}
+              style={{ width: '100%' }}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Violin Plots</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Plot
+              data={violinData}
+              layout={{
+                height: 500,
+                margin: { t: 30, r: 20, l: 60, b: 50 },
+                showlegend: true
+              }}
+              config={{ responsive: true }}
+              style={{ width: '100%' }}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Statistical Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {numericColumns.map(([column, stats]) => (
+                <div key={column} className="p-4 border rounded-lg">
+                  <h4 className="font-medium mb-3">{column}</h4>
+                  <div className="grid grid-cols-2 gap-y-2 text-sm">
+                    <div className="space-y-1">
+                      <p><span className="text-gray-600">Type:</span> {stats.dataType}</p>
+                      <p><span className="text-gray-600">Count:</span> {stats.total - stats.missing}</p>
+                      <p><span className="text-gray-600">Missing:</span> {stats.missing}</p>
+                      <p><span className="text-gray-600">Unique:</span> {new Set(stats.values).size}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p><span className="text-gray-600">Distribution:</span> {
+                        Math.abs(stats.skewness) < 0.5 ? 'Symmetric' :
+                          stats.skewness > 0 ? 'Right-skewed' : 'Left-skewed'
+                      }</p>
+                      <p><span className="text-gray-600">Peaked:</span> {
+                        Math.abs(stats.kurtosis) < 0.5 ? 'Normal' :
+                          stats.kurtosis > 0 ? 'Yes' : 'No'
+                      }</p>
+                      <p><span className="text-gray-600">Outliers:</span> {
+                        stats.outliers.length === 0 ? 'None' :
+                          stats.outliers.length <= 5 ? 'Few' : 'Many'
+                      }</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+  // Render correlation analysis
+  const renderCorrelationAnalysis = () => {
+    if (!calculateStats) return null;
+
+    const numericColumns = Object.entries(calculateStats)
+      .filter(([_, stats]) => stats.dataType === 'number')
+      .map(([column]) => column);
+
+    // Calculate correlation matrix
+    const correlationMatrix: number[][] = [];
+    const significanceMatrix: number[][] = [];
+
+    numericColumns.forEach((col1, i) => {
+      correlationMatrix[i] = [];
+      significanceMatrix[i] = [];
+      const values1 = calculateStats[col1].values;
+
+      numericColumns.forEach((col2, j) => {
+        const values2 = calculateStats[col2].values;
+
+        // Calculate Pearson correlation
+        const mean1 = calculateStats[col1].mean;
+        const mean2 = calculateStats[col2].mean;
+        const std1 = calculateStats[col1].std;
+        const std2 = calculateStats[col2].std;
+
+        const correlation = values1.reduce((sum, x, idx) =>
+          sum + ((x - mean1) / std1) * ((values2[idx] - mean2) / std2), 0) / (values1.length - 1);
+
+        correlationMatrix[i][j] = correlation;
+
+        // Calculate significance (t-test)
+        const t = correlation * Math.sqrt((values1.length - 2) / (1 - correlation * correlation));
+        const pValue = 2 * (1 - Math.abs(t) / Math.sqrt(values1.length));
+        significanceMatrix[i][j] = pValue;
+      });
+    });
+
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Correlation Heatmap</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Plot
+              data={[{
+                z: correlationMatrix,
+                x: numericColumns,
+                y: numericColumns,
+                type: 'heatmap',
+                colorscale: 'RdBu',
+                zmin: -1,
+                zmax: 1,
+                text: correlationMatrix.flatMap((row, i) =>
+                  row.map((val, j) => `r = ${val.toFixed(3)}<br>p = ${significanceMatrix[i][j].toFixed(3)}`)
+                ),
+                hoverongaps: false
+              }]}
+              layout={{
+                height: 600,
+                margin: { t: 30, r: 20, l: 100, b: 100 },
+                annotations: correlationMatrix.map((row, i) =>
+                  row.map((val, j) => ({
+                    x: j,
+                    y: i,
+                    text: val.toFixed(2),
+                    font: { color: Math.abs(val) > 0.5 ? 'white' : 'black' },
+                    showarrow: false
+                  }))
+                ).flat()
+              }}
+              config={{ responsive: true }}
+              style={{ width: '100%' }}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Scatter Matrix</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Plot
+              data={numericColumns.map((column, index) => ({
+                x: calculateStats[column].values,
+                y: calculateStats[numericColumns[(index + 1) % numericColumns.length]].values,
+                type: 'scatter',
+                mode: 'markers',
+                name: column,
+              }))}
+              layout={{
+                height: 600,
+                dragmode: 'select',
+                margin: { t: 30, r: 20, l: 60, b: 60 },
+              }}
+              config={{ responsive: true }}
+              style={{ width: '100%' }}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>Data Analysis Dashboard</DialogTitle>
           <DialogDescription>
-            Explore and analyze your data with interactive visualizations and statistics
+            Comprehensive statistical analysis and visualization
           </DialogDescription>
         </DialogHeader>
+
+        {/* Table/Sheet Selector */}
+        {tables.length > 0 && (
+          <div className="mb-4">
+            <Select value={selectedTableId} onValueChange={handleTableChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select table/sheet" />
+              </SelectTrigger>
+              <SelectContent>
+                {tables.map(table => (
+                  <SelectItem key={table.id} value={table.id}>
+                    {table.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {error && (
           <Alert variant="destructive">
@@ -240,253 +662,33 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
           </Alert>
         )}
 
-<Tabs defaultValue="basic" className="w-full" onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="basic">Basic Analysis</TabsTrigger>
-            <TabsTrigger value="advanced">Advanced Analysis</TabsTrigger>
-            <TabsTrigger value="custom">Custom Analysis</TabsTrigger>
-          </TabsList>
+        {loading ? (
+          <div className="flex justify-center items-center h-40">
+            <Loader2 className="h-8 w-8 animate-spin" />
+          </div>
+        ) : (
+          <Tabs defaultValue="distribution" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="distribution">Distribution Analysis</TabsTrigger>
+              <TabsTrigger value="advanced">Advanced Analysis</TabsTrigger>
+              <TabsTrigger value="correlation">Correlation Analysis</TabsTrigger>
+            </TabsList>
 
-          <ScrollArea className="h-[calc(80vh-10rem)] mt-4 rounded-md border p-4">
-            <TabsContent value="basic">
-              {loading ? (
-                <div className="flex justify-center items-center h-40">
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                </div>
-              ) : basicStats && (
-                <div className="space-y-6">
-                  {/* Numeric Summaries */}
-                  <Card>
-                    <CardContent className="pt-6">
-                      <h3 className="text-lg font-semibold mb-4">Numeric Summaries</h3>
-                      {renderNumericSummary(basicStats.numeric_summaries)}
-                    </CardContent>
-                  </Card>
+            <ScrollArea className="h-[calc(80vh-12rem)] mt-4 rounded-md border p-4">
+              <TabsContent value="distribution" className="space-y-4">
+                {renderDistributionAnalysis()}
+              </TabsContent>
 
-                  {/* Distribution Plots */}
-                  <Card>
-                    <CardContent className="pt-6">
-                      <h3 className="text-lg font-semibold mb-4">Distributions</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        {renderDistributionPlots()}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </TabsContent>
+              <TabsContent value="advanced" className="space-y-4">
+                {renderAdvancedAnalysis()}
+              </TabsContent>
 
-            <TabsContent value="advanced">
-              <div className="space-y-4">
-                <Button
-                  onClick={fetchAdvancedAnalysis}
-                  disabled={loading}
-                  className="w-full"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Generating Advanced Analysis...
-                    </>
-                  ) : (
-                    'Generate Advanced Analysis'
-                  )}
-                </Button>
-
-                {advancedStats && (
-                  <div className="space-y-6">
-                    {/* Correlation Matrix */}
-                    <Card>
-                      <CardContent className="pt-6">
-                        <h3 className="text-lg font-semibold mb-4">Correlation Analysis</h3>
-                        {renderCorrelationHeatmap()}
-                      </CardContent>
-                    </Card>
-
-                    {/* Distribution Tests */}
-                    <Card>
-                      <CardContent className="pt-6">
-                        <h3 className="text-lg font-semibold mb-4">Distribution Tests</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                          {Object.entries(advancedStats.distribution_tests || {}).map(([column, tests]: [string, any]) => (
-                            <div key={column} className="p-4 border rounded-lg">
-                              <h4 className="font-medium mb-2">{column}</h4>
-                              <dl className="grid grid-cols-2 gap-2 text-sm">
-                                {Object.entries(tests.normality || {}).map(([test, value]: [string, any]) => (
-                                  <div key={test}>
-                                    <dt className="text-gray-600">{test}:</dt>
-                                    <dd className="font-mono">
-                                      {typeof value === 'number' ? value.toFixed(4) : JSON.stringify(value)}
-                                    </dd>
-                                  </div>
-                                ))}
-                              </dl>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* Categorical Analysis */}
-                    <Card>
-                      <CardContent className="pt-6">
-                        <h3 className="text-lg font-semibold mb-4">Categorical Analysis</h3>
-                        <div className="space-y-4">
-                          {Object.entries(advancedStats.categorical_analysis || {}).map(([column, analysis]: [string, any]) => (
-                            <div key={column} className="p-4 border rounded-lg">
-                              <h4 className="font-medium mb-2">{column}</h4>
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <h5 className="text-sm font-medium">Top Categories</h5>
-                                  <dl className="mt-2 text-sm">
-                                    {Object.entries(analysis.frequencies || {}).slice(0, 5).map(([category, count]) => (
-                                      <div key={category} className="flex justify-between">
-                                        <dt className="text-gray-600">{category}:</dt>
-                                        <dd className="font-mono">{count as number}</dd>
-                                      </div>
-                                    ))}
-                                  </dl>
-                                </div>
-                                {analysis.chi_square && (
-                                  <div>
-                                    <h5 className="text-sm font-medium">Chi-Square Test</h5>
-                                    <dl className="mt-2 text-sm">
-                                      <div className="flex justify-between">
-                                        <dt className="text-gray-600">Statistic:</dt>
-                                        <dd className="font-mono">{analysis.chi_square.statistic.toFixed(4)}</dd>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <dt className="text-gray-600">p-value:</dt>
-                                        <dd className="font-mono">{analysis.chi_square.p_value.toExponential(4)}</dd>
-                                      </div>
-                                    </dl>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="custom">
-              <Card>
-                <CardContent className="pt-6 space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4">Custom Analysis Options</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <h4 className="font-medium mb-2">Basic Options</h4>
-                        {basicAnalysisOptions.map((option) => (
-                          <div key={option} className="flex items-center space-x-2">
-                            <Checkbox
-                              checked={customOptions.includes(option)}
-                              onCheckedChange={(checked) => {
-                                setCustomOptions(prev => 
-                                  checked 
-                                    ? [...prev, option]
-                                    : prev.filter(o => o !== option)
-                                );
-                              }}
-                              id={`option-${option}`}
-                            />
-                            <Label htmlFor={`option-${option}`}>{option}</Label>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div>
-                        <h4 className="font-medium mb-2">Advanced Options</h4>
-                        {advancedAnalysisOptions.map((option) => (
-                          <div key={option} className="flex items-center space-x-2">
-                            <Checkbox
-                              checked={customOptions.includes(option)}
-                              onCheckedChange={(checked) => {
-                                setCustomOptions(prev => 
-                                  checked 
-                                    ? [...prev, option]
-                                    : prev.filter(o => o !== option)
-                                );
-                              }}
-                              id={`option-${option}`}
-                            />
-                            <Label htmlFor={`option-${option}`}>{option}</Label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4">Add New Header</h3>
-                    <div className="flex space-x-4">
-                      <div className="flex-1">
-                        <Label htmlFor="header-name">Header Name</Label>
-                        <Input
-                          id="header-name"
-                          value={newHeader}
-                          onChange={(e) => setNewHeader(e.target.value)}
-                          placeholder="Enter header name"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <Label htmlFor="header-value">Default Value</Label>
-                        <Input
-                          id="header-value"
-                          value={headerValue}
-                          onChange={(e) => setHeaderValue(e.target.value)}
-                          placeholder="Enter default value"
-                        />
-                      </div>
-                      <div className="flex items-end">
-                        <Button 
-                          onClick={handleAddHeader}
-                          disabled={!newHeader || !headerValue || loading}
-                        >
-                          Add Header
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={handleCustomAnalysis}
-                    disabled={customOptions.length === 0 || loading}
-                    className="w-full"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Generating Custom Analysis...
-                      </>
-                    ) : (
-                      'Generate Custom Analysis'
-                    )}
-                  </Button>
-
-                  {customResults && (
-                    <div className="mt-6 space-y-6">
-                      {Object.entries(customResults).map(([key, value]) => (
-                        <Card key={key}>
-                          <CardContent className="pt-6">
-                            <h4 className="text-lg font-semibold mb-4">{key}</h4>
-                            <pre className="bg-gray-100 p-4 rounded-lg overflow-auto max-h-60">
-                              {JSON.stringify(value, null, 2)}
-                            </pre>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </ScrollArea>
-        </Tabs>
+              <TabsContent value="correlation" className="space-y-4">
+                {renderCorrelationAnalysis()}
+              </TabsContent>
+            </ScrollArea>
+          </Tabs>
+        )}
       </DialogContent>
     </Dialog>
   );

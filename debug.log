@@ -1215,3 +1215,16 @@ How does the occupancy status of a house affect its price in different locations
 2025-01-06 22:19:48,629 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Mon, 06 Jan 2025 17:19:48 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fdd60065b364bb6-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '994', 'x-ratelimit-remaining-tokens': '4737', 'x-ratelimit-reset-requests': '8m37.139999999s', 'x-ratelimit-reset-tokens': '12.626999999s', 'x-request-id': 'req_01jgya2g39fpz864x9q6jnye98', 'server': 'cloudflare', 'content-encoding': 'gzip'})
 2025-01-06 22:19:48,631 INFO Generated suggestions: ['How would you incorporate a DialogueTree class to manage the conversation flow and quest progression between the Player and NPC classes?', "What if the NPC class had multiple personas or roles, and the Player class needed to adapt its conversation strategy based on the NPC's current persona or role?", 'Can you add a QuestManager class that oversees the quest progression and rewards, and interacts with both the Player and NPC classes to facilitate dynamic quest updates and notifications?']
 2025-01-06 22:19:48,633 INFO 127.0.0.1 - - [06/Jan/2025 22:19:48] "POST /query HTTP/1.1" 200 -
+2025-01-06 22:45:35,266 DEBUG close.started
+2025-01-06 22:45:35,269 DEBUG close.complete
+2025-01-06 22:45:43,413 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-06 22:45:43,415 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-06 22:45:43,855 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-06 22:45:43,856 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-06 22:45:44,282 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-06 22:45:44,282 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-06 22:45:44,680 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-06 22:45:44,685 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-06 22:45:45,145 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:7000
+2025-01-06 22:45:45,146 INFO [33mPress CTRL+C to quit[0m
