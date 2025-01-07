@@ -801,49 +801,69 @@ const resetState = () => {
     }
   };
 
-  const handleDelete = async () => {
-    if (!user || !selectedFile || !selectedRows.length) {
-      toast({
-        title: "Error",
-        description: "No rows selected for deletion",
-        variant: "destructive",
-      });
-      return;
-    }
+// In page.tsx
 
-    setLoading(true);
-    try {
-      // Get the indices of selected rows
-      const indices = selectedRows.map(row => row.index);
+const handleDelete = async () => {
+  if (!user?.id || !selectedFile?.file_id || !selectedRows.length) {
+    toast({
+      title: "Error",
+      description: "No rows selected for deletion",
+      variant: "destructive",
+    });
+    return;
+  }
 
-      const response = await axios.post(
-        `http://localhost:5000/delete-rows/${user.id}/${selectedFile.file_id}`,
-        { indices }
+  setLoading(true);
+  try {
+    // Log selected rows for debugging
+    console.log("Selected rows:", selectedRows);
+
+    // Extract indices from selectedRows
+    const indices = selectedRows.map(row => row.index);
+    console.log("Indices to delete:", indices);
+
+    // Make the API call with the indices in the correct format
+    const response = await axios.post(
+      `http://localhost:5000/delete-rows/${user.id}/${selectedFile.file_id}`,
+      { indices: indices }  // Make sure to send as an object with 'indices' key
+    );
+
+    if (response.data.success) {
+      // Remove the deleted rows from the local data
+      const updatedData = data.filter((_, index) => 
+        !indices.includes(index)
       );
+      setData(updatedData);
+      dataRef.current = updatedData;
+      setSelectedRows([]);
 
-      if (response.data.success) {
-        // Remove the deleted rows from the local data
-        const selectedIndices = new Set(indices);
-        setData(prevData => prevData.filter((_, index) => !selectedIndices.has(index)));
-        setSelectedRows([]);
-
-        toast({
-          title: "Success",
-          description: `Successfully deleted ${indices.length} row(s)`,
-        });
-      }
-    } catch (error: any) {
-      console.error("Failed to delete rows:", error);
-      const errorMessage = error.response?.data?.error || "Failed to delete rows. Please try again.";
       toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
+        title: "Success",
+        description: `Successfully deleted ${indices.length} row(s)`,
       });
-    } finally {
-      setLoading(false);
+
+      // Refresh the data to ensure synchronization
+      await fetchFileData(selectedFile.file_id, selectedFile.filename, currentPage);
     }
-  };
+  } catch (error: any) {
+    console.error("Failed to delete rows:", error);
+    const errorMessage = error.response?.data?.error || "Failed to delete rows. Please try again.";
+    
+    // Log detailed error information
+    if (error.response) {
+      console.log("Error response:", error.response);
+      console.log("Request payload:", { indices: selectedRows.map(row => row.index) });
+    }
+
+    toast({
+      title: "Error",
+      description: errorMessage,
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Add this utility function to help with data validation
   const isValidData = (data: any): boolean => {
@@ -1142,14 +1162,14 @@ const resetState = () => {
               </Button>
             )}
             
-            <Button
+            {/* <Button
               onClick={handleSave}
               className="bg-black text-white hover:bg-gray-800"
               disabled={loading}
             >
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Data
-            </Button>
+            </Button> */}
             
             <Button
               onClick={handleReset}

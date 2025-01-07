@@ -529,9 +529,8 @@ def delete_rows(user_id, file_id):
     try:
         # Get file metadata
         c.execute("""
-            SELECT f.is_structured, f.unique_key, s.table_name
+            SELECT f.is_structured, f.unique_key
             FROM user_files f
-            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
             WHERE f.file_id = ? AND f.user_id = ?
         """, (file_id, user_id))
         
@@ -539,7 +538,8 @@ def delete_rows(user_id, file_id):
         if not result:
             return jsonify({'error': 'File not found'}), 404
             
-        is_structured, unique_key, table_name = result
+        is_structured, unique_key= result
+        table_name = "table_" + unique_key
         if not table_name and is_structured:
             return jsonify({'error': 'Table name not found'}), 404
             
