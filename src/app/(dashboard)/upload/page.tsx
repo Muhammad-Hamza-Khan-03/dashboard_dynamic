@@ -989,18 +989,22 @@ const DataTablePage: React.FC = () => {
   );
 
   return (
-    <div className="max-w-screen-2xl mx-auto w-full pb-10 min-h-screen p-6">
-      <div className="mb-8 flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Data Hub</h1>
+    // Main container - Adding a subtle background and better spacing
+    <div className="max-w-screen-2xl mx-auto w-full pb-10 min-h-screen p-6 bg-gray-50">
+      {/* Header - More prominent with better contrast */}
+      <div className="mb-8 flex justify-between items-center bg-white p-6 rounded-lg shadow-sm">
+        <h1 className="text-3xl font-bold text-gray-900">Data Hub</h1>
       </div>
-      <Card className="mb-6 border-0 shadow-xl rounded-xl overflow-hidden bg-white">
-        <CardHeader className="flex flex-row items-center justify-between border-b border-gray-100 bg-white p-6">
+  
+      {/* File Selection Card - Refined shadows and borders */}
+      <Card className="mb-6 border border-gray-200 shadow-md rounded-lg overflow-hidden bg-white">
+        <CardHeader className="flex flex-row items-center justify-between border-b border-gray-200 bg-white p-6">
           <div className="space-y-1">
-            <CardTitle className="text-xl font-semibold flex items-center text-gray-800">
-              <FileIcon className="mr-2 h-5 w-5 text-blue-600" />
+            <CardTitle className="text-xl font-semibold flex items-center text-gray-900">
+              <FileIcon className="mr-2 h-5 w-5 text-gray-700" />
               File Selection
             </CardTitle>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-600">
               Upload, select, or manage your data files
             </p>
           </div>
@@ -1009,9 +1013,9 @@ const DataTablePage: React.FC = () => {
               onUploadSuccess={handleUploadSuccess}
               triggerButton={
                 <Button
-                  className="flex items-center bg-blue-600 text-white hover:bg-blue-700 
+                  className="flex items-center bg-black text-white hover:bg-gray-800 
                          transition-colors duration-200 shadow-sm px-4 py-2
-                         focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                         focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
                 >
                   <Upload className="mr-2 h-4 w-4" />
                   Upload File
@@ -1024,10 +1028,10 @@ const DataTablePage: React.FC = () => {
             />
           </div>
         </CardHeader>
-
+  
         <CardContent className="p-6 bg-white">
           {fileListLoading ? (
-            <div className="flex items-center justify-center py-8 text-blue-600">
+            <div className="flex items-center justify-center py-8 text-gray-700">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               <span className="text-sm font-medium">Loading files...</span>
             </div>
@@ -1051,39 +1055,37 @@ const DataTablePage: React.FC = () => {
                   value={selectedFile?.file_id}
                 >
                   <SelectTrigger
-                    className="w-full border-gray-200 rounded-lg h-11 
-                           focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                           hover:border-blue-400 transition-colors duration-200"
+                    className="w-full border-gray-300 rounded-lg h-11 
+                           focus:ring-2 focus:ring-gray-500 focus:border-gray-500
+                           hover:border-gray-400 transition-colors duration-200"
                   >
                     <SelectValue placeholder="Select a file to view or edit" />
                   </SelectTrigger>
-                  <SelectContent
-                    className="max-h-[300px] overflow-y-auto"
-                  >
+                  <SelectContent className="max-h-[300px] overflow-y-auto">
                     {fileList?.map(file => (
                       <SelectItem
                         key={file.file_id}
                         value={file.file_id}
-                        className="py-2.5 hover:bg-blue-50"
+                        className="py-2.5 hover:bg-gray-100"
                       >
                         <div className="flex items-center">
-                          <FileIcon className="h-4 w-4 mr-2 text-blue-600" />
-                          <span>{file.filename}</span>
+                          <FileIcon className="h-4 w-4 mr-2 text-gray-700" />
+                          <span className="text-gray-900">{file.filename}</span>
                         </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-
+  
               {selectedFile && (
-                <div className="pt-2 flex items-center justify-between text-sm text-gray-500">
+                <div className="pt-2 flex items-center justify-between text-sm text-gray-600">
                   <span>Selected: {selectedFile.filename}</span>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setSelectedFile(null)}
-                    className="text-gray-500 hover:text-gray-700"
+                    className="text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                   >
                     Clear selection
                   </Button>
@@ -1101,14 +1103,18 @@ const DataTablePage: React.FC = () => {
           )}
         </CardContent>
       </Card>
-      <Card className="shadow-lg rounded-lg overflow-hidden bg-white">
-        <CardHeader className="flex flex-row items-center justify-between bg-gray-50">
-          <CardTitle className="text-2xl">File Content</CardTitle>
+  
+      {/* File Content Card - Enhanced visual hierarchy */}
+      <Card className="border border-gray-200 shadow-md rounded-lg overflow-hidden bg-white">
+        <CardHeader className="flex flex-row items-center justify-between bg-gray-50 border-b border-gray-200 p-6">
+          <CardTitle className="text-2xl text-gray-900">File Content</CardTitle>
           <div className="flex items-center gap-2">
-            <Button onClick={handleCreate} className="bg-green-500 text-white hover:bg-green-600">
+            <Button onClick={handleCreate} className="bg-black text-white hover:bg-gray-800">
               <PlusCircle className="mr-2 h-4 w-4" />
               Create New
             </Button>
+            
+            {/* Action Buttons - Consistent black theme */}
             {columns.length > 0 && (
               <SplitDialog
                 columns={columns.map(col => col.id).filter((col): col is string => col !== undefined)}
@@ -1124,43 +1130,42 @@ const DataTablePage: React.FC = () => {
                 }}
               />
             )}
+            
             {selectedRows.length > 0 && (
               <Button
                 variant="destructive"
                 onClick={handleDelete}
-                className="bg-red-500 hover:bg-red-600"
+                className="bg-gray-900 hover:bg-gray-800"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete Selected ({selectedRows.length})
               </Button>
             )}
+            
             <Button
               onClick={handleSave}
-              className="bg-blue-500 text-white hover:bg-blue-600"
+              className="bg-black text-white hover:bg-gray-800"
               disabled={loading}
             >
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Data
             </Button>
+            
             <Button
               onClick={handleReset}
-              className="bg-yellow-500 text-white hover:bg-yellow-600"
+              className="bg-gray-700 text-white hover:bg-gray-600"
             >
               <RefreshCw className="mr-2 h-4 w-4" />
               Reset All
             </Button>
-
-            {/* <Sheet open={isAnalysisDrawerOpen} onOpenChange={setIsAnalysisDrawerOpen}> */}
-            {/* <SheetTrigger asChild> */}
-            <Button className="bg-purple-500 text-white hover:bg-purple-600" onClick={() => setIsAnalysisModalOpen(true)}>
+  
+            <Button 
+              className="bg-black text-white hover:bg-gray-800" 
+              onClick={() => setIsAnalysisModalOpen(true)}
+            >
               <BarChart className="mr-2 h-4 w-4" />
               Analyze Data
             </Button>
-            {/* </SheetTrigger> */}
-            {/* <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto"> */}
-            {/* Analysis content */}
-            {/* </SheetContent> */}
-            {/* </Sheet> */}
             <DataAnalysisModal
               fileId={selectedFile?.file_id || ''}
               userId={user?.id || ''}
@@ -1169,14 +1174,15 @@ const DataTablePage: React.FC = () => {
             />
           </div>
         </CardHeader>
-
-        <CardContent className="p-4">
+  
+        {/* Content Area - Better spacing and loading states */}
+        <CardContent className="p-6">
           {loading ? (
             <div className="flex justify-center items-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+              <Loader2 className="h-8 w-8 animate-spin text-gray-700" />
             </div>
           ) : error ? (
-            <p className="text-red-500">{error}</p>
+            <p className="text-red-500 bg-red-50 p-4 rounded-lg">{error}</p>
           ) : isEditing && unstructuredContent ? (
             renderUnstructuredContent()
           ) : data.length > 0 ? (
@@ -1192,50 +1198,47 @@ const DataTablePage: React.FC = () => {
               {renderPagination()}
             </>
           ) : (
-            <p className="text-blue-500">
+            <p className="text-gray-500 text-center py-8">
               No data available. Please select a file or upload a new one.
             </p>
           )}
         </CardContent>
       </Card>
+  
+      {/* Edit Sheet - Refined styling */}
       <Sheet
         open={editSheetOpen}
         onOpenChange={(open) => {
-          console.log("Sheet open state changing to:", open);
           if (!open) {
             handleSheetClose();
-          } else {
-            // Verify we have active row data when opening
-            if (!activeRow) {
-              console.error("Attempting to open sheet without active row data");
-              toast({
-                title: "Error",
-                description: "Missing row data for editing",
-                variant: "destructive",
-              });
-              return;
-            }
+          } else if (!activeRow) {
+            toast({
+              title: "Error",
+              description: "Missing row data for editing",
+              variant: "destructive",
+            });
+            return;
           }
           setEditSheetOpen(open);
         }}
       >
-        <SheetContent className="sm:max-w-[425px]">
+        <SheetContent className="sm:max-w-[425px] border-l border-gray-200">
           <SheetHeader>
-            <SheetTitle>
+            <SheetTitle className="text-gray-900">
               {activeRow ? "Edit Item" : "Create New Item"}
             </SheetTitle>
-            <SheetDescription>
+            <SheetDescription className="text-gray-600">
               {activeRow ? "Make changes to the item below." : "Fill in the details for the new item."}
             </SheetDescription>
           </SheetHeader>
-
+  
           {activeRow ? (
             <div className="grid gap-4 py-4">
               {Object.entries(activeRow.data)
                 .filter(([key]) => key !== 'id' && key !== 'rowId')
                 .map(([key, value]) => (
                   <div key={key} className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor={key} className="text-right">
+                    <Label htmlFor={key} className="text-right text-gray-700">
                       {key}
                     </Label>
                     <Input
@@ -1253,7 +1256,7 @@ const DataTablePage: React.FC = () => {
                           };
                         });
                       }}
-                      className="col-span-3"
+                      className="col-span-3 border-gray-300 focus:border-gray-500 focus:ring-gray-500"
                       disabled={loading}
                     />
                   </div>
@@ -1264,12 +1267,13 @@ const DataTablePage: React.FC = () => {
               Loading row data...
             </div>
           )}
-
+  
           <div className="mt-4 flex justify-end space-x-2">
             <Button
               variant="outline"
               onClick={handleSheetClose}
               disabled={loading}
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
             >
               Cancel
             </Button>
@@ -1279,6 +1283,7 @@ const DataTablePage: React.FC = () => {
                 handleSaveItem();
               }}
               disabled={loading || !activeRow}
+              className="bg-black text-white hover:bg-gray-800"
             >
               {loading ? (
                 <>

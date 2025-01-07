@@ -1,3 +1,4 @@
+import datetime
 from mixtral import ImprovedMermaidGenerator
 import os
 import json
@@ -278,8 +279,31 @@ IMPORTANT: Do not include any code that saves or overwrites the dataframe. The s
 
     def handle_mermaid_diagram(self, user_input):
         try:
+            # Log before generating diagram
+            logging.info(f"Generating Mermaid diagram for input: {user_input}")
+            
             result = self.mermaid_generator.generate_diagram(user_input)
-            return jsonify(result)
+            
+            # Log the generated diagram code
+            if result.get('mermaid'):
+                logging.info("Generated Mermaid Code:")
+                logging.info("\n" + result['mermaid'])
+            else:
+                logging.warning("No Mermaid code was generated")
+                
+            # Include the Mermaid code in the response for easier debugging
+            response = {
+                'output': result['output'],
+                'mermaid': result['mermaid'],
+                'suggestions': result['suggestions'],
+                'debug': {
+                    'mermaid_code': result['mermaid'],
+                }
+            }
+            
+            logging.debug(f"Full response: {response}")
+            return jsonify(response)
+            
         except Exception as e:
             logging.error(f"Error in Mermaid diagram generation: {e}\n{traceback.format_exc()}")
             return jsonify({'output': f'Error: {str(e)}', 'mermaid': None, 'suggestions': []})

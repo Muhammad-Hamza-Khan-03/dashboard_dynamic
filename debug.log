@@ -1228,3 +1228,1032 @@ How does the occupancy status of a house affect its price in different locations
 2025-01-06 22:45:45,145 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
  * Running on http://127.0.0.1:7000
 2025-01-06 22:45:45,146 INFO [33mPress CTRL+C to quit[0m
+2025-01-07 10:44:00,270 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 10:44:00,272 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 10:44:01,258 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 10:44:01,283 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 10:44:02,355 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 10:44:02,398 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 10:44:03,653 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 10:44:03,688 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 10:44:04,854 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:7000
+2025-01-07 10:44:04,881 INFO [33mPress CTRL+C to quit[0m
+2025-01-07 11:30:25,908 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 11:30:25,909 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 11:30:26,263 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 11:30:26,264 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 11:30:26,627 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 11:30:26,628 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 11:30:26,996 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 11:30:26,998 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 11:30:27,366 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:7000
+2025-01-07 11:30:27,366 INFO [33mPress CTRL+C to quit[0m
+2025-01-07 11:30:59,298 INFO 127.0.0.1 - - [07/Jan/2025 11:30:59] "OPTIONS /query HTTP/1.1" 200 -
+2025-01-07 11:30:59,551 INFO Generating Mermaid diagram for input: Create a class diagram for the rpg game system.
+2025-01-07 11:30:59,553 INFO Starting Mermaid diagram generation process
+2025-01-07 11:30:59,567 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'user', 'content': 'Based on the following user input, determine the most appropriate Mermaid diagram type:\n        User input: Create a class diagram for the rpg game system.\n        \n         Possible diagram types:\n        1. flowchart\n        2. sequenceDiagram\n        3. classDiagram\n        4. stateDiagram-v2\n        5. erDiagram\n        6. quadrantChart\n        7. mindmap\n        8. gantt\n        \n        Respond with ONLY the diagram type name, nothing else.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:30:59,627 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:30:59,628 DEBUG connect_tcp.started host='api.groq.com' port=443 local_address=None timeout=None socket_options=None
+2025-01-07 11:30:59,744 DEBUG connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000140BBEE3D90>
+2025-01-07 11:30:59,745 DEBUG start_tls.started ssl_context=<ssl.SSLContext object at 0x00000140BBD83AD0> server_hostname='api.groq.com' timeout=None
+2025-01-07 11:30:59,890 DEBUG start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000140BBED2050>
+2025-01-07 11:30:59,891 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:30:59,892 DEBUG send_request_headers.complete
+2025-01-07 11:30:59,893 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:30:59,893 DEBUG send_request_body.complete
+2025-01-07 11:30:59,895 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:31:00,283 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:31:00 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1e703eb555f35-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'999'), (b'x-ratelimit-remaining-tokens', b'5883'), (b'x-ratelimit-reset-requests', b'1m26.4s'), (b'x-ratelimit-reset-tokens', b'1.17s'), (b'x-request-id', b'req_01jgzqb7q5enb80bb7pkexzd16'), (b'Set-Cookie', b'__cf_bm=2VVD.VxzXGRCsPpyUv3_qAoU7_g4ihHilFFJL3UHjqE-1736231460-1.0.1.1-sLzIiAqVJQ5jpCqPOjR35gmffqvBIZh2DHnHcHmhqC1NVnGkVV.rWu3RJ97c2CEfg73ChTdiFhIk79fSYEMJJA; path=/; expires=Tue, 07-Jan-25 07:01:00 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:31:00,287 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:31:00,288 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:31:00,291 DEBUG receive_response_body.complete
+2025-01-07 11:31:00,292 DEBUG response_closed.started
+2025-01-07 11:31:00,292 DEBUG response_closed.complete
+2025-01-07 11:31:00,293 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:31:00 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1e703eb555f35-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '999', 'x-ratelimit-remaining-tokens': '5883', 'x-ratelimit-reset-requests': '1m26.4s', 'x-ratelimit-reset-tokens': '1.17s', 'x-request-id': 'req_01jgzqb7q5enb80bb7pkexzd16', 'set-cookie': '__cf_bm=2VVD.VxzXGRCsPpyUv3_qAoU7_g4ihHilFFJL3UHjqE-1736231460-1.0.1.1-sLzIiAqVJQ5jpCqPOjR35gmffqvBIZh2DHnHcHmhqC1NVnGkVV.rWu3RJ97c2CEfg73ChTdiFhIk79fSYEMJJA; path=/; expires=Tue, 07-Jan-25 07:01:00 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:31:00,323 INFO Determined diagram type: classdiagram
+2025-01-07 11:31:00,324 DEBUG Sending request to Groq model
+2025-01-07 11:31:00,331 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': "You are an expert in creating complex and professional Mermaid diagrams. Your task is to generate a detailed Mermaid diagram based on the user's request. Follow these guidelines:\n\n    1. ALWAYS include explicit labels for ALL nodes and connections\n    2. Never leave any node or connection without a label\n    3. Use descriptive text for labels instead of placeholder text\n    4. Ensure proper syntax and indentation\n    5. Include comprehensive relationships and connections\n    6. Use Mermaid syntax version 10.9.1\n    7. Wrap the Mermaid code in triple backticks with 'mermaid' language specifier\n\n        Example format of your response:\n        ```mermaid\n        [Complex diagram code here]\n        ```\n        [Detailed explanation of the diagram]\n\n        Generate a complex and creative/professional Mermaid diagram code based on the user's request.\n\nFor class diagrams:\n            - Create a system with at least 5-6 interrelated classes\n            - Use a mix of relationships (inheritance, composition, aggregation, etc.)\n            - Include detailed attributes and methods for each class\n            - Use interfaces or abstract classes where appropriate\n            - Add multiplicities to relationships\n            - Consider using namespaces or packages to group related classes\n            \n            Example syntax:\n            ```mermaid\n            classDiagram\n            class Animal {\n                +String name\n                +int age\n                +isMammal()\n                +eat()\n            }\n            class Dog {\n                +String breed\n                +bark()\n            }\n            Animal <|-- Dog\n            class Cat {\n                +String color\n                +meow()\n            }\n            Animal <|-- Cat\n            ```\n            "}, {'role': 'user', 'content': 'Create a complex and creative classdiagram for: Create a class diagram for the rpg game system.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:31:00,334 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:31:00,335 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:31:00,335 DEBUG send_request_headers.complete
+2025-01-07 11:31:00,337 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:31:00,337 DEBUG send_request_body.complete
+2025-01-07 11:31:00,338 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:31:01,417 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:31:01 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1e706ad4c5f35-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'998'), (b'x-ratelimit-remaining-tokens', b'5411'), (b'x-ratelimit-reset-requests', b'2m52.333s'), (b'x-ratelimit-reset-tokens', b'5.885s'), (b'x-request-id', b'req_01jgzqb85gemc9vcpadt2nxzfh'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:31:01,418 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:31:01,418 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:31:01,420 DEBUG receive_response_body.complete
+2025-01-07 11:31:01,421 DEBUG response_closed.started
+2025-01-07 11:31:01,421 DEBUG response_closed.complete
+2025-01-07 11:31:01,421 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:31:01 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1e706ad4c5f35-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-remaining-tokens': '5411', 'x-ratelimit-reset-requests': '2m52.333s', 'x-ratelimit-reset-tokens': '5.885s', 'x-request-id': 'req_01jgzqb85gemc9vcpadt2nxzfh', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:31:01,422 DEBUG Received response from Groq model
+2025-01-07 11:31:01,423 INFO Successfully extracted and corrected Mermaid diagram code
+2025-01-07 11:31:01,425 INFO Generating suggested prompts for diagram type: classdiagram
+2025-01-07 11:31:01,425 DEBUG Sending request to Groq model for suggestions
+2025-01-07 11:31:01,429 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a creative Mermaid diagram expert.'}, {'role': 'user', 'content': "Based on the following user input for a classdiagram, suggest 3 complex and creative follow-up questions or diagram modifications. Focus on enhancing the diagram's complexity, adding unique features, or exploring advanced aspects of the system being modeled.\n\n        User input: Create a class diagram for the rpg game system.\n\n        IMPORTANT: Provide ONLY the questions or suggestions, one per line. Do not include any explanations, numbering, or additional text.\n\n        Suggested questions or modifications:"}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:31:01,434 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:31:01,435 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:31:01,435 DEBUG send_request_headers.complete
+2025-01-07 11:31:01,436 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:31:01,436 DEBUG send_request_body.complete
+2025-01-07 11:31:01,437 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:31:02,006 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:31:02 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1e70d89d15f35-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'997'), (b'x-ratelimit-remaining-tokens', b'4560'), (b'x-ratelimit-reset-requests', b'4m18.124999999s'), (b'x-ratelimit-reset-tokens', b'14.398999999s'), (b'x-request-id', b'req_01jgzqb97afezbx86d8tbped4v'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:31:02,007 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:31:02,007 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:31:02,008 DEBUG receive_response_body.complete
+2025-01-07 11:31:02,009 DEBUG response_closed.started
+2025-01-07 11:31:02,009 DEBUG response_closed.complete
+2025-01-07 11:31:02,010 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:31:02 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1e70d89d15f35-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '997', 'x-ratelimit-remaining-tokens': '4560', 'x-ratelimit-reset-requests': '4m18.124999999s', 'x-ratelimit-reset-tokens': '14.398999999s', 'x-request-id': 'req_01jgzqb97afezbx86d8tbped4v', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:31:02,013 INFO Generated suggestions: ['How would you model the character progression system, including experience points, level caps, and skill trees, to visualize the relationships between character attributes and abilities?', 'What if we introduce a dynamic event system, where NPCs, quests, and environmental factors interact and influence each other, and how would this be represented in the class diagram?', 'Can we incorporate a modular equipment system, where items have unique properties, stats, and compatibility requirements, and how would this impact the overall class structure and relationships?']
+2025-01-07 11:31:02,014 INFO Generated Mermaid Code:
+2025-01-07 11:31:02,014 INFO 
+classDiagram
+    class Game {
+        +String gameName
+        +String gameVersion
+        +startGame()
+        +saveGame()
+        +loadGame()
+    }
+    class Character {
+        +String characterName
+        +int characterLevel
+        +int characterHealth
+        +int characterMana
+        +levelUp()
+        +takeDamage(int damage)
+        +useAbility()
+    }
+    class Player {
+        +String playerName
+        +Character character
+        +inventory: List~Item~
+        +equipItem(Item item)
+        +unequipItem(Item item)
+    }
+    class NonPlayerCharacter {
+        +String npcName
+        +Character character
+        +dialogue: List~String~
+        +interact()
+    }
+    class Item {
+        +String itemName
+        +int itemWeight
+        +int itemValue
+        +useItem()
+    }
+    class Weapon {
+        +int weaponDamage
+        +int weaponAccuracy
+        +attack()
+    }
+    class Armor {
+        +int armorDefense
+        +int armorWeight
+        +equipArmor()
+    }
+    class Ability {
+        +String abilityName
+        +int abilityDamage
+        +int abilityManaCost
+        +useAbility()
+    }
+    class Quest {
+        +String questName
+        +String questDescription
+        +int questReward
+        +completeQuest()
+    }
+    class Location {
+        +String locationName
+        +String locationDescription
+        +enterLocation()
+    }
+    Game --* Player
+    Game --* NonPlayerCharacter
+    Game --* Location
+    Player --* Character
+    NonPlayerCharacter --* Character
+    Character --* Item
+    Item --|> Weapon
+    Item --|> Armor
+    Character --* Ability
+    Player --* Quest
+    Location --* Quest
+    Game "1" --* "many" Location
+    Location "1" --* "many" NonPlayerCharacter
+    Player "1" --* "many" Item
+    Character "1" --* "many" Ability
+    Quest "1" --* "many" Location
+2025-01-07 11:31:02,018 ERROR Error in Mermaid diagram generation: module 'datetime' has no attribute 'now'
+Traceback (most recent call last):
+  File "C:\Users\hp\Downloads\Hamza\dashboard_dynamic\app.py", line 301, in handle_mermaid_diagram
+    'generation_time': format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                              ^^^^^^^^^^^^
+AttributeError: module 'datetime' has no attribute 'now'
+
+2025-01-07 11:31:02,019 INFO 127.0.0.1 - - [07/Jan/2025 11:31:02] "POST /query HTTP/1.1" 200 -
+2025-01-07 11:31:33,224 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 11:31:33,226 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 11:31:33,549 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 11:31:33,551 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 11:31:33,904 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 11:31:33,907 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 11:31:34,341 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-07 11:31:34,344 DEBUG load_verify_locations cafile='C:\\Users\\hp\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\certifi\\cacert.pem'
+2025-01-07 11:31:34,816 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:7000
+2025-01-07 11:31:34,816 INFO [33mPress CTRL+C to quit[0m
+2025-01-07 11:31:37,195 INFO 127.0.0.1 - - [07/Jan/2025 11:31:37] "OPTIONS /query HTTP/1.1" 200 -
+2025-01-07 11:31:37,453 INFO Generating Mermaid diagram for input: Create a class diagram for the rpg game system.
+2025-01-07 11:31:37,453 INFO Starting Mermaid diagram generation process
+2025-01-07 11:31:37,459 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'user', 'content': 'Based on the following user input, determine the most appropriate Mermaid diagram type:\n        User input: Create a class diagram for the rpg game system.\n        \n         Possible diagram types:\n        1. flowchart\n        2. sequenceDiagram\n        3. classDiagram\n        4. stateDiagram-v2\n        5. erDiagram\n        6. quadrantChart\n        7. mindmap\n        8. gantt\n        \n        Respond with ONLY the diagram type name, nothing else.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:31:37,515 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:31:37,515 DEBUG connect_tcp.started host='api.groq.com' port=443 local_address=None timeout=None socket_options=None
+2025-01-07 11:31:37,624 DEBUG connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E50255FD0>
+2025-01-07 11:31:37,624 DEBUG start_tls.started ssl_context=<ssl.SSLContext object at 0x0000028E500FBBF0> server_hostname='api.groq.com' timeout=None
+2025-01-07 11:31:37,739 DEBUG start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E502F3210>
+2025-01-07 11:31:37,741 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:31:37,743 DEBUG send_request_headers.complete
+2025-01-07 11:31:37,743 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:31:37,745 DEBUG send_request_body.complete
+2025-01-07 11:31:37,745 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:31:38,130 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:31:38 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1e7f07ee99d12-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'996'), (b'x-ratelimit-remaining-tokens', b'5883'), (b'x-ratelimit-reset-requests', b'5m9.290999999s'), (b'x-ratelimit-reset-tokens', b'1.17s'), (b'x-request-id', b'req_01jgzqccp3e0zvdhcs284jacyr'), (b'Set-Cookie', b'__cf_bm=Yjd6wFPA4JlW4a9O21yWkHR4UxD1Mj3nyDXn6i56Sww-1736231498-1.0.1.1-9KBc9ZPTuiqvXxZLtS0kpV8IhLBh3S70fm9qRlNLijU2eJGVgNQPq443JY260yjghDMDx68VqJIV2lnvHxCWtg; path=/; expires=Tue, 07-Jan-25 07:01:38 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:31:38,133 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:31:38,133 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:31:38,133 DEBUG receive_response_body.complete
+2025-01-07 11:31:38,133 DEBUG response_closed.started
+2025-01-07 11:31:38,133 DEBUG response_closed.complete
+2025-01-07 11:31:38,133 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:31:38 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1e7f07ee99d12-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '996', 'x-ratelimit-remaining-tokens': '5883', 'x-ratelimit-reset-requests': '5m9.290999999s', 'x-ratelimit-reset-tokens': '1.17s', 'x-request-id': 'req_01jgzqccp3e0zvdhcs284jacyr', 'set-cookie': '__cf_bm=Yjd6wFPA4JlW4a9O21yWkHR4UxD1Mj3nyDXn6i56Sww-1736231498-1.0.1.1-9KBc9ZPTuiqvXxZLtS0kpV8IhLBh3S70fm9qRlNLijU2eJGVgNQPq443JY260yjghDMDx68VqJIV2lnvHxCWtg; path=/; expires=Tue, 07-Jan-25 07:01:38 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:31:38,168 INFO Determined diagram type: classdiagram
+2025-01-07 11:31:38,170 DEBUG Sending request to Groq model
+2025-01-07 11:31:38,174 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': "You are an expert in creating complex and professional Mermaid diagrams. Your task is to generate a detailed Mermaid diagram based on the user's request. Follow these guidelines:\n\n    1. ALWAYS include explicit labels for ALL nodes and connections\n    2. Never leave any node or connection without a label\n    3. Use descriptive text for labels instead of placeholder text\n    4. Ensure proper syntax and indentation\n    5. Include comprehensive relationships and connections\n    6. Use Mermaid syntax version 10.9.1\n    7. Wrap the Mermaid code in triple backticks with 'mermaid' language specifier\n\n        Example format of your response:\n        ```mermaid\n        [Complex diagram code here]\n        ```\n        [Detailed explanation of the diagram]\n\n        Generate a complex and creative/professional Mermaid diagram code based on the user's request.\n\nFor class diagrams:\n            - Create a system with at least 5-6 interrelated classes\n            - Use a mix of relationships (inheritance, composition, aggregation, etc.)\n            - Include detailed attributes and methods for each class\n            - Use interfaces or abstract classes where appropriate\n            - Add multiplicities to relationships\n            - Consider using namespaces or packages to group related classes\n            \n            Example syntax:\n            ```mermaid\n            classDiagram\n            class Animal {\n                +String name\n                +int age\n                +isMammal()\n                +eat()\n            }\n            class Dog {\n                +String breed\n                +bark()\n            }\n            Animal <|-- Dog\n            class Cat {\n                +String color\n                +meow()\n            }\n            Animal <|-- Cat\n            ```\n            "}, {'role': 'user', 'content': 'Create a complex and creative classdiagram for: Create a class diagram for the rpg game system.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:31:38,174 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:31:38,177 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:31:38,178 DEBUG send_request_headers.complete
+2025-01-07 11:31:38,178 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:31:38,179 DEBUG send_request_body.complete
+2025-01-07 11:31:38,180 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:31:38,981 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:31:39 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1e7f339b39d12-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'995'), (b'x-ratelimit-remaining-tokens', b'5407'), (b'x-ratelimit-reset-requests', b'7m11.578999999s'), (b'x-ratelimit-reset-tokens', b'5.93s'), (b'x-request-id', b'req_01jgzqcd38enh92vz36a55dk56'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:31:38,988 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:31:38,988 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:31:38,990 DEBUG receive_response_body.complete
+2025-01-07 11:31:38,990 DEBUG response_closed.started
+2025-01-07 11:31:38,990 DEBUG response_closed.complete
+2025-01-07 11:31:38,990 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:31:39 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1e7f339b39d12-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '995', 'x-ratelimit-remaining-tokens': '5407', 'x-ratelimit-reset-requests': '7m11.578999999s', 'x-ratelimit-reset-tokens': '5.93s', 'x-request-id': 'req_01jgzqcd38enh92vz36a55dk56', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:31:38,994 DEBUG Received response from Groq model
+2025-01-07 11:31:38,994 INFO Successfully extracted and corrected Mermaid diagram code
+2025-01-07 11:31:38,996 INFO Generating suggested prompts for diagram type: classdiagram
+2025-01-07 11:31:38,996 DEBUG Sending request to Groq model for suggestions
+2025-01-07 11:31:38,998 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a creative Mermaid diagram expert.'}, {'role': 'user', 'content': "Based on the following user input for a classdiagram, suggest 3 complex and creative follow-up questions or diagram modifications. Focus on enhancing the diagram's complexity, adding unique features, or exploring advanced aspects of the system being modeled.\n\n        User input: Create a class diagram for the rpg game system.\n\n        IMPORTANT: Provide ONLY the questions or suggestions, one per line. Do not include any explanations, numbering, or additional text.\n\n        Suggested questions or modifications:"}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:31:39,000 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:31:39,000 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:31:39,002 DEBUG send_request_headers.complete
+2025-01-07 11:31:39,002 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:31:39,007 DEBUG send_request_body.complete
+2025-01-07 11:31:39,009 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:31:39,491 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:31:39 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1e7f85ea59d12-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'994'), (b'x-ratelimit-remaining-tokens', b'4586'), (b'x-ratelimit-reset-requests', b'8m37.559s'), (b'x-ratelimit-reset-tokens', b'14.131s'), (b'x-request-id', b'req_01jgzqcdxgemf98engdrvmdbx3'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:31:39,493 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:31:39,493 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:31:39,494 DEBUG receive_response_body.complete
+2025-01-07 11:31:39,495 DEBUG response_closed.started
+2025-01-07 11:31:39,495 DEBUG response_closed.complete
+2025-01-07 11:31:39,496 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:31:39 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1e7f85ea59d12-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '994', 'x-ratelimit-remaining-tokens': '4586', 'x-ratelimit-reset-requests': '8m37.559s', 'x-ratelimit-reset-tokens': '14.131s', 'x-request-id': 'req_01jgzqcdxgemf98engdrvmdbx3', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:31:39,497 INFO Generated suggestions: ['How would you model the interaction between the Player class and the Non-Player Character class, including dialogue trees and quest management?', 'Can we introduce an inheritance hierarchy for the Item class, with subclasses for weapons, armor, and potions, each having unique attributes and behaviors?', 'What if we added a State pattern to the Character class to represent different states, such as alive, dead, or stunned, and how would this impact the overall game logic?']
+2025-01-07 11:31:39,498 INFO Generated Mermaid Code:
+2025-01-07 11:31:39,498 INFO 
+classDiagram
+    class Game {
+        +String gameName
+        +String gameVersion
+        +startGame()
+        +saveGame()
+        +loadGame()
+    }
+    class Character {
+        +String characterName
+        +int characterLevel
+        +int characterHealth
+        +int characterMana
+        +levelUp()
+        +takeDamage(int damage)
+        +useAbility()
+    }
+    class Player {
+        +String playerName
+        +Character character
+        +playGame()
+        +createCharacter()
+    }
+    class NonPlayerCharacter {
+        +String npcName
+        +String npcDialogue
+        +interactWithPlayer()
+    }
+    class Item {
+        +String itemName
+        +int itemValue
+        +int itemWeight
+        +useItem()
+    }
+    class Weapon {
+        +String weaponName
+        +int weaponDamage
+        +attack()
+    }
+    class Armor {
+        +String armorName
+        +int armorDefense
+        +equipArmor()
+    }
+    class Quest {
+        +String questName
+        +String questDescription
+        +completeQuest()
+    }
+    class Location {
+        +String locationName
+        +String locationDescription
+        +enterLocation()
+    }
+    Game *-- Player
+    Player *-- Character
+    Character *-- Item
+    Character *-- Weapon
+    Character *-- Armor
+    Character *-- Quest
+    Location *-- NonPlayerCharacter
+    Location *-- Item
+    Location *-- Quest
+    Character <|-- Player
+    Character <|-- NonPlayerCharacter
+    Item <|-- Weapon
+    Item <|-- Armor
+2025-01-07 11:31:39,503 DEBUG Full response: {'output': 'Mermaid diagram generated and syntax-corrected successfully.', 'mermaid': 'classDiagram\n    class Game {\n        +String gameName\n        +String gameVersion\n        +startGame()\n        +saveGame()\n        +loadGame()\n    }\n    class Character {\n        +String characterName\n        +int characterLevel\n        +int characterHealth\n        +int characterMana\n        +levelUp()\n        +takeDamage(int damage)\n        +useAbility()\n    }\n    class Player {\n        +String playerName\n        +Character character\n        +playGame()\n        +createCharacter()\n    }\n    class NonPlayerCharacter {\n        +String npcName\n        +String npcDialogue\n        +interactWithPlayer()\n    }\n    class Item {\n        +String itemName\n        +int itemValue\n        +int itemWeight\n        +useItem()\n    }\n    class Weapon {\n        +String weaponName\n        +int weaponDamage\n        +attack()\n    }\n    class Armor {\n        +String armorName\n        +int armorDefense\n        +equipArmor()\n    }\n    class Quest {\n        +String questName\n        +String questDescription\n        +completeQuest()\n    }\n    class Location {\n        +String locationName\n        +String locationDescription\n        +enterLocation()\n    }\n    Game *-- Player\n    Player *-- Character\n    Character *-- Item\n    Character *-- Weapon\n    Character *-- Armor\n    Character *-- Quest\n    Location *-- NonPlayerCharacter\n    Location *-- Item\n    Location *-- Quest\n    Character <|-- Player\n    Character <|-- NonPlayerCharacter\n    Item <|-- Weapon\n    Item <|-- Armor', 'suggestions': ['How would you model the interaction between the Player class and the Non-Player Character class, including dialogue trees and quest management?', 'Can we introduce an inheritance hierarchy for the Item class, with subclasses for weapons, armor, and potions, each having unique attributes and behaviors?', 'What if we added a State pattern to the Character class to represent different states, such as alive, dead, or stunned, and how would this impact the overall game logic?'], 'debug': {'mermaid_code': 'classDiagram\n    class Game {\n        +String gameName\n        +String gameVersion\n        +startGame()\n        +saveGame()\n        +loadGame()\n    }\n    class Character {\n        +String characterName\n        +int characterLevel\n        +int characterHealth\n        +int characterMana\n        +levelUp()\n        +takeDamage(int damage)\n        +useAbility()\n    }\n    class Player {\n        +String playerName\n        +Character character\n        +playGame()\n        +createCharacter()\n    }\n    class NonPlayerCharacter {\n        +String npcName\n        +String npcDialogue\n        +interactWithPlayer()\n    }\n    class Item {\n        +String itemName\n        +int itemValue\n        +int itemWeight\n        +useItem()\n    }\n    class Weapon {\n        +String weaponName\n        +int weaponDamage\n        +attack()\n    }\n    class Armor {\n        +String armorName\n        +int armorDefense\n        +equipArmor()\n    }\n    class Quest {\n        +String questName\n        +String questDescription\n        +completeQuest()\n    }\n    class Location {\n        +String locationName\n        +String locationDescription\n        +enterLocation()\n    }\n    Game *-- Player\n    Player *-- Character\n    Character *-- Item\n    Character *-- Weapon\n    Character *-- Armor\n    Character *-- Quest\n    Location *-- NonPlayerCharacter\n    Location *-- Item\n    Location *-- Quest\n    Character <|-- Player\n    Character <|-- NonPlayerCharacter\n    Item <|-- Weapon\n    Item <|-- Armor'}}
+2025-01-07 11:31:39,505 INFO 127.0.0.1 - - [07/Jan/2025 11:31:39] "POST /query HTTP/1.1" 200 -
+2025-01-07 11:39:46,294 INFO 127.0.0.1 - - [07/Jan/2025 11:39:46] "OPTIONS /query HTTP/1.1" 200 -
+2025-01-07 11:39:46,549 INFO Generating Mermaid diagram for input: Create a class diagram for the rpg game system.
+2025-01-07 11:39:46,551 INFO Starting Mermaid diagram generation process
+2025-01-07 11:39:46,551 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'user', 'content': 'Based on the following user input, determine the most appropriate Mermaid diagram type:\n        User input: Create a class diagram for the rpg game system.\n        \n         Possible diagram types:\n        1. flowchart\n        2. sequenceDiagram\n        3. classDiagram\n        4. stateDiagram-v2\n        5. erDiagram\n        6. quadrantChart\n        7. mindmap\n        8. gantt\n        \n        Respond with ONLY the diagram type name, nothing else.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:39:46,551 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:39:46,559 DEBUG close.started
+2025-01-07 11:39:46,561 DEBUG close.complete
+2025-01-07 11:39:46,563 DEBUG connect_tcp.started host='api.groq.com' port=443 local_address=None timeout=None socket_options=None
+2025-01-07 11:39:47,141 DEBUG connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E503CE590>
+2025-01-07 11:39:47,141 DEBUG start_tls.started ssl_context=<ssl.SSLContext object at 0x0000028E500FBBF0> server_hostname='api.groq.com' timeout=None
+2025-01-07 11:39:47,269 DEBUG start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E503CE8D0>
+2025-01-07 11:39:47,269 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:39:47,269 DEBUG send_request_headers.complete
+2025-01-07 11:39:47,269 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:39:47,269 DEBUG send_request_body.complete
+2025-01-07 11:39:47,269 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:39:47,655 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:39:48 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1f3e419013e41-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'998'), (b'x-ratelimit-remaining-tokens', b'5883'), (b'x-ratelimit-reset-requests', b'1m56.525s'), (b'x-ratelimit-reset-tokens', b'1.17s'), (b'x-request-id', b'req_01jgzqvar9ep38tq7s3p53cjdm'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:39:47,655 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:39:47,655 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:39:47,655 DEBUG receive_response_body.complete
+2025-01-07 11:39:47,655 DEBUG response_closed.started
+2025-01-07 11:39:47,655 DEBUG response_closed.complete
+2025-01-07 11:39:47,655 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:39:48 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1f3e419013e41-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-remaining-tokens': '5883', 'x-ratelimit-reset-requests': '1m56.525s', 'x-ratelimit-reset-tokens': '1.17s', 'x-request-id': 'req_01jgzqvar9ep38tq7s3p53cjdm', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:39:47,672 INFO Determined diagram type: classdiagram
+2025-01-07 11:39:47,672 DEBUG Sending request to Groq model
+2025-01-07 11:39:47,677 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': "You are an expert in creating complex and professional Mermaid diagrams. Your task is to generate a detailed Mermaid diagram based on the user's request. Follow these guidelines:\n\n    1. ALWAYS include explicit labels for ALL nodes and connections\n    2. Never leave any node or connection without a label\n    3. Use descriptive text for labels instead of placeholder text\n    4. Ensure proper syntax and indentation\n    5. Include comprehensive relationships and connections\n    6. Use Mermaid syntax version 10.9.1\n    7. Wrap the Mermaid code in triple backticks with 'mermaid' language specifier\n\n        Example format of your response:\n        ```mermaid\n        [Complex diagram code here]\n        ```\n        [Detailed explanation of the diagram]\n\n        Generate a complex and creative/professional Mermaid diagram code based on the user's request.\n\nFor class diagrams:\n            - Create a system with at least 5-6 interrelated classes\n            - Use a mix of relationships (inheritance, composition, aggregation, etc.)\n            - Include detailed attributes and methods for each class\n            - Use interfaces or abstract classes where appropriate\n            - Add multiplicities to relationships\n            - Consider using namespaces or packages to group related classes\n            \n            Example syntax:\n            ```mermaid\n            classDiagram\n            class Animal {\n                +String name\n                +int age\n                +isMammal()\n                +eat()\n            }\n            class Dog {\n                +String breed\n                +bark()\n            }\n            Animal <|-- Dog\n            class Cat {\n                +String color\n                +meow()\n            }\n            Animal <|-- Cat\n            ```\n            "}, {'role': 'user', 'content': 'Create a complex and creative classdiagram for: Create a class diagram for the rpg game system.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:39:47,679 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:39:47,679 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:39:47,683 DEBUG send_request_headers.complete
+2025-01-07 11:39:47,683 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:39:47,683 DEBUG send_request_body.complete
+2025-01-07 11:39:47,683 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:39:48,612 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:39:49 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1f3e6ab8e3e41-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'997'), (b'x-ratelimit-remaining-tokens', b'5407'), (b'x-ratelimit-reset-requests', b'4m18.773s'), (b'x-ratelimit-reset-tokens', b'5.923s'), (b'x-request-id', b'req_01jgzqvb5be2r8ae8z2362p7kh'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:39:48,615 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:39:48,618 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:39:48,618 DEBUG receive_response_body.complete
+2025-01-07 11:39:48,618 DEBUG response_closed.started
+2025-01-07 11:39:48,618 DEBUG response_closed.complete
+2025-01-07 11:39:48,623 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:39:49 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1f3e6ab8e3e41-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '997', 'x-ratelimit-remaining-tokens': '5407', 'x-ratelimit-reset-requests': '4m18.773s', 'x-ratelimit-reset-tokens': '5.923s', 'x-request-id': 'req_01jgzqvb5be2r8ae8z2362p7kh', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:39:48,624 DEBUG Received response from Groq model
+2025-01-07 11:39:48,624 INFO Successfully extracted and corrected Mermaid diagram code
+2025-01-07 11:39:48,627 INFO Generating suggested prompts for diagram type: classdiagram
+2025-01-07 11:39:48,628 DEBUG Sending request to Groq model for suggestions
+2025-01-07 11:39:48,631 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a creative Mermaid diagram expert.'}, {'role': 'user', 'content': "Based on the following user input for a classdiagram, suggest 3 complex and creative follow-up questions or diagram modifications. Focus on enhancing the diagram's complexity, adding unique features, or exploring advanced aspects of the system being modeled.\n\n        User input: Create a class diagram for the rpg game system.\n\n        IMPORTANT: Provide ONLY the questions or suggestions, one per line. Do not include any explanations, numbering, or additional text.\n\n        Suggested questions or modifications:"}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:39:48,631 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:39:48,631 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:39:48,638 DEBUG send_request_headers.complete
+2025-01-07 11:39:48,638 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:39:48,640 DEBUG send_request_body.complete
+2025-01-07 11:39:48,640 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:39:49,124 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:39:49 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1f3eca9233e41-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'996'), (b'x-ratelimit-remaining-tokens', b'4495'), (b'x-ratelimit-reset-requests', b'5m44.667999999s'), (b'x-ratelimit-reset-tokens', b'15.05s'), (b'x-request-id', b'req_01jgzqvc2req7bch2d5v8n8pa7'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:39:49,124 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:39:49,124 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:39:49,124 DEBUG receive_response_body.complete
+2025-01-07 11:39:49,124 DEBUG response_closed.started
+2025-01-07 11:39:49,124 DEBUG response_closed.complete
+2025-01-07 11:39:49,124 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:39:49 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1f3eca9233e41-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '996', 'x-ratelimit-remaining-tokens': '4495', 'x-ratelimit-reset-requests': '5m44.667999999s', 'x-ratelimit-reset-tokens': '15.05s', 'x-request-id': 'req_01jgzqvc2req7bch2d5v8n8pa7', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:39:49,124 INFO Generated suggestions: ['How would you model the interaction between the Player class and the Non-Player Character class, including dialogue trees and quest management?', 'Can we introduce an inheritance hierarchy for the Item class, with subclasses for weapons, armor, and potions, each having unique attributes and behaviors?', 'What if we added a State pattern to the Character class to represent different states, such as alive, dead, or stunned, and how would this impact the overall game logic?']
+2025-01-07 11:39:49,124 INFO Generated Mermaid Code:
+2025-01-07 11:39:49,124 INFO 
+classDiagram
+    class Game {
+        +String name
+        +String description
+        +startGame()
+        +saveGame()
+        +loadGame()
+    }
+    class Character {
+        +String name
+        +int level
+        +int health
+        +int mana
+        +attack()
+        +castSpell()
+    }
+    class Player {
+        +String username
+        +Character character
+        +login()
+        +logout()
+    }
+    class NonPlayerCharacter {
+        +String name
+        +String dialogue
+        +interact()
+    }
+    class Item {
+        +String name
+        +int value
+        +useItem()
+    }
+    class Weapon {
+        +String name
+        +int damage
+        +attack()
+    }
+    class Armor {
+        +String name
+        +int defense
+        +equip()
+    }
+    class Quest {
+        +String description
+        +int reward
+        +completeQuest()
+    }
+    class Location {
+        +String name
+        +String description
+        +enterLocation()
+    }
+    Game --* Player
+    Player --* Character
+    Character --* Item
+    Character --* Weapon
+    Character --* Armor
+    Game --* NonPlayerCharacter
+    NonPlayerCharacter --* Location
+    Game --* Quest
+    Quest --* Location
+    Location --* Item
+    class Inventory {
+        +Item items
+        +addItem()
+        +removeItem()
+    }
+    Character --* Inventory
+    class Spell {
+        +String name
+        +int damage
+        +castSpell()
+    }
+    Character --* Spell
+    class Skill {
+        +String name
+        +int level
+        +useSkill()
+    }
+    Character --* Skill
+    Game --* Skill
+    class Party {
+        +Character members
+        +addMember()
+        +removeMember()
+    }
+    Player --* Party
+    Party --* Character
+2025-01-07 11:39:49,137 DEBUG Full response: {'output': 'Mermaid diagram generated and syntax-corrected successfully.', 'mermaid': 'classDiagram\n    class Game {\n        +String name\n        +String description\n        +startGame()\n        +saveGame()\n        +loadGame()\n    }\n    class Character {\n        +String name\n        +int level\n        +int health\n        +int mana\n        +attack()\n        +castSpell()\n    }\n    class Player {\n        +String username\n        +Character character\n        +login()\n        +logout()\n    }\n    class NonPlayerCharacter {\n        +String name\n        +String dialogue\n        +interact()\n    }\n    class Item {\n        +String name\n        +int value\n        +useItem()\n    }\n    class Weapon {\n        +String name\n        +int damage\n        +attack()\n    }\n    class Armor {\n        +String name\n        +int defense\n        +equip()\n    }\n    class Quest {\n        +String description\n        +int reward\n        +completeQuest()\n    }\n    class Location {\n        +String name\n        +String description\n        +enterLocation()\n    }\n    Game --* Player\n    Player --* Character\n    Character --* Item\n    Character --* Weapon\n    Character --* Armor\n    Game --* NonPlayerCharacter\n    NonPlayerCharacter --* Location\n    Game --* Quest\n    Quest --* Location\n    Location --* Item\n    class Inventory {\n        +Item items\n        +addItem()\n        +removeItem()\n    }\n    Character --* Inventory\n    class Spell {\n        +String name\n        +int damage\n        +castSpell()\n    }\n    Character --* Spell\n    class Skill {\n        +String name\n        +int level\n        +useSkill()\n    }\n    Character --* Skill\n    Game --* Skill\n    class Party {\n        +Character members\n        +addMember()\n        +removeMember()\n    }\n    Player --* Party\n    Party --* Character', 'suggestions': ['How would you model the interaction between the Player class and the Non-Player Character class, including dialogue trees and quest management?', 'Can we introduce an inheritance hierarchy for the Item class, with subclasses for weapons, armor, and potions, each having unique attributes and behaviors?', 'What if we added a State pattern to the Character class to represent different states, such as alive, dead, or stunned, and how would this impact the overall game logic?'], 'debug': {'mermaid_code': 'classDiagram\n    class Game {\n        +String name\n        +String description\n        +startGame()\n        +saveGame()\n        +loadGame()\n    }\n    class Character {\n        +String name\n        +int level\n        +int health\n        +int mana\n        +attack()\n        +castSpell()\n    }\n    class Player {\n        +String username\n        +Character character\n        +login()\n        +logout()\n    }\n    class NonPlayerCharacter {\n        +String name\n        +String dialogue\n        +interact()\n    }\n    class Item {\n        +String name\n        +int value\n        +useItem()\n    }\n    class Weapon {\n        +String name\n        +int damage\n        +attack()\n    }\n    class Armor {\n        +String name\n        +int defense\n        +equip()\n    }\n    class Quest {\n        +String description\n        +int reward\n        +completeQuest()\n    }\n    class Location {\n        +String name\n        +String description\n        +enterLocation()\n    }\n    Game --* Player\n    Player --* Character\n    Character --* Item\n    Character --* Weapon\n    Character --* Armor\n    Game --* NonPlayerCharacter\n    NonPlayerCharacter --* Location\n    Game --* Quest\n    Quest --* Location\n    Location --* Item\n    class Inventory {\n        +Item items\n        +addItem()\n        +removeItem()\n    }\n    Character --* Inventory\n    class Spell {\n        +String name\n        +int damage\n        +castSpell()\n    }\n    Character --* Spell\n    class Skill {\n        +String name\n        +int level\n        +useSkill()\n    }\n    Character --* Skill\n    Game --* Skill\n    class Party {\n        +Character members\n        +addMember()\n        +removeMember()\n    }\n    Player --* Party\n    Party --* Character'}}
+2025-01-07 11:39:49,137 INFO 127.0.0.1 - - [07/Jan/2025 11:39:49] "POST /query HTTP/1.1" 200 -
+2025-01-07 11:41:54,871 INFO 127.0.0.1 - - [07/Jan/2025 11:41:54] "OPTIONS /query HTTP/1.1" 200 -
+2025-01-07 11:41:55,129 INFO Generating Mermaid diagram for input: Create a class diagram for the rpg game system.
+2025-01-07 11:41:55,129 INFO Starting Mermaid diagram generation process
+2025-01-07 11:41:55,131 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'user', 'content': 'Based on the following user input, determine the most appropriate Mermaid diagram type:\n        User input: Create a class diagram for the rpg game system.\n        \n         Possible diagram types:\n        1. flowchart\n        2. sequenceDiagram\n        3. classDiagram\n        4. stateDiagram-v2\n        5. erDiagram\n        6. quadrantChart\n        7. mindmap\n        8. gantt\n        \n        Respond with ONLY the diagram type name, nothing else.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:41:55,131 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:41:55,131 DEBUG close.started
+2025-01-07 11:41:55,131 DEBUG close.complete
+2025-01-07 11:41:55,131 DEBUG connect_tcp.started host='api.groq.com' port=443 local_address=None timeout=None socket_options=None
+2025-01-07 11:41:55,240 DEBUG connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E503A9290>
+2025-01-07 11:41:55,240 DEBUG start_tls.started ssl_context=<ssl.SSLContext object at 0x0000028E500FBBF0> server_hostname='api.groq.com' timeout=None
+2025-01-07 11:41:55,353 DEBUG start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E503ABAD0>
+2025-01-07 11:41:55,353 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:41:55,353 DEBUG send_request_headers.complete
+2025-01-07 11:41:55,353 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:41:55,353 DEBUG send_request_body.complete
+2025-01-07 11:41:55,353 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:41:55,735 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:41:56 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1f7049ecefcef-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'996'), (b'x-ratelimit-remaining-tokens', b'5883'), (b'x-ratelimit-reset-requests', b'5m5.294999999s'), (b'x-ratelimit-reset-tokens', b'1.17s'), (b'x-request-id', b'req_01jgzqz7tcfq6tts46ddcgv80r'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:41:55,738 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:41:55,738 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:41:55,738 DEBUG receive_response_body.complete
+2025-01-07 11:41:55,738 DEBUG response_closed.started
+2025-01-07 11:41:55,738 DEBUG response_closed.complete
+2025-01-07 11:41:55,738 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:41:56 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1f7049ecefcef-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '996', 'x-ratelimit-remaining-tokens': '5883', 'x-ratelimit-reset-requests': '5m5.294999999s', 'x-ratelimit-reset-tokens': '1.17s', 'x-request-id': 'req_01jgzqz7tcfq6tts46ddcgv80r', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:41:55,738 INFO Determined diagram type: classdiagram
+2025-01-07 11:41:55,738 DEBUG Sending request to Groq model
+2025-01-07 11:41:55,749 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': "You are an expert in creating complex and professional Mermaid diagrams. Your task is to generate a detailed Mermaid diagram based on the user's request. Follow these guidelines:\n\n    1. ALWAYS include explicit labels for ALL nodes and connections\n    2. Never leave any node or connection without a label\n    3. Use descriptive text for labels instead of placeholder text\n    4. Ensure proper syntax and indentation\n    5. Include comprehensive relationships and connections\n    6. Use Mermaid syntax version 10.9.1\n    7. Wrap the Mermaid code in triple backticks with 'mermaid' language specifier\n\n        Example format of your response:\n        ```mermaid\n        [Complex diagram code here]\n        ```\n        [Detailed explanation of the diagram]\n\n        Generate a complex and creative/professional Mermaid diagram code based on the user's request.\n\nFor class diagrams:\n            - Create a system with at least 5-6 interrelated classes\n            - Use a mix of relationships (inheritance, composition, aggregation, etc.)\n            - Include detailed attributes and methods for each class\n            - Use interfaces or abstract classes where appropriate\n            - Add multiplicities to relationships\n            - Consider using namespaces or packages to group related classes\n            \n            Example syntax:\n            ```mermaid\n            classDiagram\n            class Animal {\n                +String name\n                +int age\n                +isMammal()\n                +eat()\n            }\n            class Dog {\n                +String breed\n                +bark()\n            }\n            Animal <|-- Dog\n            class Cat {\n                +String color\n                +meow()\n            }\n            Animal <|-- Cat\n            ```\n            "}, {'role': 'user', 'content': 'Create a complex and creative classdiagram for: Create a class diagram for the rpg game system.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:41:55,750 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:41:55,751 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:41:55,752 DEBUG send_request_headers.complete
+2025-01-07 11:41:55,752 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:41:55,753 DEBUG send_request_body.complete
+2025-01-07 11:41:55,753 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:41:57,631 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:41:58 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1f7071ceefcef-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'995'), (b'x-ratelimit-remaining-tokens', b'5405'), (b'x-ratelimit-reset-requests', b'7m11.598999999s'), (b'x-ratelimit-reset-tokens', b'5.95s'), (b'x-request-id', b'req_01jgzqz86wfh2vvgjyd7m4zv9j'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:41:57,631 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:41:57,631 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:41:57,631 DEBUG receive_response_body.complete
+2025-01-07 11:41:57,631 DEBUG response_closed.started
+2025-01-07 11:41:57,631 DEBUG response_closed.complete
+2025-01-07 11:41:57,631 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:41:58 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1f7071ceefcef-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '995', 'x-ratelimit-remaining-tokens': '5405', 'x-ratelimit-reset-requests': '7m11.598999999s', 'x-ratelimit-reset-tokens': '5.95s', 'x-request-id': 'req_01jgzqz86wfh2vvgjyd7m4zv9j', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:41:57,631 DEBUG Received response from Groq model
+2025-01-07 11:41:57,639 INFO Successfully extracted and corrected Mermaid diagram code
+2025-01-07 11:41:57,639 INFO Generating suggested prompts for diagram type: classdiagram
+2025-01-07 11:41:57,639 DEBUG Sending request to Groq model for suggestions
+2025-01-07 11:41:57,644 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a creative Mermaid diagram expert.'}, {'role': 'user', 'content': "Based on the following user input for a classdiagram, suggest 3 complex and creative follow-up questions or diagram modifications. Focus on enhancing the diagram's complexity, adding unique features, or exploring advanced aspects of the system being modeled.\n\n        User input: Create a class diagram for the rpg game system.\n\n        IMPORTANT: Provide ONLY the questions or suggestions, one per line. Do not include any explanations, numbering, or additional text.\n\n        Suggested questions or modifications:"}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:41:57,646 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:41:57,646 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:41:57,652 DEBUG send_request_headers.complete
+2025-01-07 11:41:57,653 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:41:57,653 DEBUG send_request_body.complete
+2025-01-07 11:41:57,653 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:41:58,740 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:41:59 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1f712f85cfcef-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'994'), (b'x-ratelimit-remaining-tokens', b'4427'), (b'x-ratelimit-reset-requests', b'8m36.499999999s'), (b'x-ratelimit-reset-tokens', b'15.725s'), (b'x-request-id', b'req_01jgzqza29fs9t9bysaw8v7c2r'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:41:58,740 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:41:58,740 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:41:58,749 DEBUG receive_response_body.complete
+2025-01-07 11:41:58,749 DEBUG response_closed.started
+2025-01-07 11:41:58,749 DEBUG response_closed.complete
+2025-01-07 11:41:58,749 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:41:59 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1f712f85cfcef-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '994', 'x-ratelimit-remaining-tokens': '4427', 'x-ratelimit-reset-requests': '8m36.499999999s', 'x-ratelimit-reset-tokens': '15.725s', 'x-request-id': 'req_01jgzqza29fs9t9bysaw8v7c2r', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:41:58,754 INFO Generated suggestions: ['How would the class diagram change if we introduce a dynamic quest system with multiple branching storylines and quests that can on character skills and abilities?', 'What if we add a character progression tree with multiple classes and subclasses, each having unique attributes, abilities, and playstyles that can be represented as separate classes or interfaces in the diagram?', 'Can we incorporate a crafting system with complex item recipes, resource management, and crafting skills that require specific tools and materials, and how would this affect the relationships between character, item, and skill classes in the diagram?']
+2025-01-07 11:41:58,755 INFO Generated Mermaid Code:
+2025-01-07 11:41:58,756 INFO 
+classDiagram
+    class Character {
+        +String name
+        +int health
+        +int strength
+        +int agility
+        +isAlive()
+        +attack(Character)
+        +takeDamage(int)
+    }
+
+    class Player {
+        +String username
+        +Character character
+        +boolean isLoggedIn()
+        +void logIn()
+        +void logOut()
+    }
+
+    class Enemy {
+        +String name
+        +int health
+        +int damage
+        +attack(Character)
+        +takeDamage(int)
+    }
+
+    class Boss {
+        +String name
+        +int health
+        +int damage
+        +attack(Character)
+        +takeDamage(int)
+        +useSpecialAttack()
+    }
+
+    Character <|-- Player
+    Character <|-- Enemy
+    Character <|-- Boss
+    class Party {
+        +List~Character~ characters
+        +int experience
+        +levelUp()
+    }
+    class PartyMember {
+        +Character character
+        +boolean isInParty()
+    }
+
+    Character --* PartyMember : participates
+    Party --* PartyMember : consists
+
+    class Inventory {
+        +List~Item~ items
+        +addItem(Item)
+        +removeItem(Item)
+    }
+    class Item {
+        +String name
+        +String description
+        +int value
+        +int weight
+        +boolean isUsable()
+        +void use(Character)
+    }
+    Inventory --* Item : contains
+
+    class Equipment {
+        +String type
+        +int strength
+        +int agility
+        +boolean isEquipped()
+        +void equip(Character)
+        +void unequip(Character)
+    }
+    Item --|> Equipment
+    class Skill {
+        +String name
+        +int damage
+        +boolean isUsable()
+        +void use(Character)
+    }
+    class Quest {
+        +String name
+        +String description
+        +boolean isCompleted()
+        +void complete(Character)
+    }
+
+    Player --* Quest : accepts
+    Quest --* PartyMember : isParticipant
+
+    class World {
+        +String name
+        +List~Location~ locations
+        +addLocation(Location)
+    }
+    class Location {
+        +String name
+        +List~Character~ characters
+        +List~Enemy~ enemies
+        +addCharacter(Character)
+        +addEnemy(Enemy)
+    }
+
+    World --* Location : contains
+    Location --* Character : visitedBy
+    Location --* Enemy : inhabits
+
+    Player --* World : playsIn
+2025-01-07 11:41:58,759 DEBUG Full response: {'output': 'Mermaid diagram generated and syntax-corrected successfully.', 'mermaid': 'classDiagram\n    class Character {\n        +String name\n        +int health\n        +int strength\n        +int agility\n        +isAlive()\n        +attack(Character)\n        +takeDamage(int)\n    }\n\n    class Player {\n        +String username\n        +Character character\n        +boolean isLoggedIn()\n        +void logIn()\n        +void logOut()\n    }\n\n    class Enemy {\n        +String name\n        +int health\n        +int damage\n        +attack(Character)\n        +takeDamage(int)\n    }\n\n    class Boss {\n        +String name\n        +int health\n        +int damage\n        +attack(Character)\n        +takeDamage(int)\n        +useSpecialAttack()\n    }\n\n    Character <|-- Player\n    Character <|-- Enemy\n    Character <|-- Boss\n    class Party {\n        +List~Character~ characters\n        +int experience\n        +levelUp()\n    }\n    class PartyMember {\n        +Character character\n        +boolean isInParty()\n    }\n\n    Character --* PartyMember : participates\n    Party --* PartyMember : consists\n\n    class Inventory {\n        +List~Item~ items\n        +addItem(Item)\n        +removeItem(Item)\n    }\n    class Item {\n        +String name\n        +String description\n        +int value\n        +int weight\n        +boolean isUsable()\n        +void use(Character)\n    }\n    Inventory --* Item : contains\n\n    class Equipment {\n        +String type\n        +int strength\n        +int agility\n        +boolean isEquipped()\n        +void equip(Character)\n        +void unequip(Character)\n    }\n    Item --|> Equipment\n    class Skill {\n        +String name\n        +int damage\n        +boolean isUsable()\n        +void use(Character)\n    }\n    class Quest {\n        +String name\n        +String description\n        +boolean isCompleted()\n        +void complete(Character)\n    }\n\n    Player --* Quest : accepts\n    Quest --* PartyMember : isParticipant\n\n    class World {\n        +String name\n        +List~Location~ locations\n        +addLocation(Location)\n    }\n    class Location {\n        +String name\n        +List~Character~ characters\n        +List~Enemy~ enemies\n        +addCharacter(Character)\n        +addEnemy(Enemy)\n    }\n\n    World --* Location : contains\n    Location --* Character : visitedBy\n    Location --* Enemy : inhabits\n\n    Player --* World : playsIn', 'suggestions': ['How would the class diagram change if we introduce a dynamic quest system with multiple branching storylines and quests that can on character skills and abilities?', 'What if we add a character progression tree with multiple classes and subclasses, each having unique attributes, abilities, and playstyles that can be represented as separate classes or interfaces in the diagram?', 'Can we incorporate a crafting system with complex item recipes, resource management, and crafting skills that require specific tools and materials, and how would this affect the relationships between character, item, and skill classes in the diagram?'], 'debug': {'mermaid_code': 'classDiagram\n    class Character {\n        +String name\n        +int health\n        +int strength\n        +int agility\n        +isAlive()\n        +attack(Character)\n        +takeDamage(int)\n    }\n\n    class Player {\n        +String username\n        +Character character\n        +boolean isLoggedIn()\n        +void logIn()\n        +void logOut()\n    }\n\n    class Enemy {\n        +String name\n        +int health\n        +int damage\n        +attack(Character)\n        +takeDamage(int)\n    }\n\n    class Boss {\n        +String name\n        +int health\n        +int damage\n        +attack(Character)\n        +takeDamage(int)\n        +useSpecialAttack()\n    }\n\n    Character <|-- Player\n    Character <|-- Enemy\n    Character <|-- Boss\n    class Party {\n        +List~Character~ characters\n        +int experience\n        +levelUp()\n    }\n    class PartyMember {\n        +Character character\n        +boolean isInParty()\n    }\n\n    Character --* PartyMember : participates\n    Party --* PartyMember : consists\n\n    class Inventory {\n        +List~Item~ items\n        +addItem(Item)\n        +removeItem(Item)\n    }\n    class Item {\n        +String name\n        +String description\n        +int value\n        +int weight\n        +boolean isUsable()\n        +void use(Character)\n    }\n    Inventory --* Item : contains\n\n    class Equipment {\n        +String type\n        +int strength\n        +int agility\n        +boolean isEquipped()\n        +void equip(Character)\n        +void unequip(Character)\n    }\n    Item --|> Equipment\n    class Skill {\n        +String name\n        +int damage\n        +boolean isUsable()\n        +void use(Character)\n    }\n    class Quest {\n        +String name\n        +String description\n        +boolean isCompleted()\n        +void complete(Character)\n    }\n\n    Player --* Quest : accepts\n    Quest --* PartyMember : isParticipant\n\n    class World {\n        +String name\n        +List~Location~ locations\n        +addLocation(Location)\n    }\n    class Location {\n        +String name\n        +List~Character~ characters\n        +List~Enemy~ enemies\n        +addCharacter(Character)\n        +addEnemy(Enemy)\n    }\n\n    World --* Location : contains\n    Location --* Character : visitedBy\n    Location --* Enemy : inhabits\n\n    Player --* World : playsIn'}}
+2025-01-07 11:41:58,763 INFO 127.0.0.1 - - [07/Jan/2025 11:41:58] "POST /query HTTP/1.1" 200 -
+2025-01-07 11:46:12,750 INFO 127.0.0.1 - - [07/Jan/2025 11:46:12] "OPTIONS /query HTTP/1.1" 200 -
+2025-01-07 11:46:13,002 INFO Generating Mermaid diagram for input: Create a class diagram for the rpg game system.
+2025-01-07 11:46:13,002 INFO Starting Mermaid diagram generation process
+2025-01-07 11:46:13,007 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'user', 'content': 'Based on the following user input, determine the most appropriate Mermaid diagram type:\n        User input: Create a class diagram for the rpg game system.\n        \n         Possible diagram types:\n        1. flowchart\n        2. sequenceDiagram\n        3. classDiagram\n        4. stateDiagram-v2\n        5. erDiagram\n        6. quadrantChart\n        7. mindmap\n        8. gantt\n        \n        Respond with ONLY the diagram type name, nothing else.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:46:13,008 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:46:13,013 DEBUG close.started
+2025-01-07 11:46:13,015 DEBUG close.complete
+2025-01-07 11:46:13,016 DEBUG connect_tcp.started host='api.groq.com' port=443 local_address=None timeout=None socket_options=None
+2025-01-07 11:46:13,145 DEBUG connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E503DBB90>
+2025-01-07 11:46:13,146 DEBUG start_tls.started ssl_context=<ssl.SSLContext object at 0x0000028E500FBBF0> server_hostname='api.groq.com' timeout=None
+2025-01-07 11:46:13,287 DEBUG start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E503DBE90>
+2025-01-07 11:46:13,288 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:13,289 DEBUG send_request_headers.complete
+2025-01-07 11:46:13,290 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:46:13,291 DEBUG send_request_body.complete
+2025-01-07 11:46:13,292 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:13,701 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:46:14 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1fd50dbb4498b-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'995'), (b'x-ratelimit-remaining-tokens', b'5883'), (b'x-ratelimit-reset-requests', b'5m49.144999999s'), (b'x-ratelimit-reset-tokens', b'1.17s'), (b'x-request-id', b'req_01jgzr73qheqbvga40axb074ph'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:46:13,702 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:46:13,703 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:46:13,705 DEBUG receive_response_body.complete
+2025-01-07 11:46:13,705 DEBUG response_closed.started
+2025-01-07 11:46:13,706 DEBUG response_closed.complete
+2025-01-07 11:46:13,707 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:46:14 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1fd50dbb4498b-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '995', 'x-ratelimit-remaining-tokens': '5883', 'x-ratelimit-reset-requests': '5m49.144999999s', 'x-ratelimit-reset-tokens': '1.17s', 'x-request-id': 'req_01jgzr73qheqbvga40axb074ph', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:46:13,709 INFO Determined diagram type: classdiagram
+2025-01-07 11:46:13,710 DEBUG Sending request to Groq model
+2025-01-07 11:46:13,717 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': "You are an expert in creating complex and professional Mermaid diagrams. Your task is to generate a detailed Mermaid diagram based on the user's request. Follow these guidelines:\n\n    1. ALWAYS include explicit labels for ALL nodes and connections\n    2. Never leave any node or connection without a label\n    3. Use descriptive text for labels instead of placeholder text\n    4. Ensure proper syntax and indentation\n    5. Include comprehensive relationships and connections\n    6. Use Mermaid syntax version 10.9.1\n    7. Wrap the Mermaid code in triple backticks with 'mermaid' language specifier\n\n        Example format of your response:\n        ```mermaid\n        [Complex diagram code here]\n        ```\n        [Detailed explanation of the diagram]\n\n        Generate a complex and creative/professional Mermaid diagram code based on the user's request.\n\nFor class diagrams:\n            - Create a system with at least 5-6 interrelated classes\n            - Use a mix of relationships (inheritance, composition, aggregation, etc.)\n            - Include detailed attributes and methods for each class\n            - Use interfaces or abstract classes where appropriate\n            - Add multiplicities to relationships\n            - Consider using namespaces or packages to group related classes\n            \n            Example syntax:\n            ```mermaid\n            classDiagram\n            class Animal {\n                +String name\n                +int age\n                +isMammal()\n                +eat()\n            }\n            class Dog {\n                +String breed\n                +bark()\n            }\n            Animal <|-- Dog\n            class Cat {\n                +String color\n                +meow()\n            }\n            Animal <|-- Cat\n            ```\n            "}, {'role': 'user', 'content': 'Create a complex and creative classdiagram for: Create a class diagram for the rpg game system.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:46:13,720 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:46:13,721 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:13,722 DEBUG send_request_headers.complete
+2025-01-07 11:46:13,722 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:46:13,723 DEBUG send_request_body.complete
+2025-01-07 11:46:13,724 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:14,595 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:46:15 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1fd538d92498b-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'994'), (b'x-ratelimit-remaining-tokens', b'5408'), (b'x-ratelimit-reset-requests', b'8m37.963999999s'), (b'x-ratelimit-reset-tokens', b'5.913s'), (b'x-request-id', b'req_01jgzr7451ft2vvj2dzxyfm4sw'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:46:14,596 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:46:14,597 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:46:14,598 DEBUG receive_response_body.complete
+2025-01-07 11:46:14,598 DEBUG response_closed.started
+2025-01-07 11:46:14,599 DEBUG response_closed.complete
+2025-01-07 11:46:14,600 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:46:15 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1fd538d92498b-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '994', 'x-ratelimit-remaining-tokens': '5408', 'x-ratelimit-reset-requests': '8m37.963999999s', 'x-ratelimit-reset-tokens': '5.913s', 'x-request-id': 'req_01jgzr7451ft2vvj2dzxyfm4sw', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:46:14,602 DEBUG Received response from Groq model
+2025-01-07 11:46:14,604 INFO Successfully extracted and corrected Mermaid diagram code
+2025-01-07 11:46:14,605 INFO Generating suggested prompts for diagram type: classdiagram
+2025-01-07 11:46:14,606 DEBUG Sending request to Groq model for suggestions
+2025-01-07 11:46:14,611 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a creative Mermaid diagram expert.'}, {'role': 'user', 'content': "Based on the following user input for a classdiagram, suggest 3 complex and creative follow-up questions or diagram modifications. Focus on enhancing the diagram's complexity, adding unique features, or exploring advanced aspects of the system being modeled.\n\n        User input: Create a class diagram for the rpg game system.\n\n        IMPORTANT: Provide ONLY the questions or suggestions, one per line. Do not include any explanations, numbering, or additional text.\n\n        Suggested questions or modifications:"}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:46:14,613 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:46:14,614 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:14,616 DEBUG send_request_headers.complete
+2025-01-07 11:46:14,616 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:46:14,617 DEBUG send_request_body.complete
+2025-01-07 11:46:14,618 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:15,116 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:46:15 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1fd59187b498b-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'993'), (b'x-ratelimit-remaining-tokens', b'4551'), (b'x-ratelimit-reset-requests', b'10m3.911999999s'), (b'x-ratelimit-reset-tokens', b'14.483999999s'), (b'x-request-id', b'req_01jgzr7511fr7raswrwwthcdne'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:46:15,118 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:46:15,118 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:46:15,119 DEBUG receive_response_body.complete
+2025-01-07 11:46:15,120 DEBUG response_closed.started
+2025-01-07 11:46:15,121 DEBUG response_closed.complete
+2025-01-07 11:46:15,122 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:46:15 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1fd59187b498b-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '993', 'x-ratelimit-remaining-tokens': '4551', 'x-ratelimit-reset-requests': '10m3.911999999s', 'x-ratelimit-reset-tokens': '14.483999999s', 'x-request-id': 'req_01jgzr7511fr7raswrwwthcdne', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:46:15,124 INFO Generated suggestions: ['How would you model the interaction between the Player class and the Non-Player Character class, including dialogue trees and quest management?', 'Can we introduce an inheritance hierarchy for the Item class, with subclasses for weapons, armor, and potions, each having unique attributes and behaviors?', 'What if we added a State pattern to the Character class to represent different states, such as alive, dead, or stunned, and how would this impact the overall game logic?']
+2025-01-07 11:46:15,125 INFO Generated Mermaid Code:
+2025-01-07 11:46:15,127 INFO 
+classDiagram
+    class Game {
+        +String gameName
+        +String gameVersion
+        +startGame()
+        +saveGame()
+        +loadGame()
+    }
+    class Character {
+        +String characterName
+        +int characterLevel
+        +int characterHealth
+        +int characterMana
+        +levelUp()
+        +takeDamage(int damage)
+        +useAbility()
+    }
+    class Player {
+        +String playerName
+        +Character character
+        +playGame()
+        +pauseGame()
+    }
+    Game *-- Player : has a
+    class NonPlayerCharacter {
+        +String npcName
+        +String npcDialogue
+        +interactWithPlayer()
+    }
+    class Enemy {
+        +String enemyName
+        +int enemyHealth
+        +int enemyDamage
+        +attackPlayer()
+    }
+    NonPlayerCharacter <|-- Enemy
+    class Item {
+        +String itemName
+        +int itemValue
+        +useItem()
+    }
+    class Weapon {
+        +String weaponName
+        +int weaponDamage
+        +attackWithWeapon()
+    }
+    Item <|-- Weapon
+    class Armor {
+        +String armorName
+        +int armorDefense
+        +equipArmor()
+    }
+    Item <|-- Armor
+    class Skill {
+        +String skillName
+        +int skillLevel
+        +useSkill()
+    }
+    class Ability {
+        +String abilityName
+        +int abilityCooldown
+        +useAbility()
+    }
+    Skill <|-- Ability
+    class Quest {
+        +String questName
+        +String questDescription
+        +completeQuest()
+    }
+    class Location {
+        +String locationName
+        +String locationDescription
+        +visitLocation()
+    }
+    Game *-- Location : has multiple
+    Location *-- Quest : has multiple
+    Location *-- NonPlayerCharacter : has multiple
+    Location *-- Item : has multiple
+    Character *-- Item : has multiple
+    Character *-- Skill : has multiple
+    Character *-- Ability : has multiple
+2025-01-07 11:46:15,129 DEBUG Full response: {'output': 'Mermaid diagram generated and syntax-corrected successfully.', 'mermaid': 'classDiagram\n    class Game {\n        +String gameName\n        +String gameVersion\n        +startGame()\n        +saveGame()\n        +loadGame()\n    }\n    class Character {\n        +String characterName\n        +int characterLevel\n        +int characterHealth\n        +int characterMana\n        +levelUp()\n        +takeDamage(int damage)\n        +useAbility()\n    }\n    class Player {\n        +String playerName\n        +Character character\n        +playGame()\n        +pauseGame()\n    }\n    Game *-- Player : has a\n    class NonPlayerCharacter {\n        +String npcName\n        +String npcDialogue\n        +interactWithPlayer()\n    }\n    class Enemy {\n        +String enemyName\n        +int enemyHealth\n        +int enemyDamage\n        +attackPlayer()\n    }\n    NonPlayerCharacter <|-- Enemy\n    class Item {\n        +String itemName\n        +int itemValue\n        +useItem()\n    }\n    class Weapon {\n        +String weaponName\n        +int weaponDamage\n        +attackWithWeapon()\n    }\n    Item <|-- Weapon\n    class Armor {\n        +String armorName\n        +int armorDefense\n        +equipArmor()\n    }\n    Item <|-- Armor\n    class Skill {\n        +String skillName\n        +int skillLevel\n        +useSkill()\n    }\n    class Ability {\n        +String abilityName\n        +int abilityCooldown\n        +useAbility()\n    }\n    Skill <|-- Ability\n    class Quest {\n        +String questName\n        +String questDescription\n        +completeQuest()\n    }\n    class Location {\n        +String locationName\n        +String locationDescription\n        +visitLocation()\n    }\n    Game *-- Location : has multiple\n    Location *-- Quest : has multiple\n    Location *-- NonPlayerCharacter : has multiple\n    Location *-- Item : has multiple\n    Character *-- Item : has multiple\n    Character *-- Skill : has multiple\n    Character *-- Ability : has multiple', 'suggestions': ['How would you model the interaction between the Player class and the Non-Player Character class, including dialogue trees and quest management?', 'Can we introduce an inheritance hierarchy for the Item class, with subclasses for weapons, armor, and potions, each having unique attributes and behaviors?', 'What if we added a State pattern to the Character class to represent different states, such as alive, dead, or stunned, and how would this impact the overall game logic?'], 'debug': {'mermaid_code': 'classDiagram\n    class Game {\n        +String gameName\n        +String gameVersion\n        +startGame()\n        +saveGame()\n        +loadGame()\n    }\n    class Character {\n        +String characterName\n        +int characterLevel\n        +int characterHealth\n        +int characterMana\n        +levelUp()\n        +takeDamage(int damage)\n        +useAbility()\n    }\n    class Player {\n        +String playerName\n        +Character character\n        +playGame()\n        +pauseGame()\n    }\n    Game *-- Player : has a\n    class NonPlayerCharacter {\n        +String npcName\n        +String npcDialogue\n        +interactWithPlayer()\n    }\n    class Enemy {\n        +String enemyName\n        +int enemyHealth\n        +int enemyDamage\n        +attackPlayer()\n    }\n    NonPlayerCharacter <|-- Enemy\n    class Item {\n        +String itemName\n        +int itemValue\n        +useItem()\n    }\n    class Weapon {\n        +String weaponName\n        +int weaponDamage\n        +attackWithWeapon()\n    }\n    Item <|-- Weapon\n    class Armor {\n        +String armorName\n        +int armorDefense\n        +equipArmor()\n    }\n    Item <|-- Armor\n    class Skill {\n        +String skillName\n        +int skillLevel\n        +useSkill()\n    }\n    class Ability {\n        +String abilityName\n        +int abilityCooldown\n        +useAbility()\n    }\n    Skill <|-- Ability\n    class Quest {\n        +String questName\n        +String questDescription\n        +completeQuest()\n    }\n    class Location {\n        +String locationName\n        +String locationDescription\n        +visitLocation()\n    }\n    Game *-- Location : has multiple\n    Location *-- Quest : has multiple\n    Location *-- NonPlayerCharacter : has multiple\n    Location *-- Item : has multiple\n    Character *-- Item : has multiple\n    Character *-- Skill : has multiple\n    Character *-- Ability : has multiple'}}
+2025-01-07 11:46:15,131 INFO 127.0.0.1 - - [07/Jan/2025 11:46:15] "POST /query HTTP/1.1" 200 -
+2025-01-07 11:46:38,172 INFO 127.0.0.1 - - [07/Jan/2025 11:46:38] "OPTIONS /query HTTP/1.1" 200 -
+2025-01-07 11:46:38,496 INFO Generating Mermaid diagram for input: How would the class diagram change if we introduce a dynamic quest system with multiple branching storylines and quests that can on character skills and abilities?
+2025-01-07 11:46:38,497 INFO Starting Mermaid diagram generation process
+2025-01-07 11:46:38,505 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'user', 'content': 'Based on the following user input, determine the most appropriate Mermaid diagram type:\n        User input: How would the class diagram change if we introduce a dynamic quest system with multiple branching storylines and quests that can on character skills and abilities?\n        \n         Possible diagram types:\n        1. flowchart\n        2. sequenceDiagram\n        3. classDiagram\n        4. stateDiagram-v2\n        5. erDiagram\n        6. quadrantChart\n        7. mindmap\n        8. gantt\n        \n        Respond with ONLY the diagram type name, nothing else.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:46:38,506 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:46:38,507 DEBUG close.started
+2025-01-07 11:46:38,508 DEBUG close.complete
+2025-01-07 11:46:38,508 DEBUG connect_tcp.started host='api.groq.com' port=443 local_address=None timeout=None socket_options=None
+2025-01-07 11:46:38,626 DEBUG connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E50277090>
+2025-01-07 11:46:38,627 DEBUG start_tls.started ssl_context=<ssl.SSLContext object at 0x0000028E500FBBF0> server_hostname='api.groq.com' timeout=None
+2025-01-07 11:46:38,741 DEBUG start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E502745D0>
+2025-01-07 11:46:38,741 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:38,742 DEBUG send_request_headers.complete
+2025-01-07 11:46:38,743 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:46:38,746 DEBUG send_request_body.complete
+2025-01-07 11:46:38,747 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:39,136 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:46:39 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1fdefda445fdb-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'992'), (b'x-ratelimit-remaining-tokens', b'5854'), (b'x-ratelimit-reset-requests', b'11m7.073s'), (b'x-ratelimit-reset-tokens', b'1.46s'), (b'x-request-id', b'req_01jgzr7wk2fj4t947t4kebbswa'), (b'Set-Cookie', b'__cf_bm=lv2lXty1V7nz9B_wdo37qK3FurCLvk.FGIpmBckQEAU-1736232399-1.0.1.1-BMdKqXkwNPUoJiumT0MZ.idHS6rggkzIf96Y9_Bx68KdhrwcbnCavMi.0WCbKoZ7TTICnIsyetTJYNXVoX478Q; path=/; expires=Tue, 07-Jan-25 07:16:39 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:46:39,139 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:46:39,139 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:46:39,141 DEBUG receive_response_body.complete
+2025-01-07 11:46:39,141 DEBUG response_closed.started
+2025-01-07 11:46:39,151 DEBUG response_closed.complete
+2025-01-07 11:46:39,153 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:46:39 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1fdefda445fdb-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '992', 'x-ratelimit-remaining-tokens': '5854', 'x-ratelimit-reset-requests': '11m7.073s', 'x-ratelimit-reset-tokens': '1.46s', 'x-request-id': 'req_01jgzr7wk2fj4t947t4kebbswa', 'set-cookie': '__cf_bm=lv2lXty1V7nz9B_wdo37qK3FurCLvk.FGIpmBckQEAU-1736232399-1.0.1.1-BMdKqXkwNPUoJiumT0MZ.idHS6rggkzIf96Y9_Bx68KdhrwcbnCavMi.0WCbKoZ7TTICnIsyetTJYNXVoX478Q; path=/; expires=Tue, 07-Jan-25 07:16:39 GMT; domain=.groq.com; HttpOnly; Secure; SameSite=None', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:46:39,155 INFO Determined diagram type: classdiagram
+2025-01-07 11:46:39,155 DEBUG Sending request to Groq model
+2025-01-07 11:46:39,162 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': "You are an expert in creating complex and professional Mermaid diagrams. Your task is to generate a detailed Mermaid diagram based on the user's request. Follow these guidelines:\n\n    1. ALWAYS include explicit labels for ALL nodes and connections\n    2. Never leave any node or connection without a label\n    3. Use descriptive text for labels instead of placeholder text\n    4. Ensure proper syntax and indentation\n    5. Include comprehensive relationships and connections\n    6. Use Mermaid syntax version 10.9.1\n    7. Wrap the Mermaid code in triple backticks with 'mermaid' language specifier\n\n        Example format of your response:\n        ```mermaid\n        [Complex diagram code here]\n        ```\n        [Detailed explanation of the diagram]\n\n        Generate a complex and creative/professional Mermaid diagram code based on the user's request.\n\nFor class diagrams:\n            - Create a system with at least 5-6 interrelated classes\n            - Use a mix of relationships (inheritance, composition, aggregation, etc.)\n            - Include detailed attributes and methods for each class\n            - Use interfaces or abstract classes where appropriate\n            - Add multiplicities to relationships\n            - Consider using namespaces or packages to group related classes\n            \n            Example syntax:\n            ```mermaid\n            classDiagram\n            class Animal {\n                +String name\n                +int age\n                +isMammal()\n                +eat()\n            }\n            class Dog {\n                +String breed\n                +bark()\n            }\n            Animal <|-- Dog\n            class Cat {\n                +String color\n                +meow()\n            }\n            Animal <|-- Cat\n            ```\n            "}, {'role': 'user', 'content': 'Create a complex and creative classdiagram for: How would the class diagram change if we introduce a dynamic quest system with multiple branching storylines and quests that can on character skills and abilities?'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:46:39,165 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:46:39,166 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:39,167 DEBUG send_request_headers.complete
+2025-01-07 11:46:39,168 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:46:39,169 DEBUG send_request_body.complete
+2025-01-07 11:46:39,170 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:40,511 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:46:40 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1fdf27de75fdb-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'991'), (b'x-ratelimit-remaining-tokens', b'5361'), (b'x-ratelimit-reset-requests', b'12m57.174999999s'), (b'x-ratelimit-reset-tokens', b'6.383s'), (b'x-request-id', b'req_01jgzr7x0cf5zsh5gwyedj41qp'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:46:40,512 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:46:40,512 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:46:40,515 DEBUG receive_response_body.complete
+2025-01-07 11:46:40,515 DEBUG response_closed.started
+2025-01-07 11:46:40,516 DEBUG response_closed.complete
+2025-01-07 11:46:40,517 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:46:40 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1fdf27de75fdb-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '991', 'x-ratelimit-remaining-tokens': '5361', 'x-ratelimit-reset-requests': '12m57.174999999s', 'x-ratelimit-reset-tokens': '6.383s', 'x-request-id': 'req_01jgzr7x0cf5zsh5gwyedj41qp', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:46:40,519 DEBUG Received response from Groq model
+2025-01-07 11:46:40,520 INFO Successfully extracted and corrected Mermaid diagram code
+2025-01-07 11:46:40,520 INFO Generating suggested prompts for diagram type: classdiagram
+2025-01-07 11:46:40,521 DEBUG Sending request to Groq model for suggestions
+2025-01-07 11:46:40,527 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a creative Mermaid diagram expert.'}, {'role': 'user', 'content': "Based on the following user input for a classdiagram, suggest 3 complex and creative follow-up questions or diagram modifications. Focus on enhancing the diagram's complexity, adding unique features, or exploring advanced aspects of the system being modeled.\n\n        User input: How would the class diagram change if we introduce a dynamic quest system with multiple branching storylines and quests that can on character skills and abilities?\n\n        IMPORTANT: Provide ONLY the questions or suggestions, one per line. Do not include any explanations, numbering, or additional text.\n\n        Suggested questions or modifications:"}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:46:40,530 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:46:40,530 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:40,531 DEBUG send_request_headers.complete
+2025-01-07 11:46:40,531 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:46:40,533 DEBUG send_request_body.complete
+2025-01-07 11:46:40,534 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:41,012 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:46:41 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1fdfb09a65fdb-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'990'), (b'x-ratelimit-remaining-tokens', b'4501'), (b'x-ratelimit-reset-requests', b'14m22.659s'), (b'x-ratelimit-reset-tokens', b'14.983s'), (b'x-request-id', b'req_01jgzr7yacfj59ddjpeqkgfg2j'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:46:41,013 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:46:41,015 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:46:41,016 DEBUG receive_response_body.complete
+2025-01-07 11:46:41,017 DEBUG response_closed.started
+2025-01-07 11:46:41,017 DEBUG response_closed.complete
+2025-01-07 11:46:41,018 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:46:41 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1fdfb09a65fdb-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '990', 'x-ratelimit-remaining-tokens': '4501', 'x-ratelimit-reset-requests': '14m22.659s', 'x-ratelimit-reset-tokens': '14.983s', 'x-request-id': 'req_01jgzr7yacfj59ddjpeqkgfg2j', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:46:41,020 INFO Generated suggestions: ['How would the class diagram accommodate the concept of quest dependencies, where certain quests can only be unlocked after completing specific prerequisite quests or achieving particular character milestones?', "What if we introduce a reputation system, where characters' choices and actions in quests affect their standing with various factions, and this reputation influences the availability of future quests and storylines?", 'Can we model a system where quests are generated procedurally based on character attributes, such as their skill levels, equipment, and playstyle, to create a highly dynamic and personalized questing experience?']
+2025-01-07 11:46:41,021 INFO Generated Mermaid Code:
+2025-01-07 11:46:41,022 INFO 
+classDiagram
+    class QuestSystem {
+        +Map~String, Quest~> quests
+        +Map~String, Storyline~> storylines
+        +loadQuests()
+        +loadStorylines()
+    }
+    class Quest {
+        +String id
+        +String description
+        +String objective
+        +int reward
+        +checkEligibility(Character)
+        +isCompleted()
+    }
+    class Storyline {
+        +String id
+        +String description
+        +List~Quest~> quests
+        +isUnlocked()
+        +getNextQuest()
+    }
+    QuestSystem --* Quest
+    QuestSystem --* Storyline
+    class Character {
+        +String name
+        +Map~String, Skill~> skills
+        +Map~String, Ability~> abilities
+        +addQuest(Quest)
+        +checkQuestEligibility(Quest)
+    }
+    class Skill {
+        +String name
+        +int level
+        +String description
+        +improveLevel()
+    }
+    class Ability {
+        +String name
+        +String description
+        +int cooldown
+        +activateAbility()
+    }
+    Character --* Skill
+    Character --* Ability
+    Quest --* Character
+    QuestSystem <|-- BranchingStoryline
+    class BranchingStoryline {
+        +List~Quest~> branchingQuests
+        +List~String~> storyPath
+        +getNextBranchingQuest()
+        +addStoryPath()
+    }
+    Quest <|-- DynamicQuest
+    class DynamicQuest {
+        +List~Condition~> conditions
+        +int timeout
+        +String timer
+        +evaluateConditions(Character)
+        +onTimerTimeout()
+    }
+    class Condition {
+        +String type
+        +int threshold
+        +evaluate(Character)
+    }
+    DynamicQuest --* Condition
+    Character <|-- NonPlayerCharacter
+    class NonPlayerCharacter {
+        +String role
+        +List~Dialogue~> dialogues
+        +sayDialogue(Dialogue)
+    }
+    Character <|-- PlayerCharacter
+    class PlayerCharacter {
+        +String playerId
+        +String classType
+        +addPlayerSkill(Skill)
+    }
+    NonPlayerCharacter --* Dialogue
+    class Dialogue {
+        +String content
+        +List~Choice~> choices
+    }
+    Dialogue --* Choice
+    class Choice {
+        +String description
+        +Quest effect
+        +Ability trigger
+        +getEffect()
+        +getTrigger()
+    }
+2025-01-07 11:46:41,024 DEBUG Full response: {'output': 'Mermaid diagram generated and syntax-corrected successfully.', 'mermaid': 'classDiagram\n    class QuestSystem {\n        +Map~String, Quest~> quests\n        +Map~String, Storyline~> storylines\n        +loadQuests()\n        +loadStorylines()\n    }\n    class Quest {\n        +String id\n        +String description\n        +String objective\n        +int reward\n        +checkEligibility(Character)\n        +isCompleted()\n    }\n    class Storyline {\n        +String id\n        +String description\n        +List~Quest~> quests\n        +isUnlocked()\n        +getNextQuest()\n    }\n    QuestSystem --* Quest\n    QuestSystem --* Storyline\n    class Character {\n        +String name\n        +Map~String, Skill~> skills\n        +Map~String, Ability~> abilities\n        +addQuest(Quest)\n        +checkQuestEligibility(Quest)\n    }\n    class Skill {\n        +String name\n        +int level\n        +String description\n        +improveLevel()\n    }\n    class Ability {\n        +String name\n        +String description\n        +int cooldown\n        +activateAbility()\n    }\n    Character --* Skill\n    Character --* Ability\n    Quest --* Character\n    QuestSystem <|-- BranchingStoryline\n    class BranchingStoryline {\n        +List~Quest~> branchingQuests\n        +List~String~> storyPath\n        +getNextBranchingQuest()\n        +addStoryPath()\n    }\n    Quest <|-- DynamicQuest\n    class DynamicQuest {\n        +List~Condition~> conditions\n        +int timeout\n        +String timer\n        +evaluateConditions(Character)\n        +onTimerTimeout()\n    }\n    class Condition {\n        +String type\n        +int threshold\n        +evaluate(Character)\n    }\n    DynamicQuest --* Condition\n    Character <|-- NonPlayerCharacter\n    class NonPlayerCharacter {\n        +String role\n        +List~Dialogue~> dialogues\n        +sayDialogue(Dialogue)\n    }\n    Character <|-- PlayerCharacter\n    class PlayerCharacter {\n        +String playerId\n        +String classType\n        +addPlayerSkill(Skill)\n    }\n    NonPlayerCharacter --* Dialogue\n    class Dialogue {\n        +String content\n        +List~Choice~> choices\n    }\n    Dialogue --* Choice\n    class Choice {\n        +String description\n        +Quest effect\n        +Ability trigger\n        +getEffect()\n        +getTrigger()\n    }', 'suggestions': ['How would the class diagram accommodate the concept of quest dependencies, where certain quests can only be unlocked after completing specific prerequisite quests or achieving particular character milestones?', "What if we introduce a reputation system, where characters' choices and actions in quests affect their standing with various factions, and this reputation influences the availability of future quests and storylines?", 'Can we model a system where quests are generated procedurally based on character attributes, such as their skill levels, equipment, and playstyle, to create a highly dynamic and personalized questing experience?'], 'debug': {'mermaid_code': 'classDiagram\n    class QuestSystem {\n        +Map~String, Quest~> quests\n        +Map~String, Storyline~> storylines\n        +loadQuests()\n        +loadStorylines()\n    }\n    class Quest {\n        +String id\n        +String description\n        +String objective\n        +int reward\n        +checkEligibility(Character)\n        +isCompleted()\n    }\n    class Storyline {\n        +String id\n        +String description\n        +List~Quest~> quests\n        +isUnlocked()\n        +getNextQuest()\n    }\n    QuestSystem --* Quest\n    QuestSystem --* Storyline\n    class Character {\n        +String name\n        +Map~String, Skill~> skills\n        +Map~String, Ability~> abilities\n        +addQuest(Quest)\n        +checkQuestEligibility(Quest)\n    }\n    class Skill {\n        +String name\n        +int level\n        +String description\n        +improveLevel()\n    }\n    class Ability {\n        +String name\n        +String description\n        +int cooldown\n        +activateAbility()\n    }\n    Character --* Skill\n    Character --* Ability\n    Quest --* Character\n    QuestSystem <|-- BranchingStoryline\n    class BranchingStoryline {\n        +List~Quest~> branchingQuests\n        +List~String~> storyPath\n        +getNextBranchingQuest()\n        +addStoryPath()\n    }\n    Quest <|-- DynamicQuest\n    class DynamicQuest {\n        +List~Condition~> conditions\n        +int timeout\n        +String timer\n        +evaluateConditions(Character)\n        +onTimerTimeout()\n    }\n    class Condition {\n        +String type\n        +int threshold\n        +evaluate(Character)\n    }\n    DynamicQuest --* Condition\n    Character <|-- NonPlayerCharacter\n    class NonPlayerCharacter {\n        +String role\n        +List~Dialogue~> dialogues\n        +sayDialogue(Dialogue)\n    }\n    Character <|-- PlayerCharacter\n    class PlayerCharacter {\n        +String playerId\n        +String classType\n        +addPlayerSkill(Skill)\n    }\n    NonPlayerCharacter --* Dialogue\n    class Dialogue {\n        +String content\n        +List~Choice~> choices\n    }\n    Dialogue --* Choice\n    class Choice {\n        +String description\n        +Quest effect\n        +Ability trigger\n        +getEffect()\n        +getTrigger()\n    }'}}
+2025-01-07 11:46:41,027 INFO 127.0.0.1 - - [07/Jan/2025 11:46:41] "POST /query HTTP/1.1" 200 -
+2025-01-07 11:46:48,262 INFO 127.0.0.1 - - [07/Jan/2025 11:46:48] "OPTIONS /query HTTP/1.1" 200 -
+2025-01-07 11:46:48,582 INFO Generating Mermaid diagram for input: Can we model a system where quests are generated procedurally based on character attributes, such as their skill levels, equipment, and playstyle, to create a highly dynamic and personalized questing experience?
+2025-01-07 11:46:48,583 INFO Starting Mermaid diagram generation process
+2025-01-07 11:46:48,587 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'user', 'content': 'Based on the following user input, determine the most appropriate Mermaid diagram type:\n        User input: Can we model a system where quests are generated procedurally based on character attributes, such as their skill levels, equipment, and playstyle, to create a highly dynamic and personalized questing experience?\n        \n         Possible diagram types:\n        1. flowchart\n        2. sequenceDiagram\n        3. classDiagram\n        4. stateDiagram-v2\n        5. erDiagram\n        6. quadrantChart\n        7. mindmap\n        8. gantt\n        \n        Respond with ONLY the diagram type name, nothing else.'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:46:48,588 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:46:48,589 DEBUG close.started
+2025-01-07 11:46:48,589 DEBUG close.complete
+2025-01-07 11:46:48,589 DEBUG connect_tcp.started host='api.groq.com' port=443 local_address=None timeout=None socket_options=None
+2025-01-07 11:46:48,705 DEBUG connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E503E6510>
+2025-01-07 11:46:48,706 DEBUG start_tls.started ssl_context=<ssl.SSLContext object at 0x0000028E500FBBF0> server_hostname='api.groq.com' timeout=None
+2025-01-07 11:46:48,834 DEBUG start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000028E503E5C90>
+2025-01-07 11:46:48,835 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:48,835 DEBUG send_request_headers.complete
+2025-01-07 11:46:48,837 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:46:48,838 DEBUG send_request_body.complete
+2025-01-07 11:46:48,838 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:49,237 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:46:49 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1fe2f0bc06017-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'989'), (b'x-ratelimit-remaining-tokens', b'5091'), (b'x-ratelimit-reset-requests', b'15m42.078999999s'), (b'x-ratelimit-reset-tokens', b'9.085s'), (b'x-request-id', b'req_01jgzr86eee40a0b66whvrk47y'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:46:49,238 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:46:49,238 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:46:49,239 DEBUG receive_response_body.complete
+2025-01-07 11:46:49,239 DEBUG response_closed.started
+2025-01-07 11:46:49,239 DEBUG response_closed.complete
+2025-01-07 11:46:49,241 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:46:49 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1fe2f0bc06017-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '989', 'x-ratelimit-remaining-tokens': '5091', 'x-ratelimit-reset-requests': '15m42.078999999s', 'x-ratelimit-reset-tokens': '9.085s', 'x-request-id': 'req_01jgzr86eee40a0b66whvrk47y', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:46:49,242 INFO Determined diagram type: flowchart
+2025-01-07 11:46:49,242 DEBUG Sending request to Groq model
+2025-01-07 11:46:49,246 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': "You are an expert in creating complex and professional Mermaid diagrams. Your task is to generate a detailed Mermaid diagram based on the user's request. Follow these guidelines:\n\n    1. ALWAYS include explicit labels for ALL nodes and connections\n    2. Never leave any node or connection without a label\n    3. Use descriptive text for labels instead of placeholder text\n    4. Ensure proper syntax and indentation\n    5. Include comprehensive relationships and connections\n    6. Use Mermaid syntax version 10.9.1\n    7. Wrap the Mermaid code in triple backticks with 'mermaid' language specifier\n\n        Example format of your response:\n        ```mermaid\n        [Complex diagram code here]\n        ```\n        [Detailed explanation of the diagram]\n\n        Generate a complex and creative/professional Mermaid diagram code based on the user's request.\n\nFor flowcharts:\n            - Use a mix of node shapes (rectangles, diamonds, circles, etc.)\n            - Include multiple decision points and parallel processes\n            - Use subgraphs to group related processes\n            - Add labels to edges for clarity\n            - Consider including error handling or alternative paths\n            \n            Example syntax:\n            ```mermaid\n            flowchart TD\n            A((Start)) --> B[Process]\n            B --> C{Decision?}\n            C -->|Yes| D[Do something]\n            C -->|No| E[Do something else]\n            subgraph SubProcess\n                D --> F[End]\n            end\n            F --> G[Final End]\n            ```\n            "}, {'role': 'user', 'content': 'Create a complex and creative flowchart for: Can we model a system where quests are generated procedurally based on character attributes, such as their skill levels, equipment, and playstyle, to create a highly dynamic and personalized questing experience?'}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:46:49,247 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:46:49,248 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:49,248 DEBUG send_request_headers.complete
+2025-01-07 11:46:49,249 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:46:49,249 DEBUG send_request_body.complete
+2025-01-07 11:46:49,249 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:50,224 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:46:50 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1fe319e636017-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'988'), (b'x-ratelimit-remaining-tokens', b'4652'), (b'x-ratelimit-reset-requests', b'17m16.389999999s'), (b'x-ratelimit-reset-tokens', b'13.476999999s'), (b'x-request-id', b'req_01jgzr86v5f3xtfj86pvd9naev'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:46:50,225 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:46:50,226 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:46:50,227 DEBUG receive_response_body.complete
+2025-01-07 11:46:50,227 DEBUG response_closed.started
+2025-01-07 11:46:50,228 DEBUG response_closed.complete
+2025-01-07 11:46:50,230 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:46:50 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1fe319e636017-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '988', 'x-ratelimit-remaining-tokens': '4652', 'x-ratelimit-reset-requests': '17m16.389999999s', 'x-ratelimit-reset-tokens': '13.476999999s', 'x-request-id': 'req_01jgzr86v5f3xtfj86pvd9naev', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:46:50,232 DEBUG Received response from Groq model
+2025-01-07 11:46:50,233 INFO Successfully extracted and corrected Mermaid diagram code
+2025-01-07 11:46:50,234 INFO Generating suggested prompts for diagram type: flowchart
+2025-01-07 11:46:50,235 DEBUG Sending request to Groq model for suggestions
+2025-01-07 11:46:50,239 DEBUG Request options: {'method': 'post', 'url': '/openai/v1/chat/completions', 'files': None, 'json_data': {'messages': [{'role': 'system', 'content': 'You are a creative Mermaid diagram expert.'}, {'role': 'user', 'content': "Based on the following user input for a flowchart, suggest 3 complex and creative follow-up questions or diagram modifications. Focus on enhancing the diagram's complexity, adding unique features, or exploring advanced aspects of the system being modeled.\n\n        User input: Can we model a system where quests are generated procedurally based on character attributes, such as their skill levels, equipment, and playstyle, to create a highly dynamic and personalized questing experience?\n\n        IMPORTANT: Provide ONLY the questions or suggestions, one per line. Do not include any explanations, numbering, or additional text.\n\n        Suggested questions or modifications:"}], 'model': 'llama-3.3-70b-specdec', 'n': 1, 'stop': None, 'stream': False, 'temperature': 0.7}}
+2025-01-07 11:46:50,241 DEBUG Sending HTTP Request: POST https://api.groq.com/openai/v1/chat/completions
+2025-01-07 11:46:50,243 DEBUG send_request_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:50,244 DEBUG send_request_headers.complete
+2025-01-07 11:46:50,245 DEBUG send_request_body.started request=<Request [b'POST']>
+2025-01-07 11:46:50,246 DEBUG send_request_body.complete
+2025-01-07 11:46:50,246 DEBUG receive_response_headers.started request=<Request [b'POST']>
+2025-01-07 11:46:50,768 DEBUG receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Date', b'Tue, 07 Jan 2025 06:46:51 GMT'), (b'Content-Type', b'application/json'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'CF-Ray', b'8fe1fe37cdba6017-SIN'), (b'CF-Cache-Status', b'DYNAMIC'), (b'Cache-Control', b'private, max-age=0, no-store, no-cache, must-revalidate'), (b'Vary', b'Origin, Accept-Encoding'), (b'Via', b'1.1 google'), (b'alt-svc', b'h3=":443"; ma=86400'), (b'x-groq-region', b'us-west-1'), (b'x-ratelimit-limit-requests', b'1000'), (b'x-ratelimit-limit-tokens', b'6000'), (b'x-ratelimit-remaining-requests', b'987'), (b'x-ratelimit-remaining-tokens', b'3744'), (b'x-ratelimit-reset-requests', b'18m42.2s'), (b'x-ratelimit-reset-tokens', b'22.557s'), (b'x-request-id', b'req_01jgzr87tff2595xr1yzrscfak'), (b'Server', b'cloudflare'), (b'Content-Encoding', b'gzip')])
+2025-01-07 11:46:50,770 INFO HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-07 11:46:50,771 DEBUG receive_response_body.started request=<Request [b'POST']>
+2025-01-07 11:46:50,772 DEBUG receive_response_body.complete
+2025-01-07 11:46:50,772 DEBUG response_closed.started
+2025-01-07 11:46:50,773 DEBUG response_closed.complete
+2025-01-07 11:46:50,774 DEBUG HTTP Response: POST https://api.groq.com/openai/v1/chat/completions "200 OK" Headers({'date': 'Tue, 07 Jan 2025 06:46:51 GMT', 'content-type': 'application/json', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'cf-ray': '8fe1fe37cdba6017-SIN', 'cf-cache-status': 'DYNAMIC', 'cache-control': 'private, max-age=0, no-store, no-cache, must-revalidate', 'vary': 'Origin, Accept-Encoding', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=86400', 'x-groq-region': 'us-west-1', 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-requests': '987', 'x-ratelimit-remaining-tokens': '3744', 'x-ratelimit-reset-requests': '18m42.2s', 'x-ratelimit-reset-tokens': '22.557s', 'x-request-id': 'req_01jgzr87tff2595xr1yzrscfak', 'server': 'cloudflare', 'content-encoding': 'gzip'})
+2025-01-07 11:46:50,777 INFO Generated suggestions: ["How can we incorporate a feedback loop that allows the system to adjust quest difficulty and rewards based on the player's performance and progression over time?", 'Can we add a layer of emergent narrative by introducing quest-giver NPCs with their own agendas, motivations, and relationships that influence the types of quests they offer and the storylines that unfold?', "What if we integrated a reputation system where the player's actions and choices in completing quests affect their standing with various factions, leading to unique quest opportunities, alliances, or even rivalries that shape the game world?"]
+2025-01-07 11:46:50,778 INFO Generated Mermaid Code:
+2025-01-07 11:46:50,779 INFO 
+flowchart TD
+    A((Start)) --> B[Load Character Data]
+    B --> C{Has Character Completed Quests Before?}
+    C -->|Yes| D[Retrieve Character's Quest History]
+    C -->|No| E[Generate Initial Quest Pool]
+    D --> E
+    E --> F[Filter Quests Based on Character Attributes]
+    F --> G{Does Quest Meet Character's Skill Level?}
+    G -->|Yes| H[Check Equipment Requirements]
+    G -->|No| I[Generate New Quest with Suitable Difficulty]
+    H --> J{Does Character Have Required Equipment?}
+    J -->|Yes| K[Check Playstyle Compatibility]
+    J -->|No| L[Generate Alternative Quest with Lower Equipment Requirements]
+    K --> M{Is Quest Compatible with Character's Playstyle?}
+    M -->|Yes| N[Add Quest to Available Quest Pool]
+    M -->|No| O[Generate New Quest with Compatible Playstyle]
+    I --> N
+    L --> N
+    O --> N
+    N --> P[Sort and Prioritize Available Quests]
+    P --> Q[Select Top Quest Based on Character's Preferences]
+    Q --> R[Present Quest to Character]
+    R --> S{Has Character Accepted the Quest?}
+    S -->|Yes| T[Update Character's Quest Log]
+    S -->|No| U[Generate New Quest Based on Character's Feedback]
+    T --> V[Update Character's Experience and Rewards]
+    U --> R
+    V --> W[Save Character Data and Quest History]
+    W --> X((End))
+    subgraph Character Data Loading
+        B --> BB[Load Skill Levels]
+        B --> BC[Load Equipment Data]
+        B --> BD[Load Playstyle Preferences]
+    end
+    subgraph Quest Generation and Filtering
+        E --> EE[Generate Quest Templates]
+        E --> EF[Apply Randomization to Quest Templates]
+        F --> FF[Apply Character Attribute Filters]
+    end
+    subgraph Quest Presentation and Feedback
+        R --> RR[Present Quest Details to Character]
+        R --> RF[Get Character Feedback]
+    end
+2025-01-07 11:46:50,781 DEBUG Full response: {'output': 'Mermaid diagram generated and syntax-corrected successfully.', 'mermaid': "flowchart TD\n    A((Start)) --> B[Load Character Data]\n    B --> C{Has Character Completed Quests Before?}\n    C -->|Yes| D[Retrieve Character's Quest History]\n    C -->|No| E[Generate Initial Quest Pool]\n    D --> E\n    E --> F[Filter Quests Based on Character Attributes]\n    F --> G{Does Quest Meet Character's Skill Level?}\n    G -->|Yes| H[Check Equipment Requirements]\n    G -->|No| I[Generate New Quest with Suitable Difficulty]\n    H --> J{Does Character Have Required Equipment?}\n    J -->|Yes| K[Check Playstyle Compatibility]\n    J -->|No| L[Generate Alternative Quest with Lower Equipment Requirements]\n    K --> M{Is Quest Compatible with Character's Playstyle?}\n    M -->|Yes| N[Add Quest to Available Quest Pool]\n    M -->|No| O[Generate New Quest with Compatible Playstyle]\n    I --> N\n    L --> N\n    O --> N\n    N --> P[Sort and Prioritize Available Quests]\n    P --> Q[Select Top Quest Based on Character's Preferences]\n    Q --> R[Present Quest to Character]\n    R --> S{Has Character Accepted the Quest?}\n    S -->|Yes| T[Update Character's Quest Log]\n    S -->|No| U[Generate New Quest Based on Character's Feedback]\n    T --> V[Update Character's Experience and Rewards]\n    U --> R\n    V --> W[Save Character Data and Quest History]\n    W --> X((End))\n    subgraph Character Data Loading\n        B --> BB[Load Skill Levels]\n        B --> BC[Load Equipment Data]\n        B --> BD[Load Playstyle Preferences]\n    end\n    subgraph Quest Generation and Filtering\n        E --> EE[Generate Quest Templates]\n        E --> EF[Apply Randomization to Quest Templates]\n        F --> FF[Apply Character Attribute Filters]\n    end\n    subgraph Quest Presentation and Feedback\n        R --> RR[Present Quest Details to Character]\n        R --> RF[Get Character Feedback]\n    end", 'suggestions': ["How can we incorporate a feedback loop that allows the system to adjust quest difficulty and rewards based on the player's performance and progression over time?", 'Can we add a layer of emergent narrative by introducing quest-giver NPCs with their own agendas, motivations, and relationships that influence the types of quests they offer and the storylines that unfold?', "What if we integrated a reputation system where the player's actions and choices in completing quests affect their standing with various factions, leading to unique quest opportunities, alliances, or even rivalries that shape the game world?"], 'debug': {'mermaid_code': "flowchart TD\n    A((Start)) --> B[Load Character Data]\n    B --> C{Has Character Completed Quests Before?}\n    C -->|Yes| D[Retrieve Character's Quest History]\n    C -->|No| E[Generate Initial Quest Pool]\n    D --> E\n    E --> F[Filter Quests Based on Character Attributes]\n    F --> G{Does Quest Meet Character's Skill Level?}\n    G -->|Yes| H[Check Equipment Requirements]\n    G -->|No| I[Generate New Quest with Suitable Difficulty]\n    H --> J{Does Character Have Required Equipment?}\n    J -->|Yes| K[Check Playstyle Compatibility]\n    J -->|No| L[Generate Alternative Quest with Lower Equipment Requirements]\n    K --> M{Is Quest Compatible with Character's Playstyle?}\n    M -->|Yes| N[Add Quest to Available Quest Pool]\n    M -->|No| O[Generate New Quest with Compatible Playstyle]\n    I --> N\n    L --> N\n    O --> N\n    N --> P[Sort and Prioritize Available Quests]\n    P --> Q[Select Top Quest Based on Character's Preferences]\n    Q --> R[Present Quest to Character]\n    R --> S{Has Character Accepted the Quest?}\n    S -->|Yes| T[Update Character's Quest Log]\n    S -->|No| U[Generate New Quest Based on Character's Feedback]\n    T --> V[Update Character's Experience and Rewards]\n    U --> R\n    V --> W[Save Character Data and Quest History]\n    W --> X((End))\n    subgraph Character Data Loading\n        B --> BB[Load Skill Levels]\n        B --> BC[Load Equipment Data]\n        B --> BD[Load Playstyle Preferences]\n    end\n    subgraph Quest Generation and Filtering\n        E --> EE[Generate Quest Templates]\n        E --> EF[Apply Randomization to Quest Templates]\n        F --> FF[Apply Character Attribute Filters]\n    end\n    subgraph Quest Presentation and Feedback\n        R --> RR[Present Quest Details to Character]\n        R --> RF[Get Character Feedback]\n    end"}}
+2025-01-07 11:46:50,783 INFO 127.0.0.1 - - [07/Jan/2025 11:46:50] "POST /query HTTP/1.1" 200 -
