@@ -93,29 +93,94 @@ const MermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
   const mermaidRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    import('mermaid')
-      .then(({ default: mermaid }) => {
-        mermaid.initialize({ startOnLoad: true });
+    // Create a self-executing async function to handle the initialization and rendering
+    (async () => {
+      try {
+        // First, import the mermaid library
+        const mermaid = (await import('mermaid')).default;
+        
+        // Initialize mermaid with specific settings for class diagrams
+        mermaid.initialize({
+          startOnLoad: true,
+          theme: 'default',
+          logLevel: 'error',
+          securityLevel: 'loose',
+          classDiagram: {
+            useMaxWidth: true,
+            diagramPadding: 8,
+            htmlLabels: true,
+          },
+          flowchart: {
+            htmlLabels: true,
+            curve: 'basis',
+          }
+        });
+
+        // Clear the previous content if any
         if (mermaidRef.current) {
+          mermaidRef.current.innerHTML = '';
+          
+          // Create the diagram container
+          const diagramContainer = document.createElement('div');
+          diagramContainer.className = 'mermaid';
+          diagramContainer.innerHTML = chart;
+          mermaidRef.current.appendChild(diagramContainer);
+
+          // Use mermaidAPI to render the diagram
           try {
-            mermaid.contentLoaded();
-          } catch (error) {
-            console.error('Mermaid rendering error:', error);
-            if (mermaidRef.current) {
-              mermaidRef.current.innerHTML = 'Error rendering diagram.';
-            }
+            await mermaid.contentLoaded();
+            
+            // Add some delay to ensure proper rendering
+            setTimeout(() => {
+              const svg = mermaidRef.current?.querySelector('svg');
+              if (svg) {
+                // Apply styling to the SVG
+                svg.style.maxWidth = '100%';
+                svg.style.height = 'auto';
+                svg.style.backgroundColor = 'white';
+                // Make sure the SVG renders with proper dimensions
+                svg.setAttribute('width', '100%');
+                svg.setAttribute('height', 'auto');
+              }
+            }, 100);
+          } catch (renderError) {
+            console.error('Mermaid rendering error:', renderError);
+            throw renderError;
           }
         }
-      })
-      .catch((error) => {
-        console.error('Failed to load mermaid:', error);
-      });
-  }, [chart]);
+      } catch (error) {
+        console.error('Mermaid initialization error:', error);
+        // Show error message with the original code for debugging
+        if (mermaidRef.current) {
+          mermaidRef.current.innerHTML = `
+            <div class="p-4">
+              <div class="text-red-500 font-bold mb-2">Error rendering diagram</div>
+              <pre class="bg-gray-100 p-4 rounded-lg overflow-auto text-sm">
+                ${chart.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+              </pre>
+            </div>
+          `;
+        }
+      }
+    })();
+
+    // Cleanup function
+    return () => {
+      if (mermaidRef.current) {
+        mermaidRef.current.innerHTML = '';
+      }
+    };
+  }, [chart]); // Only re-run if the chart content changes
 
   return (
-    <div className="mermaid w-full overflow-x-auto" ref={mermaidRef}>
-      {chart}
-    </div>
+    <div 
+      ref={mermaidRef}
+      className="w-full overflow-x-auto bg-white rounded-lg shadow-sm"
+      style={{
+        minHeight: '200px',
+        padding: '1rem',
+      }}
+    />
   );
 };
 
@@ -553,6 +618,7 @@ export default function ChatSection() {
     }
 
     if (message.type === 'mermaid' && message.mermaidCode) {
+      console.log('Rendering Mermaid diagram:', message.mermaidCode);
       return <MermaidDiagram chart={message.mermaidCode} />;
     }
 

@@ -68,13 +68,13 @@ class ImprovedMermaidGenerator:
     def _get_diagram_instructions(self, diagram_type):
         base_instructions = """You are an expert in creating complex and professional Mermaid diagrams. Your task is to generate a detailed Mermaid diagram based on the user's request. Follow these guidelines:
 
-        1. Use the appropriate Mermaid syntax for the determined diagram type.
-        2. Create a comprehensive diagram with multiple elements and relationships.
-        3. Include creative/professional elements that go beyond basic representations.
-        4. Ensure the diagram is properly formatted and syntactically correct.
-        5. Use Mermaid syntax version 10.9.1.
-        6. Wrap the Mermaid code in triple backticks with 'mermaid' language specifier.
-        7. After the diagram code, provide a detailed explanation of the diagram.
+    1. ALWAYS include explicit labels for ALL nodes and connections
+    2. Never leave any node or connection without a label
+    3. Use descriptive text for labels instead of placeholder text
+    4. Ensure proper syntax and indentation
+    5. Include comprehensive relationships and connections
+    6. Use Mermaid syntax version 10.9.1
+    7. Wrap the Mermaid code in triple backticks with 'mermaid' language specifier
 
         Example format of your response:
         ```mermaid
