@@ -34,6 +34,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -91,96 +98,142 @@ interface FilePreview {
 // Mermaid Diagram Component
 const MermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
   const mermaidRef = useRef<HTMLDivElement>(null);
+  const dialogMermaidRef = useRef<HTMLDivElement>(null);
+  const [showDialog, setShowDialog] = useState(false);
 
+  // This function handles the Mermaid rendering logic for any container
+  const renderMermaidDiagram = async (container: HTMLDivElement, content: string) => {
+    try {
+      const mermaid = (await import('mermaid')).default;
+      
+      // Initialize Mermaid with our preferred settings
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: 'default',
+        logLevel: 'error',
+        securityLevel: 'loose',
+        classDiagram: {
+          useMaxWidth: true,
+          diagramPadding: 8,
+          htmlLabels: true,
+        },
+        flowchart: {
+          htmlLabels: true,
+          curve: 'basis',
+        }
+      });
+
+      // Clear existing content
+      container.innerHTML = '';
+      
+      // Create and set up the diagram container
+      const diagramContainer = document.createElement('div');
+      diagramContainer.className = 'mermaid';
+      diagramContainer.innerHTML = content;
+      container.appendChild(diagramContainer);
+
+      // Render the diagram
+      await mermaid.contentLoaded();
+
+      // Add styling to the generated SVG
+      const svg = container.querySelector('svg');
+      if (svg) {
+        svg.style.maxWidth = '100%';
+        svg.style.height = 'auto';
+        svg.style.backgroundColor = 'white';
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', 'auto');
+      }
+    } catch (error) {
+      console.error('Mermaid rendering error:', error);
+      container.innerHTML = `
+        <div class="p-4">
+          <div class="text-red-500 font-bold mb-2">Error rendering diagram</div>
+          <pre class="bg-gray-100 p-4 rounded-lg overflow-auto text-sm">
+            ${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+          </pre>
+        </div>
+      `;
+    }
+  };
+
+  // Effect for the main diagram
   useEffect(() => {
-    // Create a self-executing async function to handle the initialization and rendering
-    (async () => {
-      try {
-        // First, import the mermaid library
-        const mermaid = (await import('mermaid')).default;
-        
-        // Initialize mermaid with specific settings for class diagrams
-        mermaid.initialize({
-          startOnLoad: true,
-          theme: 'default',
-          logLevel: 'error',
-          securityLevel: 'loose',
-          classDiagram: {
-            useMaxWidth: true,
-            diagramPadding: 8,
-            htmlLabels: true,
-          },
-          flowchart: {
-            htmlLabels: true,
-            curve: 'basis',
-          }
-        });
+    if (mermaidRef.current) {
+      renderMermaidDiagram(mermaidRef.current, chart);
+    }
+  }, [chart]);
 
-        // Clear the previous content if any
-        if (mermaidRef.current) {
-          mermaidRef.current.innerHTML = '';
-          
-          // Create the diagram container
-          const diagramContainer = document.createElement('div');
-          diagramContainer.className = 'mermaid';
-          diagramContainer.innerHTML = chart;
-          mermaidRef.current.appendChild(diagramContainer);
+  // Effect for the dialog diagram
+  useEffect(() => {
+    if (showDialog && dialogMermaidRef.current) {
+      renderMermaidDiagram(dialogMermaidRef.current, chart);
+    }
+  }, [showDialog, chart]);
 
-          // Use mermaidAPI to render the diagram
-          try {
-            await mermaid.contentLoaded();
-            
-            // Add some delay to ensure proper rendering
-            setTimeout(() => {
-              const svg = mermaidRef.current?.querySelector('svg');
-              if (svg) {
-                // Apply styling to the SVG
-                svg.style.maxWidth = '100%';
-                svg.style.height = 'auto';
-                svg.style.backgroundColor = 'white';
-                // Make sure the SVG renders with proper dimensions
-                svg.setAttribute('width', '100%');
-                svg.setAttribute('height', 'auto');
-              }
-            }, 100);
-          } catch (renderError) {
-            console.error('Mermaid rendering error:', renderError);
-            throw renderError;
-          }
-        }
-      } catch (error) {
-        console.error('Mermaid initialization error:', error);
-        // Show error message with the original code for debugging
-        if (mermaidRef.current) {
-          mermaidRef.current.innerHTML = `
-            <div class="p-4">
-              <div class="text-red-500 font-bold mb-2">Error rendering diagram</div>
-              <pre class="bg-gray-100 p-4 rounded-lg overflow-auto text-sm">
-                ${chart.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
-              </pre>
-            </div>
-          `;
-        }
+  const handleDownload = () => {
+    if (mermaidRef.current) {
+      const svg = mermaidRef.current.querySelector('svg');
+      if (svg) {
+        const svgData = svg.outerHTML;
+        const blob = new Blob([svgData], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'diagram.svg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       }
-    })();
-
-    // Cleanup function
-    return () => {
-      if (mermaidRef.current) {
-        mermaidRef.current.innerHTML = '';
-      }
-    };
-  }, [chart]); // Only re-run if the chart content changes
+    }
+  };
 
   return (
-    <div 
-      ref={mermaidRef}
-      className="w-full overflow-x-auto bg-white rounded-lg shadow-sm"
-      style={{
-        minHeight: '200px',
-        padding: '1rem',
-      }}
-    />
+    <>
+      {/* Main diagram container */}
+      <div 
+        ref={mermaidRef}
+        className="w-full overflow-x-auto bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
+        style={{
+          minHeight: '200px',
+          padding: '1rem',
+          cursor: 'pointer'
+        }}
+        onClick={() => setShowDialog(true)}
+      />
+
+      {/* Dialog for enlarged view */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="max-w-[90vw] w-full">
+          <DialogHeader>
+            <DialogTitle>Diagram View</DialogTitle>
+          </DialogHeader>
+          
+          {/* Diagram content in dialog */}
+          <div className="mt-4 p-4 bg-white rounded-lg overflow-auto">
+            <div ref={dialogMermaidRef} className="w-full" />
+          </div>
+          
+          {/* Dialog footer with actions */}
+          <DialogFooter className="flex justify-end space-x-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowDialog(false)}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={handleDownload}
+              className="flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Download SVG
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
