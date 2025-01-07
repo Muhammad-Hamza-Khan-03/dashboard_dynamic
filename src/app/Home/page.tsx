@@ -21,7 +21,6 @@ export default function OverviewPage() {
     { icon: <MessageSquare className="h-6 w-6" />, title: 'Chat with Data', description: 'Leverage AI for instant, conversational insights from your data.' },
     { icon: <RefreshCw className="h-6 w-6" />, title: 'Automated Data Cleaning', description: 'AI-powered data cleaning to ensure your data is accurate and ready for analysis.' },
     { icon: <GitBranch className="h-6 w-6" />, title: 'Relational Diagrams', description: 'Auto-generate relationship diagrams to visualize data connections.' },
-    { icon: <Terminal className="h-6 w-6" />, title: 'SQL Execution', description: 'Run SQL queries directly on your data for advanced analysis.' },
     { icon: <Layout className="h-6 w-6" />, title: 'Customizable Dashboards', description: 'Design analytics dashboards tailored to your specific needs and preferences.' },
     { icon: <Zap className="h-6 w-6" />, title: 'AI-Powered Insights', description: 'Get automated insights and trends based on your data analysis.' },
   ]
