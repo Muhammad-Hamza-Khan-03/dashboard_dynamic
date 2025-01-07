@@ -7,10 +7,14 @@ import { BarChart, PieChart, LineChart, Activity, Database, MessageSquare, Zap, 
 import Image from 'next/image'
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-
+import { Swiper, SwiperSlide } from 'swiper/react'
+import 'swiper/css'
+import 'swiper/css/pagination'
+import 'swiper/css/navigation'
+import { Pagination, Navigation } from 'swiper/modules'
 export default function OverviewPage() {
-  const [hoveredFeature, setHoveredFeature] = useState(null)
-
+  // const [hoveredFeature, setHoveredFeature] = useState(null)
+  const [currentSlide, setCurrentSlide] = useState(0);
   const features = [
     { icon: <Upload className="h-6 w-6" />, title: 'Manual Data Handling', description: 'Efficiently manage and upload your data with ease.' },
     { icon: <Database className="h-6 w-6" />, title: 'Upload Size (Up to 500MB)', description: 'Handle large datasets seamlessly, supporting files up to 500MB.' },
@@ -28,6 +32,14 @@ export default function OverviewPage() {
     { icon: <PieChart className="h-6 w-6" />, name: 'Marketing', description: 'Optimize campaigns with deep data insights and customer behavior analysis.' },
     { icon: <LineChart className="h-6 w-6" />, name: 'Retail', description: 'Analyze sales, trends, and customer behavior to boost your retail strategy.' },
   ]
+
+  const nextSlide = () => {
+    setCurrentSlide((prev) => (prev + 1) % features.length);
+  };
+
+  const prevSlide = () => {
+    setCurrentSlide((prev) => (prev - 1 + features.length) % features.length);
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-white">
@@ -65,56 +77,36 @@ export default function OverviewPage() {
           </div>
         </section>
 
-        {/* Features Section */}
-        <section className="py-24 bg-gray-50">
-          <div className="container mx-auto px-4">
-            <h2 className="text-4xl font-bold text-center mb-16 text-gray-800">Why InsightAI Dashboard?</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {features.map((feature, index) => (
-                <Card 
-                  key={index} 
-                  className="hover:shadow-xl transition-all duration-300 bg-white border-none"
-                  onMouseEnter={() => setHoveredFeature(index)}
-                  onMouseLeave={() => setHoveredFeature(null)}
-                >
-                  <CardHeader>
-                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-6 mx-auto transform transition-transform duration-300 hover:scale-110">
-                      {React.cloneElement(feature.icon, { className: "h-8 w-8 text-blue-600" })}
-                    </div>
-                    <CardTitle className="text-xl text-blue-600 text-center">{feature.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription className="text-center text-gray-600">
-                      {hoveredFeature === index ? feature.description : feature.title}
-                    </CardDescription>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* How It Works Section */}
-        <section className="py-24 bg-white">
-          <div className="container mx-auto px-4">
-            <h2 className="text-4xl font-bold text-center mb-16 text-gray-800">How InsightAI Works</h2>
-            <div className="flex flex-col md:flex-row justify-between items-center space-y-12 md:space-y-0 md:space-x-8">
-              {[
-                { icon: <Upload className="h-12 w-12 text-blue-600" />, title: "1. Upload Your Data", description: "Securely upload large datasets, including structured and unstructured formats." },
-                { icon: <Zap className="h-12 w-12 text-purple-600" />, title: "2. AI Automates Insights", description: "Clean, structure, and visualize data effortlessly with our AI-powered tools." },
-                { icon: <Layout className="h-12 w-12 text-indigo-600" />, title: "3. Create Custom Dashboards", description: "Build intuitive, actionable dashboards for data-driven decision-making." }
-              ].map((step, index) => (
-                <div key={index} className="flex-1 text-center">
-                  <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
-                    {step.icon}
+        <section className="py-24 bg-gray-50">
+      <div className="container mx-auto px-4">
+        <h2 className="text-4xl font-bold text-center mb-16 text-gray-800">Why InsightAI Dashboard?</h2>
+        <Swiper
+          slidesPerView={3} // Show 3 slides at a time
+          spaceBetween={30} // Add spacing between slides
+          navigation // Enable navigation arrows
+          pagination={{ clickable: true }} // Enable pagination dots
+          modules={[Pagination, Navigation]}
+          className="mySwiper"
+        >
+          {features.map((feature, index) => (
+            <SwiperSlide key={index}>
+              <Card className="hover:shadow-xl transition-all duration-300 bg-white border-none">
+                <CardHeader>
+                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-6 mx-auto transform transition-transform duration-300 hover:scale-110">
+                    {React.cloneElement(feature.icon, { className: "h-8 w-8 text-blue-600" })}
                   </div>
-                  <h3 className="text-2xl font-semibold mb-4 text-gray-800">{step.title}</h3>
-                  <p className="text-gray-600 leading-relaxed">{step.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+                  <CardTitle className="text-xl text-blue-600 text-center">{feature.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CardDescription className="text-center text-gray-600">{feature.description}</CardDescription>
+                </CardContent>
+              </Card>
+            </SwiperSlide>
+          ))}
+        </Swiper>
+      </div>
+    </section>
 
         {/* Use Cases/Industries Section */}
         <section className="py-24 bg-gray-50">

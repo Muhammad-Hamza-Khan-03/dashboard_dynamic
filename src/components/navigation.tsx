@@ -17,10 +17,10 @@ const routes = [
         label: "Home",
     },
 
-    // {
-    //     href: "../Home",
-    //     label: "Home-Main"
-    // },
+    {
+        href: "../Home",
+        label: "Home-Main"
+    },
     {
         href: "/upload",
         label: "Data Table"
@@ -31,10 +31,10 @@ const routes = [
         href: "/board",
         label: "Board"
     },
-    {
-        href: "/DataWorkspace",
-        label: "Data Workspace"
-    },
+    // {
+    //     href: "/DataWorkspace",
+    //     label: "Data Workspace"
+    // },
     {
         href: "/Chat",
         label: "InSightAI"

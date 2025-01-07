@@ -32,7 +32,7 @@ import {
 import FileUpload from "./fileupload";
 import FileDelete from "@/features/sqlite/components/file-delete";
 import { SplitDialog } from "./split-dialog";
-import AnalysisModal from "./data-analysis-modal-component";
+
 import DataAnalysisModal from "./data-analysis-modal-component";
 
 
@@ -41,6 +41,10 @@ const DataTable = dynamic<DataTableProps<FileData>>(() =>
   loading: () => <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-teal-500" /></div>,
   ssr: false,
 });
+
+interface ColumnOrder {
+  [key: string]: number;
+}
 
 interface TableData {
   columns: string[];
@@ -91,9 +95,6 @@ interface FileGroup {
   tables: TableInfo[];
 }
 
-interface GroupedFiles {
-  [key: string]: FileGroup;
-}
 ///////
 // Add these interfaces
 interface Sheet {
@@ -101,11 +102,6 @@ interface Sheet {
   key: string;
 }
 
-interface FileMetadata {
-  file_id: string;
-  filename: string;
-  file_type: string;
-}
 ///////
 type DataItem = FileData;
 interface PaginationInfo {
@@ -115,19 +111,6 @@ interface PaginationInfo {
   total_pages: number;
 }
 
-interface FileResponse {
-  type: 'structured' | 'unstructured';
-  file_type: string;
-  columns?: string[];
-  data?: any[];
-  content?: string;
-  editable?: boolean;
-  pagination?: PaginationInfo;
-}
-interface RowOperation {
-  type: 'create' | 'update' | 'delete';
-  data: any;
-}
 const fetchTableData = async (
   userId: string,
   fileId: string,
@@ -152,12 +135,11 @@ const DataTablePage: React.FC = () => {
   const dataRef = useRef<DataItem[]>([]);
   const { user, isLoaded: isUserLoaded } = useUser();
   const { fileList, error: fileListError, loading: fileListLoading, refetch: refetchFileList } = useFilesList(user?.id);
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  
   const [editItem, setEditItem] = useState<Partial<DataItem> | null>(null);
-  const [editIndex, setEditIndex] = useState<number | null>(null);
-  const [editField, setEditField] = useState<string | null>(null);
+ 
   const [selectedRows, setSelectedRows] = useState<Row<DataItem>[]>([]);
-  const [isAnalysisDrawerOpen, setIsAnalysisDrawerOpen] = useState(false);
+
   const [tableKey, setTableKey] = useState(0);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [tableNames, setTableNames] = useState<string[]>([]);
@@ -168,9 +150,9 @@ const DataTablePage: React.FC = () => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [currentTable, setCurrentTable] = useState<string | null>(null);
   const [tablesList, setTablesList] = useState<TableInfo[]>([]);
-  const [groupedFiles, setGroupedFiles] = useState<GroupedFiles>({});
-  const [selectedBaseName, setSelectedBaseName] = useState<string | null>(null);
-  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
+  
+  const [columnOrder, setColumnOrder] = useState<ColumnOrder>({});
+  const [focusedField, setFocusedField] = useState<string>('');
   const [editSheetOpen, setEditSheetOpen] = useState(false);
   const [activeRow, setActiveRow] = useState<{
     data: any;
@@ -263,77 +245,10 @@ const resetState = () => {
   }, [user?.id, selectedTable]);
 
   // Helper function to parse CSV content
-  const parseCSVContent = (content: string): DataItem[] => {
-    const lines = content.trim().split('\n');
-    if (lines.length === 0) return [];
 
-    const headers = lines[0].split(',').map(header => header.trim());
 
-    return lines.slice(1).map(line => {
-      const values = line.split(',');
-      const row: DataItem = {};
-
-      headers.forEach((header, index) => {
-        let value = values[index]?.trim() || '';
-
-        // Try to parse numbers
-        if (!isNaN(Number(value))) {
-          row[header] = Number(value);
-        } else {
-          row[header] = value;
-        }
-      });
-
-      return row;
-    });
-  };
-
-  const handleDataLoad = useCallback((newData: any[], newColumns: any[]) => {
-    setData(newData);
-    const columnDefs = newColumns.map(col => ({
-      accessorKey: col,
-      header: col,
-      cell: ({ row }: {
-        row: {
-          getValue: (col: any) => any;
-          index: number;
-        }
-      }) => {
-        const value = row.getValue(col);
-        return (
-          <div className="flex items-center justify-between">
-            <span>{formatCellValue(value)}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleEdit(row.index, col, formatCellValue(value))}
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-          </div>
-        );
-      },
-    }));
-    setColumns(columnDefs);
-  }, []);
-
-  const handleViewerError = useCallback((error: string) => {
-    setError(error);
-    toast({
-      title: "Error",
-      description: error,
-      variant: "destructive",
-    });
-  }, []);
 
   // Helper function to parse text content
-  const parseTextContent = (content: string): DataItem[] => {
-    const lines = content.trim().split('\n');
-    return lines.map((line, index) => ({
-      line: index + 1,
-      content: line.trim()
-    }));
-  };
   ///////////////////////////////////////////////////////////////////////////////////
   useEffect(() => {
     const loadTableData = async () => {
@@ -367,10 +282,6 @@ const resetState = () => {
     }
   }, [selectedFile, currentTable, currentPage, user?.id]);
 
-  const handleTableChange = (tableName: string) => {
-    setCurrentTable(tableName);
-    setCurrentPage(1);
-  };
   useEffect(() => {
     if (isUserLoaded && user && selectedFile) {
       fetchFileData(selectedFile.file_id, selectedFile.filename);
@@ -422,30 +333,6 @@ const resetState = () => {
     }
   }, [selectedFile, fetchTableNames]);
 
-  const parseFileData = (fileData: string, filename: string): FileData[] => {
-    if (!fileData) {
-      console.error("Received undefined or null fileData");
-      return [];
-    }
-
-    const fileExtension = filename.split('.').pop()?.toLowerCase();
-
-    switch (fileExtension) {
-      case 'csv':
-      case 'tsv':
-      case 'txt':
-      case 'xlsx':
-      case 'xls':
-      case 'db':
-      case 'xml':
-        return parseCSV(fileData);
-      case 'pdf':
-        return parsePDFData(fileData);
-      default:
-        console.error(`Unsupported file type: ${fileExtension}`);
-        return [];
-    }
-  };
 
   const parseCSV = (csvString: string): FileData[] => {
     const lines = csvString.trim().split('\n');
@@ -471,6 +358,15 @@ const resetState = () => {
   // Update the generateColumns function to include the cell update functionality
   // Helper function to generate columns with consistent formatting
   const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
+    // Create column order if it doesn't exist
+    if (Object.keys(columnOrder).length === 0) {
+      const order: ColumnOrder = {};
+      columns.forEach((col, index) => {
+        order[col] = index;
+      });
+      setColumnOrder(order);
+    }
+
     return columns.map(column => ({
       accessorKey: column,
       header: column,
@@ -539,27 +435,6 @@ const resetState = () => {
   };
 
   // Update the UI to include table selection when needed
-  const renderTableSelector = () => {
-    if (!tablesList || tablesList.length === 0) return null;
-
-    return (
-      <Select
-        onValueChange={setSelectedTable}
-        value={selectedTable || undefined}
-      >
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder="Select a table" />
-        </SelectTrigger>
-        <SelectContent>
-          {tablesList.map(table => (
-            <SelectItem key={table.id} value={table.id}>
-              {table.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    );
-  };
 
   // Add this JSX for rendering unstructured content editor
   const renderUnstructuredContent = () => {
@@ -648,7 +523,6 @@ const resetState = () => {
     console.log("Edit request:", { index, field, value });
     console.log("Current data state at edit time:", dataRef.current);
 
-    // Check data from ref instead of state
     if (!dataRef.current || dataRef.current.length === 0) {
       console.error("No data available in ref");
       toast({
@@ -672,6 +546,7 @@ const resetState = () => {
     const currentRow = dataRef.current[index];
     console.log("Found row data:", currentRow);
 
+    setFocusedField(field);
     setActiveRow({
       data: { ...currentRow },
       index,
@@ -679,7 +554,6 @@ const resetState = () => {
       value
     });
 
-    // Force sheet to open in next tick to ensure state is updated
     setTimeout(() => {
       setEditSheetOpen(true);
     }, 0);
@@ -866,81 +740,7 @@ const handleDelete = async () => {
 };
 
   // Add this utility function to help with data validation
-  const isValidData = (data: any): boolean => {
-    if (!data || typeof data !== 'object') return false;
-    // Add any additional validation as needed
-    return true;
-  };
 
-  // Add this function to handle cell updates
-  // const handleCellUpdate = async (rowIndex: number, field: string, value: any) => {
-  //   if (!user || !selectedFile) return;
-
-  //   const currentRow = data[rowIndex];
-  //   const updatedData = {
-  //     ...currentRow,
-  //     [field]: value,
-  //     row_id: rowIndex + 1
-  //   };
-
-  //   try {
-  //     const response = await axios.put(
-  //       `http://localhost:5000/row/${user.id}/${selectedFile.file_id}`,
-  //       updatedData
-  //     );
-
-  //     if (response.data) {
-  //       setData(prevData => 
-  //         prevData.map((item, index) => 
-  //           index === rowIndex ? response.data.data : item
-  //         )
-  //       );
-
-  //       toast({
-  //         title: "Success",
-  //         description: "Cell updated successfully",
-  //       });
-  //     }
-  //   } catch (error) {
-  //     console.error("Failed to update cell:", error);
-  //     toast({
-  //       title: "Error",
-  //       description: "Failed to update cell. Please try again.",
-  //       variant: "destructive",
-  //     });
-  //   }
-  // };
-  const handleSave = async () => {
-    if (!user || !selectedFile) {
-      toast({
-        title: "Error",
-        description: "User not authenticated or no file selected",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await axios.post(`http://localhost:5000/update_blob/${user.id}/${selectedFile}`, {
-        newContent: data,
-      });
-
-      toast({
-        title: "Success",
-        description: "File content updated successfully",
-      });
-    } catch (error) {
-      console.error("Error updating file content:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update file content. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleReset = () => {
     setTableKey(prevKey => prevKey + 1);
@@ -981,32 +781,51 @@ const handleDelete = async () => {
       </div>
     );
   }
-  const renderEditForm = () => (
-    <div className="grid gap-4 py-4">
-      {editItem && (
-        Object.entries(editItem)
-          .filter(([key]) => key !== 'id' && key !== 'rowId') // Exclude any internal fields
-          .map(([key, value]) => (
-            <div key={key} className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor={key} className="text-right">
-                {key}
-              </Label>
-              <Input
-                id={key}
-                value={value as string}
-                onChange={(e) => {
-                  setEditItem(prev => ({
-                    ...prev!,
-                    [key]: e.target.value
-                  }));
-                }}
-                className="col-span-3"
-              />
-            </div>
-          ))
-      )}
-    </div>
-  );
+  const renderEditForm = () => {
+    if (!activeRow) return null;
+
+    // Sort fields based on column order
+    const sortedFields = Object.entries(activeRow.data)
+      .filter(([key]) => key !== 'id' && key !== 'rowId')
+      .sort(([keyA], [keyB]) => {
+        const orderA = columnOrder[keyA] ?? Infinity;
+        const orderB = columnOrder[keyB] ?? Infinity;
+        return orderA - orderB;
+      });
+
+    return (
+      <div className="grid gap-4 py-4">
+        {sortedFields.map(([key, value]) => (
+          <div key={key} className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor={key} className="text-right text-gray-700">
+              {key}
+            </Label>
+            <Input
+              id={key}
+              value={(value as string) ?? ''}
+              onChange={(e) => {
+                setActiveRow(prev => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    data: {
+                      ...prev.data,
+                      [key]: e.target.value
+                    }
+                  };
+                });
+              }}
+              className={`col-span-3 border-gray-300 focus:border-gray-500 focus:ring-gray-500 ${
+                key === focusedField ? 'ring-2 ring-gray-500' : ''
+              }`}
+              autoFocus={key === focusedField}
+              disabled={loading}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     // Main container - Adding a subtle background and better spacing
@@ -1231,6 +1050,7 @@ const handleDelete = async () => {
         onOpenChange={(open) => {
           if (!open) {
             handleSheetClose();
+            setFocusedField('');
           } else if (!activeRow) {
             toast({
               title: "Error",
@@ -1243,16 +1063,18 @@ const handleDelete = async () => {
         }}
       >
         <SheetContent className="sm:max-w-[425px] border-l border-gray-200">
+          {/* {renderEditForm()} */}
           <SheetHeader>
             <SheetTitle className="text-gray-900">
               {activeRow ? "Edit Item" : "Create New Item"}
             </SheetTitle>
+          
             <SheetDescription className="text-gray-600">
               {activeRow ? "Make changes to the item below." : "Fill in the details for the new item."}
             </SheetDescription>
           </SheetHeader>
-  
-          {activeRow ? (
+          {renderEditForm()}
+          {/* {activeRow ? (
             <div className="grid gap-4 py-4">
               {Object.entries(activeRow.data)
                 .filter(([key]) => key !== 'id' && key !== 'rowId')
@@ -1286,7 +1108,7 @@ const handleDelete = async () => {
             <div className="py-4 text-center text-gray-500">
               Loading row data...
             </div>
-          )}
+          )} */}
   
           <div className="mt-4 flex justify-end space-x-2">
             <Button
