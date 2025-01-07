@@ -610,7 +610,7 @@ def list_files(user_id):
         c.execute("""
             SELECT file_id, filename, file_type, is_structured, created_at,unique_key,parent_file_id
             FROM user_files
-            WHERE user_id = ?
+            WHERE user_id = ? 
         """, (user_id,))
         files = c.fetchall()
         file_list = [
@@ -621,7 +621,7 @@ def list_files(user_id):
                 'is_structured': bool(f[3]),
                 'created_at': f[4],
                 'unique_key': f[5]
-            } for f in files
+            } for f in files if f[2] == 'csv' or f[2] =='pdf' or f[6] is not None
         ]
         return jsonify({'files': file_list}), 200
     except Exception as e:

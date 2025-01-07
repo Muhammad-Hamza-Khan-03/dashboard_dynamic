@@ -1090,3 +1090,18 @@ Do the number of bedrooms and bathrooms in a house influence its price in relati
 How does the occupancy status of a house affect its price in different locations, considering the floor area?
 2025-01-06 12:05:02,504 DEBUG Filtered suggestions: ['What is the average floor area and price of houses in each city?', 'Do the number of bedrooms and bathrooms in a house influence its price in relation to the floor area?', 'How does the occupancy status of a house affect its price in different locations, considering the floor area?']
 2025-01-06 12:05:04,137 INFO 127.0.0.1 - - [06/Jan/2025 12:05:04] "POST /query HTTP/1.1" 200 -
+2025-01-06 12:57:41,437 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-06 12:57:41,437 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2025-01-06 12:57:41,758 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-06 12:57:41,758 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2025-01-06 12:57:42,102 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-06 12:57:42,102 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2025-01-06 12:57:42,464 DEBUG load_ssl_context verify=True cert=None trust_env=True http2=False
+2025-01-06 12:57:42,469 DEBUG load_verify_locations cafile='D:\\python3.12.5\\Lib\\site-packages\\certifi\\cacert.pem'
+2025-01-06 12:57:43,518 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:7000
+2025-01-06 12:57:43,521 INFO [33mPress CTRL+C to quit[0m
+2025-01-06 12:59:51,925 INFO 127.0.0.1 - - [06/Jan/2025 12:59:51] "POST /upload HTTP/1.1" 200 -
+2025-01-06 13:00:18,907 INFO 127.0.0.1 - - [06/Jan/2025 13:00:18] "POST /upload HTTP/1.1" 200 -
+2025-01-06 13:02:59,138 INFO 127.0.0.1 - - [06/Jan/2025 13:02:59] "POST /upload HTTP/1.1" 200 -
+2025-01-06 13:03:39,555 INFO 127.0.0.1 - - [06/Jan/2025 13:03:39] "POST /upload HTTP/1.1" 200 -
