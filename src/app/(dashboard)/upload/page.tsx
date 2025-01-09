@@ -954,7 +954,7 @@ const handleDelete = async () => {
             </Button>
             
             {/* Action Buttons - Consistent black theme */}
-            {columns.length > 0 && (
+            {/* {columns.length > 0 && (
               <SplitDialog
                 columns={columns.map(col => col.id).filter((col): col is string => col !== undefined)}
                 fileId={selectedFile?.file_id || ''}
@@ -968,7 +968,7 @@ const handleDelete = async () => {
                   });
                 }}
               />
-            )}
+            )} */}
             
             {selectedRows.length > 0 && (
               <Button

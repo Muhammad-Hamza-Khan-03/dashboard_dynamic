@@ -1,15 +1,15 @@
-#backend.py
-
-import re
+from scipy import stats
+import numpy as np
+from typing import Dict, Any
+import plotly.express as px
+import plotly.graph_objects as go
 import tempfile
 import traceback
-from flask import Flask, Response, request, send_file, jsonify
+from flask import Flask, Response, request, jsonify
 from flask_cors import CORS
 import sqlite3
 import io
-import csv
 import logging
-import openpyxl
 import pandas as pd
 import xml.etree.ElementTree as ET
 import PyPDF2
@@ -17,7 +17,6 @@ from werkzeug.utils import secure_filename
 import uuid
 import plotly.express as px
 import plotly.graph_objects as go
-import pypdf
 from pdfminer.high_level import extract_text
 from pdfminer.layout import LAParams
 import tempfile
@@ -1149,13 +1148,7 @@ def split_column(user_id, file_id):
     finally:
         conn.close()
 
-# Add these imports at the top
-from scipy import stats
-import numpy as np
-from typing import Dict, List, Any
-import plotly.express as px
-import plotly.graph_objects as go
-import json
+
 
 def calculate_basic_stats(df: pd.DataFrame) -> Dict[str, Any]:
     """Calculate basic statistics for the dataset."""
@@ -1278,74 +1271,6 @@ def generate_visualizations(df: pd.DataFrame) -> Dict[str, Any]:
         visualizations[f'{col}_distribution'] = fig.to_json()
     
     return visualizations
-
-# @app.route('/analyze/<user_id>/<file_id>', methods=['POST'])
-# def analyze_data(user_id: str, file_id: str):
-#     """Main analysis endpoint supporting different types of analysis."""
-#     try:
-#         data = request.json
-#         analysis_type = data.get('analysis_type')
-#         options = data.get('options', [])
-
-#         # Database connection and data retrieval
-#         conn = sqlite3.connect('user_files.db')
-#         cursor = conn.cursor()
-
-#         # Get file metadata and table name
-#         cursor.execute("""
-#             SELECT f.unique_key, s.table_name
-#             FROM user_files f
-#             LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
-#             WHERE f.file_id = ? AND f.user_id = ?
-#         """, (file_id, user_id))
-        
-#         result = cursor.fetchone()
-#         if not result:
-#             return jsonify({'error': 'File not found'}), 404
-
-#         _, table_name = result
-
-#         # Read data in chunks if it's a large dataset
-#         chunk_size = 100000  # Adjust based on memory constraints
-#         chunks = []
-#         for chunk in pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn, chunksize=chunk_size):
-#             chunks.append(chunk)
-#         df = pd.concat(chunks)
-
-#         response = {}
-        
-#         if analysis_type == 'basic' or 'basic' in options:
-#             response['basic'] = calculate_basic_stats(df)
-            
-#         if analysis_type == 'advanced' or 'advanced' in options:
-#             response['advanced'] = calculate_advanced_stats(df)
-            
-#         if analysis_type == 'custom':
-#             # Process each requested option
-#             for option in options:
-#                 if option in ['correlation', 'distributions', 'outliers']:
-#                     response[option] = calculate_advanced_stats(df).get(option)
-#                 elif option == 'visualizations':
-#                     response['visualizations'] = generate_visualizations(df)
-        
-#         # Add metadata about the analysis
-#         response['metadata'] = {
-#             'rows': len(df),
-#             'columns': len(df.columns),
-#             'memory_usage': df.memory_usage(deep=True).sum(),
-#             'timestamp': pd.Timestamp.now().isoformat()
-#         }
-
-#         return jsonify(response)
-
-#     except Exception as e:
-#         app.logger.error(f"Error in analysis: {str(e)}")
-#         return jsonify({'error': str(e)}), 500
-#     finally:
-#         if 'conn' in locals():
-#             conn.close()
-
-# Add these helper functions at the top of your backend.py
 def convert_numpy_types(obj):
     """Convert numpy types to Python native types for JSON serialization."""
     if isinstance(obj, np.integer):
