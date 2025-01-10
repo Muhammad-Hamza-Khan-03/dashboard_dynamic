@@ -40,7 +40,25 @@ user_files.db
 
 dataframe.pkl
 debug.log
+__pycache__/
 
-__pycache__/mixtral.cpython-39.pyc
-debug.logdebug.log
-__pycache__/mixtral.cpython-311.pyc
+# Python
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
