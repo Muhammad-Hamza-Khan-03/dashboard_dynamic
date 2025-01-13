@@ -5,7 +5,6 @@ numpy
 pandas
 matplotlib
 plotly
-# sqlite3  # This is part of Python's standard library and doesn't need to be listed.
 pdfminer.six
 python-docx
 striprtf

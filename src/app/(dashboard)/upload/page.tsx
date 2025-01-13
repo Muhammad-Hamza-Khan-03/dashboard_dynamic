@@ -90,10 +90,6 @@ interface TableInfo {
   full_name: string;
 }
 
-interface FileGroup {
-  baseFile: FileData;
-  tables: TableInfo[];
-}
 
 ///////
 // Add these interfaces
@@ -334,26 +330,7 @@ const resetState = () => {
   }, [selectedFile, fetchTableNames]);
 
 
-  const parseCSV = (csvString: string): FileData[] => {
-    const lines = csvString.trim().split('\n');
-    const headers = lines[0].split(',');
-    return lines.slice(1).map(line => {
-      const values = line.split(',');
-      const obj: FileData = {};
-      headers.forEach((header, index) => {
-        obj[header.trim()] = values[index]?.trim();
-      });
-      return obj;
-    });
-  };
 
-  const parsePDFData = (pdfData: string): FileData[] => {
-    const lines = pdfData.trim().split('\n');
-    return lines.slice(1).map(line => {
-      const [page, content] = line.split(',', 2);
-      return { page, content };
-    });
-  };
 
   // Update the generateColumns function to include the cell update functionality
   // Helper function to generate columns with consistent formatting

@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DraggableChart from './drag-chart';
 import ChartModal from './chartmodal';
-import FileSelectionPopover from './file-popover';
 
 // Interfaces
 interface Position {
