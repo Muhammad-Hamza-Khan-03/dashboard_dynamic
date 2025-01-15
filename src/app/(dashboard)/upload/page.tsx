@@ -34,6 +34,7 @@ import FileDelete from "@/features/sqlite/components/file-delete";
 import { SplitDialog } from "./split-dialog";
 
 import DataAnalysisModal from "./data-analysis-modal-component";
+import EnhancedEditForm from "./EditForm";
 
 
 const DataTable = dynamic<DataTableProps<FileData>>(() =>
@@ -329,11 +330,6 @@ const resetState = () => {
     }
   }, [selectedFile, fetchTableNames]);
 
-
-
-
-  // Update the generateColumns function to include the cell update functionality
-  // Helper function to generate columns with consistent formatting
   const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
     // Create column order if it doesn't exist
     if (Object.keys(columnOrder).length === 0) {
@@ -1050,7 +1046,13 @@ const handleDelete = async () => {
               {activeRow ? "Make changes to the item below." : "Fill in the details for the new item."}
             </SheetDescription>
           </SheetHeader>
-          {renderEditForm()}
+          <EnhancedEditForm
+    data={data}
+    activeRow={activeRow}
+    setActiveRow={setActiveRow}
+    columnOrder={columnOrder}
+    loading={loading}
+  />
           {/* {activeRow ? (
             <div className="grid gap-4 py-4">
               {Object.entries(activeRow.data)
