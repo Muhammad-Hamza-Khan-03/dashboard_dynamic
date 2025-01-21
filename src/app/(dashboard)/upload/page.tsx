@@ -569,7 +569,7 @@ const resetState = () => {
 
 
   const handleSaveItem = async () => {
-    // First, let's add comprehensive validation
+    // First, validate user authentication and file selection
     if (!user?.id) {
       toast({
         title: "Error",
@@ -578,7 +578,7 @@ const resetState = () => {
       });
       return;
     }
-
+  
     if (!selectedFile?.file_id) {
       toast({
         title: "Error",
@@ -587,7 +587,7 @@ const resetState = () => {
       });
       return;
     }
-
+  
     if (!activeRow) {
       toast({
         title: "Error",
@@ -596,24 +596,45 @@ const resetState = () => {
       });
       return;
     }
-
+  
     setLoading(true);
     try {
-      console.log("Saving item:", {
-        editItem: activeRow.data,
+      // Process the row data before sending
+      const processedData = Object.entries(activeRow.data).reduce((acc, [key, value]) => {
+        // Convert empty strings to null
+        if (value === '') {
+          acc[key] = null;
+        }
+        // Convert undefined to null
+        else if (value === undefined) {
+          acc[key] = null;
+        }
+        // Handle empty arrays
+        else if (Array.isArray(value) && value.length === 0) {
+          acc[key] = null;
+        }
+        // Keep other values as is
+        else {
+          acc[key] = value;
+        }
+        return acc;
+      }, {} as Record<string, any>);
+  
+      // Prepare the request payload
+      const payload = {
+        editItem: processedData,
         editIndex: activeRow.index
-      });
-
+      };
+  
+      console.log("Sending payload to backend:", payload);
+  
       const response = await axios.post(
         `http://localhost:5000/update-row/${user.id}/${selectedFile.file_id}`,
-        {
-          editItem: activeRow.data,
-          editIndex: activeRow.index
-        }
+        payload
       );
-
+  
       console.log("Save response:", response.data);
-
+  
       if (response.data.success) {
         // Update the data in both state and ref
         const updatedData = [...dataRef.current];
@@ -625,12 +646,12 @@ const resetState = () => {
           updatedData.push(response.data.data);
         }
         updateData(updatedData);
-
+  
         toast({
           title: "Success",
           description: activeRow.index >= 0 ? "Item updated successfully" : "Item created successfully",
         });
-
+  
         // Close the sheet and reset edit states
         setEditSheetOpen(false);
         setActiveRow(null);
@@ -647,9 +668,7 @@ const resetState = () => {
       setLoading(false);
     }
   };
-
-// In page.tsx
-
+  
 const handleDelete = async () => {
   if (!user?.id || !selectedFile?.file_id || !selectedRows.length) {
     toast({

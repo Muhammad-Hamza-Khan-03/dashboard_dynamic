@@ -364,24 +364,41 @@ def update_row(user_id, file_id):
         
         if is_structured:
             edit_item = data.get('editItem', {})
-            # Remove any empty or null values
-            edit_item = {k: v for k, v in edit_item.items() if v is not None and v != ''}
+            # Process empty or null values
+            processed_item = {}
             
-            if edit_item:
-                # Properly quote column names
+            # Get column types from the table
+            c.execute(f'PRAGMA table_info("{table_name}")')
+            columns_info = {col[1]: col[2] for col in c.fetchall()}
+            
+            for key, value in edit_item.items():
+                # Handle different SQL types appropriately
+                if value is None:
+                    processed_item[key] = None
+                else:
+                    col_type = columns_info.get(key, '').upper()
+                    if 'INT' in col_type:
+                        processed_item[key] = int(value) if value != '' else None
+                    elif 'REAL' in col_type or 'FLOAT' in col_type:
+                        processed_item[key] = float(value) if value != '' else None
+                    elif 'BOOL' in col_type:
+                        processed_item[key] = bool(value) if value != '' else None
+                    else:
+                        # For text/varchar types, empty string is kept as empty string
+                        processed_item[key] = value
+            
+            if processed_item:
                 quoted_table = f'"{table_name}"'
                 
                 if data.get('editIndex') is not None:  # Update existing row
-                    # Get the ROWID using the offset
                     row_query = f'SELECT ROWID FROM {quoted_table} LIMIT 1 OFFSET ?'
                     c.execute(row_query, (data['editIndex'],))
                     row_result = c.fetchone()
                     
                     if row_result:
                         row_id = row_result[0]
-                        # Quote all column names in the SET clause
-                        set_clause = ', '.join([f'"{k}" = ?' for k in edit_item.keys()])
-                        values = list(edit_item.values())
+                        set_clause = ', '.join([f'"{k}" = ?' for k in processed_item.keys()])
+                        values = list(processed_item.values())
                         
                         update_query = f'''
                             UPDATE {quoted_table} 
@@ -394,9 +411,8 @@ def update_row(user_id, file_id):
                         c.execute(f'SELECT * FROM {quoted_table} WHERE ROWID = ?', [row_id])
                         
                 else:  # Create new row
-                    # Quote column names in INSERT
-                    columns = [f'"{k}"' for k in edit_item.keys()]
-                    values = list(edit_item.values())
+                    columns = [f'"{k}"' for k in processed_item.keys()]
+                    values = list(processed_item.values())
                     placeholders = ','.join(['?' for _ in values])
                     
                     insert_query = f'''
@@ -420,8 +436,7 @@ def update_row(user_id, file_id):
                 else:
                     raise Exception("Failed to retrieve updated row")
             else:
-                return jsonify({'error': 'No valid data provided for update'}), 400
-            
+                return jsonify({'error': 'No valid data provided for update'}), 400            
         else:  # Unstructured data handling remains the same
             c.execute("""
                 SELECT content 
