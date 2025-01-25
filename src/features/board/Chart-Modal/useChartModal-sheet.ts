@@ -1,18 +1,18 @@
 
-import { create } from 'zustand';
+// import { create } from 'zustand';
 
-type ModalState = {
-    showModal: boolean;
-    chartType: string;
-    openModal: () => void;
-    closeModal: () => void;
-    setChartType: (type: string) => void;
-};
+// type ModalState = {
+//     showModal: boolean;
+//     chartType: string;
+//     openModal: () => void;
+//     closeModal: () => void;
+//     setChartType: (type: string) => void;
+// };
 
-export const useModalSheet = create<ModalState>((set) => ({
-    showModal: false,
-    chartType: 'line',
-    openModal: () => set({ showModal: true }),
-    closeModal: () => set({ showModal: false }),
-    setChartType: (type: string) => set({ chartType: type }),
-}));
+// export const useModalSheet = create<ModalState>((set) => ({
+//     showModal: false,
+//     chartType: 'line',
+//     openModal: () => set({ showModal: true }),
+//     closeModal: () => set({ showModal: false }),
+//     setChartType: (type: string) => set({ chartType: type }),
+// }));

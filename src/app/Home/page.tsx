@@ -3,10 +3,9 @@
 import React, { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart, PieChart, LineChart, Activity, Database, MessageSquare, Zap, Upload, RefreshCw, GitBranch, Terminal, Layout } from 'lucide-react'
+import { BarChart, PieChart, LineChart, Activity, Database, MessageSquare, Zap, Upload, RefreshCw, GitBranch, Layout } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link';
-import { useRouter } from 'next/router';
 import { Swiper, SwiperSlide } from 'swiper/react'
 import 'swiper/css'
 import 'swiper/css/pagination'

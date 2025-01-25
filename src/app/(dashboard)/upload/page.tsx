@@ -34,6 +34,7 @@ import FileDelete from "@/features/sqlite/components/file-delete";
 import { SplitDialog } from "./split-dialog";
 
 import DataAnalysisModal from "./data-analysis-modal-component";
+import EnhancedEditForm from "./EditForm";
 
 
 const DataTable = dynamic<DataTableProps<FileData>>(() =>
@@ -90,10 +91,6 @@ interface TableInfo {
   full_name: string;
 }
 
-interface FileGroup {
-  baseFile: FileData;
-  tables: TableInfo[];
-}
 
 ///////
 // Add these interfaces
@@ -333,30 +330,6 @@ const resetState = () => {
     }
   }, [selectedFile, fetchTableNames]);
 
-
-  const parseCSV = (csvString: string): FileData[] => {
-    const lines = csvString.trim().split('\n');
-    const headers = lines[0].split(',');
-    return lines.slice(1).map(line => {
-      const values = line.split(',');
-      const obj: FileData = {};
-      headers.forEach((header, index) => {
-        obj[header.trim()] = values[index]?.trim();
-      });
-      return obj;
-    });
-  };
-
-  const parsePDFData = (pdfData: string): FileData[] => {
-    const lines = pdfData.trim().split('\n');
-    return lines.slice(1).map(line => {
-      const [page, content] = line.split(',', 2);
-      return { page, content };
-    });
-  };
-
-  // Update the generateColumns function to include the cell update functionality
-  // Helper function to generate columns with consistent formatting
   const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
     // Create column order if it doesn't exist
     if (Object.keys(columnOrder).length === 0) {
@@ -1073,7 +1046,13 @@ const handleDelete = async () => {
               {activeRow ? "Make changes to the item below." : "Fill in the details for the new item."}
             </SheetDescription>
           </SheetHeader>
-          {renderEditForm()}
+          <EnhancedEditForm
+    data={data}
+    activeRow={activeRow}
+    setActiveRow={setActiveRow}
+    columnOrder={columnOrder}
+    loading={loading}
+  />
           {/* {activeRow ? (
             <div className="grid gap-4 py-4">
               {Object.entries(activeRow.data)

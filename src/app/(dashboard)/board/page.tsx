@@ -5,16 +5,13 @@ import { useUser } from '@clerk/clerk-react';
 import useFilesList from '@/features/sqlite/api/file-list';
 import { handleUseCSV } from '@/features/sqlite/api/file-content';
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, FileText, Loader, Menu, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, FileText, Loader, Menu, Plus } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DraggableChart from './drag-chart';
 import ChartModal from './chartmodal';
-import FileSelectionPopover from './file-popover';
-import Dialog from '@mui/material/Dialog';
-import { DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 // Interfaces
 interface Position {
