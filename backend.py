@@ -21,7 +21,13 @@ import os
 
 from flask_caching import Cache
 from pyecharts import options as opts
-from pyecharts.charts import Line, Bar, Pie, Scatter, Boxplot,Grid
+from pyecharts.charts import (
+    Line, Bar, Pie, Scatter, Boxplot, Grid, EffectScatter,
+    Funnel, Gauge, HeatMap, Kline, Radar, TreeMap, Surface3D,
+    Bar3D, Line3D, Scatter3D, Map, Graph, Liquid, Parallel,
+    Sankey, Sunburst
+)
+from pyecharts.commons.utils import JsCode
 import pandas as pd
 import sqlite3
 import uuid
@@ -35,7 +41,7 @@ import math
 import logging
 import json
 import time
-from typing import List, Dict, Any, Generator, Tuple
+from typing import List, Dict, Any, Generator, Tuple,Optional
 from dataclasses import dataclass
 from flask import jsonify, request
 import traceback
@@ -401,17 +407,11 @@ init_db()
 #         return chart
 
 
-class ChartGenerator:
-    """
-    Helper class to generate interactive charts using ECharts.
-    This implementation ensures compatibility with different pyecharts versions.
-    """
-    
+
+class EnhancedChartGenerator:
     @staticmethod
     def _initialize_chart(chart_type: str):
-        """
-        Initialize the appropriate chart type with proper error handling.
-        """
+        """Initialize the appropriate chart type with proper error handling."""
         chart_types = {
             'line': Line,
             'bar': Bar,
@@ -419,26 +419,44 @@ class ChartGenerator:
             'scatter': Scatter,
             'box': Boxplot,
             'histogram': Bar,
-            'segmented-bar': Bar
+            'segmented-bar': Bar,
+            'effect-scatter': EffectScatter,
+            'funnel': Funnel,
+            'gauge': Gauge,
+            'heatmap': HeatMap,
+            'kline': Kline,
+            'radar': Radar,
+            'treemap': TreeMap,
+            'surface3d': Surface3D,
+            'bar3d': Bar3D,
+            'line3d': Line3D,
+            'scatter3d': Scatter3D,
+            'map': Map,
+            'graph': Graph,
+            'liquid': Liquid,
+            'parallel': Parallel,
+            'sankey': Sankey,
+            'sunburst': Sunburst
         }
         
         if chart_type not in chart_types:
-            raise ValueError(f'Unsupported chart type: {chart_type}. Supported types are: {", ".join(chart_types.keys())}')
+            raise ValueError(f'Unsupported chart type: {chart_type}')
             
         ChartClass = chart_types[chart_type]
         return ChartClass()
 
     @staticmethod
-    def create_chart(chart_type: str, df: pd.DataFrame, selected_columns: list, options: dict = None):
-        """
-        Creates a responsive chart with the specified type and data.
-        Now uses correct parameter names for grid options and other configurations.
-        """
+    def create_chart(
+        chart_type: str,
+        df: pd.DataFrame,
+        selected_columns: list,
+        options: Optional[Dict[str, Any]] = None
+    ):
+        """Creates a responsive chart with the specified type and data."""
         try:
-            chart = ChartGenerator._initialize_chart(chart_type)
+            chart = EnhancedChartGenerator._initialize_chart(chart_type)
             options = options or {}
             
-            # Process data based on chart type
             if chart_type in ['line', 'bar', 'segmented-bar']:
                 x_data = df[selected_columns[0]].tolist()
                 chart.add_xaxis(x_data)
@@ -450,7 +468,6 @@ class ChartGenerator:
                         label_opts=opts.LabelOpts(is_show=False),
                         stack="total" if chart_type == 'segmented-bar' else None
                     )
-                    
             elif chart_type == 'histogram':
                 values = df[selected_columns[0]].dropna()
                 bin_count = options.get('binSize', 10)
@@ -482,8 +499,39 @@ class ChartGenerator:
                 data = [df[col].dropna().tolist() for col in selected_columns]
                 chart.add_xaxis(selected_columns)
                 chart.add_yaxis("Boxplot", chart.prepare_data(data))
-            
-            # Configure global options
+
+            # Process data based on chart type
+            elif chart_type in ['effect-scatter']:
+                return EnhancedChartGenerator._create_effect_scatter(df, selected_columns, options)
+            elif chart_type == 'funnel':
+                return EnhancedChartGenerator._create_funnel(df, selected_columns, options)
+            elif chart_type == 'gauge':
+                return EnhancedChartGenerator._create_gauge(df, selected_columns, options)
+            elif chart_type == 'heatmap':
+                return EnhancedChartGenerator._create_heatmap(df, selected_columns, options)
+            elif chart_type == 'kline':
+                return EnhancedChartGenerator._create_kline(df, selected_columns, options)
+            elif chart_type == 'radar':
+                return EnhancedChartGenerator._create_radar(df, selected_columns, options)
+            elif chart_type == 'treemap':
+                return EnhancedChartGenerator._create_treemap(df, selected_columns, options)
+            elif chart_type == 'surface3d':
+                return EnhancedChartGenerator._create_surface3d(df, selected_columns, options)
+            elif chart_type in ['bar3d', 'line3d', 'scatter3d']:
+                return EnhancedChartGenerator._create_3d_chart(chart_type, df, selected_columns, options)
+            elif chart_type == 'map':
+                return EnhancedChartGenerator._create_map(df, selected_columns, options)
+            elif chart_type == 'graph':
+                return EnhancedChartGenerator._create_graph(df, selected_columns, options)
+            elif chart_type == 'liquid':
+                return EnhancedChartGenerator._create_liquid(df, selected_columns, options)
+            elif chart_type == 'parallel':
+                return EnhancedChartGenerator._create_parallel(df, selected_columns, options)
+            elif chart_type == 'sankey':
+                return EnhancedChartGenerator._create_sankey(df, selected_columns, options)
+            elif chart_type == 'sunburst':
+                return EnhancedChartGenerator._create_sunburst(df, selected_columns, options)
+             # Configure global options
             chart.set_global_opts(
                 title_opts=opts.TitleOpts(
                     title="Chart Title",
@@ -520,16 +568,477 @@ class ChartGenerator:
                 grid = Grid()
                 grid.add(chart, grid_opts=options['grid_opts'])
                 return grid
-            
             return chart
             
         except Exception as e:
-            # Error logging (replace app.logger if not using Flask)
-            print(f"Error creating chart: {str(e)}")
-            print(f"Traceback: {traceback.format_exc()}")
+            logging.error(f"Error creating chart: {str(e)}")
             raise
 
+    @staticmethod
+    def _create_effect_scatter(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates an effect scatter plot with animated effects."""
+        chart = EffectScatter()
+        
+        x_data = df[selected_columns[0]].tolist()
+        y_data = df[selected_columns[1]].tolist()
+        
+        chart.add_xaxis(x_data)
+        chart.add_yaxis(
+            "",
+            y_data,
+            symbol_size=options.get('symbol_size', 10),
+            effect_opts=opts.EffectOpts(
+                brush_type="stroke",
+                scale=options.get('effect_scale', 2.5)
+            )
+        )
+        
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Effect Scatter Chart"),
+            xaxis_opts=opts.AxisOpts(type_="value"),
+            yaxis_opts=opts.AxisOpts(type_="value")
+        )
+        
+        return chart
 
+    @staticmethod
+    def _create_funnel(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a funnel chart showing stages in a process."""
+        chart = Funnel()
+        
+        data = [
+            (row[selected_columns[0]], row[selected_columns[1]])
+            for _, row in df.iterrows()
+        ]
+        
+        chart.add(
+            series_name="",
+            data_pair=data,
+            gap=options.get('gap', 2),
+            label_opts=opts.LabelOpts(position="inside")
+        )
+        
+        chart.set_global_opts(title_opts=opts.TitleOpts(title="Funnel Chart"))
+        return chart
+
+    @staticmethod
+    def _create_gauge(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a gauge chart showing a single value within a range."""
+        chart = Gauge()
+        
+        # Take the first value from the selected column
+        value = df[selected_columns[0]].iloc[0]
+        
+        chart.add(
+            series_name="",
+            data_pair=[("", value)],
+            min_=options.get('min', 0),
+            max_=options.get('max', 100)
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_heatmap(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a heatmap showing data density."""
+        chart = HeatMap()
+        
+        # Create heatmap data from selected columns
+        x_axis = df[selected_columns[0]].unique().tolist()
+        y_axis = df[selected_columns[1]].unique().tolist()
+        
+        data = [[i, j, df[
+            (df[selected_columns[0]] == x) & 
+            (df[selected_columns[1]] == y)
+        ][selected_columns[2]].mean()] 
+            for i, x in enumerate(x_axis) 
+            for j, y in enumerate(y_axis)
+        ]
+        
+        chart.add_xaxis(x_axis)
+        chart.add_yaxis(
+            "",
+            y_axis,
+            data,
+            label_opts=opts.LabelOpts(is_show=True)
+        )
+        
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Heat Map"),
+            visualmap_opts=opts.VisualMapOpts()
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_kline(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a K-line (candlestick) chart for financial data."""
+        chart = Kline()
+        
+        # Expect columns: date, open, close, low, high
+        data = [
+            [
+                row[selected_columns[1]],  # open
+                row[selected_columns[2]],  # close
+                row[selected_columns[3]],  # low
+                row[selected_columns[4]]   # high
+            ]
+            for _, row in df.iterrows()
+        ]
+        
+        chart.add_xaxis(df[selected_columns[0]].tolist())  # dates
+        chart.add_yaxis(
+            "",
+            data,
+            itemstyle_opts=opts.ItemStyleOpts(color="#ec0000", color0="#00da3c")
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_radar(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a radar chart comparing multiple variables."""
+        chart = Radar()
+        
+        # Create indicator config from columns
+        indicators = [
+            opts.RadarIndicatorItem(name=col, max_=df[col].max())
+            for col in selected_columns[1:]
+        ]
+        
+        # Prepare data for each category
+        categories = df[selected_columns[0]].unique()
+        data = []
+        for category in categories:
+            category_data = df[df[selected_columns[0]] == category][selected_columns[1:]].iloc[0].tolist()
+            data.append({"value": category_data, "name": str(category)})
+        
+        chart.add_schema(schema=indicators)
+        chart.add("", data)
+        
+        return chart
+
+    @staticmethod
+    def _create_treemap(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a treemap for hierarchical data visualization."""
+        chart = TreeMap()
+        
+        def create_tree_data(df, columns, current_level=0):
+            if current_level >= len(columns):
+                return []
+            
+            grouped = df.groupby(columns[current_level])
+            data = []
+            
+            for name, group in grouped:
+                children = create_tree_data(group, columns, current_level + 1)
+                node = {
+                    "name": str(name),
+                    "value": len(group) if not children else None,
+                }
+                if children:
+                    node["children"] = children
+                data.append(node)
+            
+            return data
+        
+        data = create_tree_data(df, selected_columns)
+        
+        chart.add(
+            series_name="",
+            data=data,
+            leaf_depth=options.get('leaf_depth', 1)
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_surface3d(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a 3D surface chart."""
+        chart = Surface3D()
+        
+        # Create 3D surface data from three columns
+        x_data = df[selected_columns[0]].unique()
+        y_data = df[selected_columns[1]].unique()
+        
+        data = [[
+            x, y, df[
+                (df[selected_columns[0]] == x) & 
+                (df[selected_columns[1]] == y)
+            ][selected_columns[2]].iloc[0]
+        ] for x in x_data for y in y_data]
+        
+        chart.add(
+            series_name="",
+            data=data,
+            shading="realistic",
+            itemstyle_opts=opts.ItemStyleOpts(opacity=0.8)
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_3d_chart(chart_type: str, df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates various types of 3D charts (bar, line, scatter)."""
+        if chart_type == 'bar3d':
+            chart = Bar3D()
+        elif chart_type == 'line3d':
+            chart = Line3D()
+        else:  # scatter3d
+            chart = Scatter3D()
+        
+        data = [[
+            row[selected_columns[0]],
+            row[selected_columns[1]],
+            row[selected_columns[2]]
+        ] for _, row in df.iterrows()]
+        
+        chart.add(
+            series_name="",
+            data=data,
+            xaxis3d_opts=opts.Axis3DOpts(type_="value"),
+            yaxis3d_opts=opts.Axis3DOpts(type_="value"),
+            zaxis3d_opts=opts.Axis3DOpts(type_="value")
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_map(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a map visualization."""
+        chart = Map()
+        
+        # Prepare map data
+        data = [
+            (row[selected_columns[0]], row[selected_columns[1]])
+            for _, row in df.iterrows()
+        ]
+        
+        chart.add(
+            series_name="",
+            data_pair=data,
+            maptype=options.get('maptype', 'world')
+        )
+        
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Map"),
+            visualmap_opts=opts.VisualMapOpts()
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_graph(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a graph visualization showing relationships."""
+        chart = Graph()
+        
+        # Prepare nodes and links
+        nodes = [{"name": str(name)} for name in df[selected_columns[0]].unique()]
+        links = [
+            {
+                "source": str(row[selected_columns[0]]),
+                "target": str(row[selected_columns[1]]),
+                "value": row[selected_columns[2]] if len(selected_columns) > 2 else 1
+            }
+            for _, row in df.iterrows()
+        ]
+        
+        chart.add(
+            series_name="",
+            nodes=nodes,
+            links=links,
+            layout=options.get('layout', 'circular'),
+            is_roam=True,
+            is_focusnode=True
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_liquid(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a liquid fill chart showing percentage values."""
+        chart = Liquid()
+        
+        # Get the first value from the selected column as percentage
+        value = df[selected_columns[0]].iloc[0] / 100.0
+        
+        chart.add(
+            series_name="",
+            data=[value],
+            label_opts=opts.LabelOpts(
+                font_size=50,
+                formatter=JsCode(
+                    "function(param){return Math.floor(param.value * 100) + '%';}"
+                ),
+                position="inside"
+            )
+        )
+        
+        chart.set_global_opts(title_opts=opts.TitleOpts(title="Liquid Fill"))
+        return chart
+
+    @staticmethod
+    def _create_parallel(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a parallel coordinates plot for multi-dimensional data analysis."""
+        chart = Parallel()
+        
+        # Create schema for parallel axes
+        schema = [
+            {"dim": i, "name": col, "type": "value"}
+            for i, col in enumerate(selected_columns)
+        ]
+        
+        # Prepare data
+        data = df[selected_columns].values.tolist()
+        
+        chart.add(
+            series_name="",
+            data=data,
+            linestyle_opts=opts.LineStyleOpts(width=1, opacity=0.5),
+            schema=schema
+        )
+        
+        chart.set_global_opts(title_opts=opts.TitleOpts(title="Parallel"))
+        return chart
+
+    @staticmethod
+    def _create_sankey(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a Sankey diagram showing flow between entities."""
+        chart = Sankey()
+        
+        # Prepare nodes and links
+        nodes = []
+        node_map = {}
+        current_node = 0
+        
+        # Create nodes
+        for col in selected_columns[:2]:  # Source and target columns
+            for value in df[col].unique():
+                if value not in node_map:
+                    node_map[value] = current_node
+                    nodes.append({"name": str(value)})
+                    current_node += 1
+        
+        # Create links
+        links = []
+        for _, row in df.iterrows():
+            source = str(row[selected_columns[0]])
+            target = str(row[selected_columns[1]])
+            value = row[selected_columns[2]] if len(selected_columns) > 2 else 1
+            
+            links.append({
+                "source": node_map[source],
+                "target": node_map[target],
+                "value": value
+            })
+        
+        chart.add(
+            series_name="",
+            nodes=nodes,
+            links=links,
+            linestyle_opts=opts.LineStyleOpts(opacity=0.3, curve=0.5),
+            label_opts=opts.LabelOpts(position="right")
+        )
+        
+        chart.set_global_opts(title_opts=opts.TitleOpts(title="Sankey Diagram"))
+        return chart
+
+    @staticmethod
+    def _create_sunburst(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a sunburst chart for hierarchical data visualization."""
+        chart = Sunburst()
+        
+        def create_sunburst_data(df, columns, current_level=0):
+            """Recursively create hierarchical data structure for sunburst chart."""
+            if current_level >= len(columns):
+                return []
+            
+            grouped = df.groupby(columns[current_level])
+            data = []
+            
+            for name, group in grouped:
+                children = create_sunburst_data(group, columns, current_level + 1)
+                node = {
+                    "name": str(name),
+                    "value": len(group) if not children else None,
+                }
+                if children:
+                    node["children"] = children
+                data.append(node)
+            
+            return data
+        
+        # Create hierarchical data structure
+        data = create_sunburst_data(df, selected_columns)
+        
+        chart.add(
+            series_name="",
+            data_pair=data,
+            radius=[0, '90%'],
+            label_opts=opts.LabelOpts(
+                position="inside",
+                formatter="{b}"
+            )
+        )
+        
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Sunburst Chart"),
+            toolbox_opts=opts.ToolboxOpts(
+                feature={
+                    "saveAsImage": {},
+                    "dataView": {},
+                    "restore": {}
+                }
+            )
+        )
+        
+        return chart
+
+    def _configure_common_options(chart, title="", options: Dict[str, Any] = None):
+        """Configure common options for all chart types."""
+        options = options or {}
+        
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(
+                title=title,
+                subtitle=options.get("subtitle", ""),
+                title_textstyle_opts=opts.TextStyleOpts(
+                    font_size=16,
+                    font_weight="bold"
+                )
+            ),
+            tooltip_opts=opts.TooltipOpts(
+                trigger="axis",
+                axis_pointer_type="cross"
+            ),
+            toolbox_opts=opts.ToolboxOpts(
+                feature={
+                    "dataZoom": {"yAxisIndex": "none"},
+                    "restore": {},
+                    "saveAsImage": {},
+                    "dataView": {}
+                }
+            ),
+            datazoom_opts=[
+                opts.DataZoomOpts(
+                    range_start=0,
+                    range_end=100
+                ),
+                opts.DataZoomOpts(
+                    type_="inside",
+                    range_start=0,
+                    range_end=100
+                )
+            ],
+            legend_opts=opts.LegendOpts(
+                type_="scroll",
+                pos_top="top",
+                orient="horizontal"
+            )
+        )
+        
+        return chart
+   
 
 @cache.memoize(timeout=CACHE_TIMEOUT)
 def get_table_data(table_name, selected_columns):
@@ -1869,6 +2378,148 @@ def update_blob(user_id, filename):
         app.logger.error(f"Error updating blob content: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+# Add these new endpoints to your backend.py
+
+@app.route('/get-column-stats/<user_id>/<file_id>/<column_name>', methods=['GET'])
+def get_column_stats(user_id, file_id, column_name):
+    """Get statistics and metadata for a specific column."""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get table name from file metadata
+        c.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        table_name = f"table_{result[0]}"
+        
+        # Read column data
+        df = pd.read_sql_query(f'SELECT "{column_name}" FROM "{table_name}"', conn)
+        
+        # Determine column type
+        sample = df[column_name].dropna().iloc[0] if not df[column_name].empty else None
+        is_numeric = pd.api.types.is_numeric_dtype(df[column_name])
+        
+        if is_numeric:
+            stats = {
+                'type': 'numeric',
+                'min': float(df[column_name].min()),
+                'max': float(df[column_name].max()),
+                'mean': float(df[column_name].mean()),
+                'median': float(df[column_name].median()),
+                'unique_count': int(df[column_name].nunique()),
+                'null_count': int(df[column_name].isnull().sum()),
+                'value_counts': df[column_name].value_counts().head(10).to_dict()
+            }
+        else:
+            value_counts = df[column_name].value_counts()
+            stats = {
+                'type': 'categorical',
+                'unique_values': df[column_name].unique().tolist(),
+                'unique_count': int(df[column_name].nunique()),
+                'null_count': int(df[column_name].isnull().sum()),
+                'value_counts': value_counts.head(50).to_dict()
+            }
+            
+        return jsonify(stats)
+        
+    except Exception as e:
+        app.logger.error(f"Error getting column stats: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/apply-filters/<user_id>/<file_id>', methods=['POST'])
+def apply_filters(user_id, file_id):
+    """Apply filters and sorting to the dataset."""
+    try:
+        filters = request.json.get('filters', [])
+        sort_by = request.json.get('sort_by', {})
+        page = request.json.get('page', 1)
+        page_size = request.json.get('page_size', 50)
+        
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get table name
+        c.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        table_name = f"table_{result[0]}"
+        
+        # Build SQL query with filters
+        query = f'SELECT * FROM "{table_name}"'
+        params = []
+        
+        if filters:
+            conditions = []
+            for f in filters:
+                column = f['column']
+                operator = f['operator']
+                value = f['value']
+                
+                if operator == 'between':
+                    conditions.append(f'"{column}" BETWEEN ? AND ?')
+                    params.extend([value[0], value[1]])
+                elif operator in ['=', '>', '<', '>=', '<=']:
+                    conditions.append(f'"{column}" {operator} ?')
+                    params.append(value)
+                elif operator == 'in':
+                    placeholders = ','.join(['?' for _ in value])
+                    conditions.append(f'"{column}" IN ({placeholders})')
+                    params.extend(value)
+                elif operator == 'like':
+                    conditions.append(f'"{column}" LIKE ?')
+                    params.append(f'%{value}%')
+                    
+            if conditions:
+                query += ' WHERE ' + ' AND '.join(conditions)
+        
+        # Add sorting
+        if sort_by:
+            query += f' ORDER BY "{sort_by["column"]}" {sort_by["direction"]}'
+            
+        # Add pagination
+        query += ' LIMIT ? OFFSET ?'
+        params.extend([page_size, (page - 1) * page_size])
+        
+        # Execute query
+        df = pd.read_sql_query(query, conn, params=params)
+        
+        # Get total count for pagination
+        count_query = f'SELECT COUNT(*) FROM "{table_name}"'
+        if filters:
+            count_query += ' WHERE ' + ' AND '.join(conditions)
+        total_count = pd.read_sql_query(count_query, conn, params=params[:-2]).iloc[0, 0]
+        
+        return jsonify({
+            'data': df.to_dict('records'),
+            'total': total_count,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': (total_count + page_size - 1) // page_size
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error applying filters: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+        
 # @app.route('/generate-graph/<user_id>/<file_id>', methods=['POST'])
 # def generate_graph(user_id, file_id):
 #     try:
@@ -2056,8 +2707,8 @@ def update_blob(user_id, filename):
 @app.route('/generate-graph/<user_id>/<file_id>', methods=['POST'])
 def generate_graph(user_id, file_id):
     """
-    Generate interactive charts while maintaining compatibility with existing frontend.
-    Uses ECharts for better performance and interactivity.
+    Enhanced route handler for generating interactive charts.
+    Supports an expanded set of chart types with improved data processing.
     """
     try:
         app.logger.debug(f"Received request: user_id={user_id}, file_id={file_id}")
@@ -2071,6 +2722,22 @@ def generate_graph(user_id, file_id):
         # Validate input
         if not chart_type or not selected_columns:
             return jsonify({'error': 'Missing required parameters'}), 400
+
+        # Special handling for different chart types
+        required_columns = {
+            'kline': 5,  # date, open, close, low, high
+            'surface3d': 3,
+            'bar3d': 3,
+            'line3d': 3,
+            'scatter3d': 3,
+            'sankey': 2,
+            'graph': 2
+        }
+
+        if chart_type in required_columns and len(selected_columns) < required_columns[chart_type]:
+            return jsonify({
+                'error': f'{chart_type} requires at least {required_columns[chart_type]} columns'
+            }), 400
 
         # Database connection
         conn = sqlite3.connect('user_files.db')
@@ -2096,11 +2763,28 @@ def generate_graph(user_id, file_id):
             if not c.fetchone():
                 return jsonify({'error': f'Table {table_name} not found'}), 404
 
-            # Get data using optimized function
+            # Get data using optimized function with specific handling for each chart type
             df = get_table_data(table_name, selected_columns)
             
+            # Special data processing for specific chart types
+            if chart_type == 'kline':
+                # Ensure data is sorted by date
+                df = df.sort_values(by=selected_columns[0])
+            elif chart_type in ['surface3d', 'bar3d', 'line3d', 'scatter3d']:
+                # Normalize 3D data
+                for col in selected_columns[1:]:
+                    df[col] = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
+            elif chart_type == 'gauge':
+                # Ensure single value for gauge
+                if len(df) > 1:
+                    df = df.iloc[[0]]
+            elif chart_type == 'liquid':
+                # Convert to percentage if needed
+                if df[selected_columns[0]].max() > 1:
+                    df[selected_columns[0]] = df[selected_columns[0]] / 100
+
             # Generate chart
-            chart = ChartGenerator.create_chart(chart_type, df, selected_columns, options)
+            chart = EnhancedChartGenerator.create_chart(chart_type, df, selected_columns, options)
             
             # Generate HTML and cache it
             graph_id = str(uuid.uuid4())
@@ -2129,7 +2813,8 @@ def generate_graph(user_id, file_id):
 @app.route('/graph/<graph_id>', methods=['GET'])
 def serve_graph(graph_id):
     """
-    Serve the cached graph with proper HTML wrapper.
+    Enhanced route handler for serving cached graphs with improved responsive layout
+    and interaction features.
     """
     try:
         conn = sqlite3.connect('user_files.db')
@@ -2147,7 +2832,7 @@ def serve_graph(graph_id):
             
         html_content = result[0]
         
-        # Create a full HTML page
+        # Create a full HTML page with enhanced responsive layout
         full_html = f"""
         <!DOCTYPE html>
         <html>
@@ -2173,6 +2858,33 @@ def serve_graph(graph_id):
                     width: 100% !important;
                     height: 100% !important;
                 }}
+                
+                /* Dark mode support */
+                @media (prefers-color-scheme: dark) {{
+                    body {{
+                        background-color: #1a1a1a;
+                    }}
+                    
+                    .echarts-for-react {{
+                        background-color: #1a1a1a;
+                    }}
+                }}
+                
+                /* Enhanced tooltip styles */
+                .echarts-tooltip {{
+                    background: rgba(255, 255, 255, 0.9) !important;
+                    backdrop-filter: blur(4px);
+                    border-radius: 4px;
+                    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+                    padding: 8px 12px;
+                }}
+                
+                /* Responsive adjustments */
+                @media (max-width: 768px) {{
+                    .echarts-tooltip {{
+                        max-width: 200px;
+                    }}
+                }}
             </style>
         </head>
         <body>
@@ -2191,38 +2903,49 @@ def serve_graph(graph_id):
                         // Store reference for resize handling
                         window.chart = chartInstance;
                         
-                        // Set up resize observer
-                        const resizeObserver = new ResizeObserver(entries => {{
-                            for (let entry of entries) {{
+                        // Enhanced resize handling with debouncing
+                        let resizeTimeout;
+                        const handleResize = () => {{
+                            clearTimeout(resizeTimeout);
+                            resizeTimeout = setTimeout(() => {{
                                 if (window.chart) {{
                                     window.chart.resize({{
-                                        width: entry.contentRect.width,
-                                        height: entry.contentRect.height,
                                         animation: {{
-                                            duration: 300
+                                            duration: 300,
+                                            easing: 'cubicInOut'
                                         }}
                                     }});
                                 }}
+                            }}, 100);
+                        }};
+                        
+                        // Set up resize observer with enhanced options
+                        const resizeObserver = new ResizeObserver(entries => {{
+                            for (let entry of entries) {{
+                                handleResize();
                             }}
                         }});
                         
                         // Observe the container
                         resizeObserver.observe(document.getElementById('chart-container'));
+                        
+                        // Also handle window resize events
+                        window.addEventListener('resize', handleResize);
+                        
+                        // Handle visibility changes
+                        document.addEventListener('visibilitychange', () => {{
+                            if (document.visibilityState === 'visible') {{
+                                handleResize();
+                            }}
+                        }});
                     }}
-                    
-                    // Also handle window resize events
-                    window.addEventListener('resize', function() {{
-                        if (window.chart) {{
-                            window.chart.resize();
-                        }}
-                    }});
                 }});
             </script>
         </body>
         </html>
         """
-        return Response(full_html, mimetype='text/html')
         
+        return Response(full_html, mimetype='text/html')        
     except Exception as e:
         app.logger.error(f"Error serving graph: {str(e)}")
         return str(e), 500
