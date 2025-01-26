@@ -15,17 +15,37 @@ import xml.etree.ElementTree as ET
 import PyPDF2
 from werkzeug.utils import secure_filename
 import uuid
-import plotly.express as px
-import plotly.graph_objects as go
 from pdfminer.high_level import extract_text
 from pdfminer.layout import LAParams
-import tempfile
 import os
+
+from flask_caching import Cache
+from pyecharts import options as opts
+from pyecharts.charts import Line, Bar, Pie, Scatter, Boxplot,Grid
+import pandas as pd
 import sqlite3
+import uuid
+import traceback
+
+import sqlite3
+import psutil
+import datetime
+import decimal
+import math
+import logging
+import json
+import time
+from typing import List, Dict, Any, Generator, Tuple
+from dataclasses import dataclass
+from flask import jsonify, request
+import traceback
 
 app = Flask(__name__)
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 CORS(app)
 logging.basicConfig(level=logging.DEBUG)
+CACHE_TIMEOUT = 300  # Cache timeout in seconds
+CHUNK_SIZE = 100000  # Maximum rows to fetch at once
 
 def init_db():
     conn = sqlite3.connect('user_files.db')
@@ -103,25 +123,431 @@ def init_db():
     conn.close()
 
 init_db()
-
-# Add this to the top of your backend.py file
-
-def debug_sql(query, params=None):
-    """Debug helper for SQL queries"""
-    app.logger.debug(f"SQL Query: {query}")
-    if params:
-        app.logger.debug(f"Parameters: {params}")
         
-# Add this after creating the cursor in each route
-def get_table_info(cursor, table_name):
-    """Debug helper for table information"""
+# class ChartGenerator:
+#     """
+#     Helper class to generate interactive charts using ECharts.
+#     Maintains compatibility with existing frontend while providing better performance.
+#     """
+#     @staticmethod
+#     def create_chart(chart_type, df, selected_columns, options=None):
+#         options = options or {}
+        
+            
+#         try:
+#             if chart_type == 'histogram':
+#                 return ChartGenerator._create_histogram(df, selected_columns, options)
+#             elif chart_type == 'segmented-bar':
+#                 return ChartGenerator._create_segmented_bar(df, selected_columns, options)
+#             # elif chart_type == 'line':
+#             #     return ChartGenerator._create_line(df, selected_columns)
+#             # elif chart_type == 'bar':
+#             #     chart = Bar()
+#             #     x_data = df[selected_columns[0]].tolist()
+#             #     for col in selected_columns[1:]:
+#             #         y_data = df[col].tolist()
+#             #         chart.add_xaxis(x_data)
+#             #         chart.add_yaxis(col, y_data)
+#             elif chart_type in ['line', 'bar']:
+#                 x_data = df[selected_columns[0]].tolist()
+#                 for col in selected_columns[1:]:
+#                     y_data = df[col].tolist()
+#                     chart.add_xaxis(x_data)
+#                     chart.add_yaxis(
+#                         col,
+#                         y_data,
+#                         label_opts=opts.LabelOpts(
+#                             is_show=False,
+#                             font_size=12,
+#                             rotate=0
+#                         )
+#                     )        
+#             elif chart_type == 'pie':
+#                 chart = Pie()
+#                 data_pairs = list(zip(
+#                     df[selected_columns[0]].tolist(),
+#                     df[selected_columns[1]].tolist()
+#                 ))
+#                 chart.add(
+#                     series_name="",
+#                     data_pair=data_pairs,
+#                     label_opts=opts.LabelOpts(
+#                         is_show=True,
+#                         formatter="{b}: {c}"
+#                     )
+#                 )
+                
+#             elif chart_type == 'scatter':
+#                 return ChartGenerator._create_scatter(df, selected_columns)
+#             elif chart_type == 'box':
+#                 chart = Boxplot()
+#                 data = [df[col].tolist() for col in selected_columns[1:]]
+#                 chart.add_xaxis([selected_columns[1:]])
+#                 chart.add_yaxis("", chart.prepare_data(data))
+                
+#             else:
+#                 raise ValueError(f'Unsupported chart type: {chart_type}')
+
+#             chart.set_global_opts(
+#                 # Title configuration
+#                 title_opts=opts.TitleOpts(
+#                     title="",
+#                     subtitle="",
+#                     title_textstyle_opts=opts.TextStyleOpts(
+#                         font_size=16,
+#                         font_weight='bold'
+#                     )
+#                 ),
+                
+#                 # Tooltip configuration
+#                 tooltip_opts=opts.TooltipOpts(
+#                     trigger="axis",
+#                     axis_pointer_type="cross"
+#                 ),
+                
+#                 # Toolbox with interactive features
+#                 toolbox_opts=opts.ToolboxOpts(
+#                     is_show=True,
+#                     pos_left="right",
+#                     feature={
+#                         "dataZoom": {"yAxisIndex": "none"},
+#                         "restore": {},
+#                         "saveAsImage": {},
+#                         "dataView": {}
+#                     }
+#                 ),
+                
+#                 # Data zoom for interaction
+#                 datazoom_opts=[
+#                     opts.DataZoomOpts(
+#                         range_start=0,
+#                         range_end=100,
+#                         is_zoom_lock=False
+#                     ),
+#                     opts.DataZoomOpts(
+#                         type_="inside",
+#                         range_start=0,
+#                         range_end=100
+#                     )
+#                 ],
+                
+#                 # Legend configuration
+#                 legend_opts=opts.LegendOpts(
+#                     type_="scroll",
+#                     pos_top="top",
+#                     pos_left="center",
+#                     orient="horizontal",
+#                     text_style=opts.TextStyleOpts(
+#                         font_size=12
+#                     )
+#                 ),
+                
+#                 # Grid configuration for main chart area
+#                 grid_opts=opts.GridOpts(
+#                     pos_left="5%",
+#                     pos_right="5%",
+#                     pos_top="15%",
+#                     pos_bottom="15%",
+#                     containLabel=True,
+#                     is_contain_label=True
+#                 )
+#             )
+            
+#             # Configure the chart instance for responsiveness
+#             chart.width = "100%"
+#             chart.height = "100%"
+#             chart.renderer = "canvas"
+            
+#             return chart
+            
+#         except Exception as e:
+#             app.logger.error(f"Error creating chart: {str(e)}")
+#             raise
+        
+#     @staticmethod
+#     def _create_histogram(df, selected_columns, options):
+#         """
+#         Creates a histogram using ECharts.
+#         Supports customizable bin sizes and multiple series.
+#         """
+#         # Create a Bar chart (ECharts doesn't have a direct histogram type)
+#         chart = Bar()
+        
+#         # Get bin parameters
+#         bin_size = options.get('binSize', 10)
+#         column = selected_columns[0]  # Histogram works on a single column
+        
+#         # Calculate histogram data
+#         hist_data = np.histogram(df[column].dropna(), bins=bin_size)
+#         bin_edges = hist_data[1]
+#         counts = hist_data[0]
+        
+#         # Create bin labels (use middle of each bin)
+#         bin_labels = [f"{bin_edges[i]:.2f}-{bin_edges[i+1]:.2f}" 
+#                      for i in range(len(bin_edges)-1)]
+        
+#         # Add data to chart
+#         chart.add_xaxis(bin_labels)
+#         chart.add_yaxis("Frequency", counts.tolist(), 
+#                        label_opts=opts.LabelOpts(is_show=False))
+        
+#         # Configure chart options
+#         chart.set_global_opts(
+#             title_opts=opts.TitleOpts(title=f"Histogram of {column}"),
+#             xaxis_opts=opts.AxisOpts(name="Value Ranges"),
+#             yaxis_opts=opts.AxisOpts(name="Frequency"),
+#             tooltip_opts=opts.TooltipOpts(trigger="axis"),
+#             toolbox_opts=opts.ToolboxOpts(
+#                 feature={
+#                     "dataZoom": {},
+#                     "dataView": {},
+#                     "saveAsImage": {}
+#                 }
+#             ),
+#             datazoom_opts=[opts.DataZoomOpts()],
+#         )
+        
+#         return chart
+
+#     @staticmethod
+#     def _create_segmented_bar(df, selected_columns, options):
+#         """
+#         Creates a segmented (stacked) bar chart using ECharts.
+#         Supports both stacked and percentage stacked modes.
+#         """
+#         chart = Bar()
+#         stack_type = options.get('stackType', 'stack')  # 'stack' or 'percentage'
+        
+#         # First column is categories (x-axis)
+#         x_data = df[selected_columns[0]].unique().tolist()
+        
+#         # Handle percentage stacking if requested
+#         if stack_type == 'percentage':
+#             # Calculate percentages for each category
+#             total = df.groupby(selected_columns[0])[selected_columns[1:]].sum()
+#             for col in selected_columns[1:]:
+#                 total[col] = (total[col] / total.sum(axis=1) * 100)
+            
+#             # Add each series
+#             for col in selected_columns[1:]:
+#                 y_data = total[col].tolist()
+#                 chart.add_yaxis(
+#                     col, 
+#                     y_data,
+#                     stack="stack1",
+#                     label_opts=opts.LabelOpts(position="inside", formatter="{c}%")
+#                 )
+#         else:
+#             # Regular stacked bar chart
+#             for col in selected_columns[1:]:
+#                 y_data = df.groupby(selected_columns[0])[col].sum().tolist()
+#                 chart.add_yaxis(
+#                     col, 
+#                     y_data,
+#                     stack="stack1",
+#                     label_opts=opts.LabelOpts(position="inside")
+#                 )
+        
+#         # Set x-axis data
+#         chart.add_xaxis(x_data)
+        
+#         # Configure chart options
+#         chart.set_global_opts(
+#             title_opts=opts.TitleOpts(title=""),
+#             tooltip_opts=opts.TooltipOpts(trigger="axis", axis_pointer_type="shadow"),
+#             toolbox_opts=opts.ToolboxOpts(
+#                 feature={
+#                     "dataZoom": {},
+#                     "dataView": {},
+#                     "saveAsImage": {},
+#                     "magicType": {"show": True, "type": ["line", "bar"]}
+#                 }
+#             ),
+#             legend_opts=opts.LegendOpts(pos_top="5%"),
+#             datazoom_opts=[opts.DataZoomOpts()],
+#         )
+        
+#         return chart
+
+#     @staticmethod
+#     def _create_line(df, selected_columns):
+#         """Creates a line chart with multiple series support"""
+#         chart = Line()
+#         x_data = df[selected_columns[0]].tolist()
+        
+#         for col in selected_columns[1:]:
+#             y_data = df[col].tolist()
+#             chart.add_xaxis(x_data)
+#             chart.add_yaxis(
+#                 col, 
+#                 y_data,
+#                 label_opts=opts.LabelOpts(is_show=False),
+#                 is_smooth=True
+#             )
+        
+#         chart.set_global_opts(
+#             title_opts=opts.TitleOpts(title=""),
+#             tooltip_opts=opts.TooltipOpts(trigger="axis"),
+#             toolbox_opts=opts.ToolboxOpts(
+#                 feature={
+#                     "dataZoom": {},
+#                     "dataView": {},
+#                     "saveAsImage": {}
+#                 }
+#             ),
+#             datazoom_opts=[opts.DataZoomOpts()],
+#         )
+        
+#         return chart
+
+
+class ChartGenerator:
+    """
+    Helper class to generate interactive charts using ECharts.
+    This implementation ensures compatibility with different pyecharts versions.
+    """
+    
+    @staticmethod
+    def _initialize_chart(chart_type: str):
+        """
+        Initialize the appropriate chart type with proper error handling.
+        """
+        chart_types = {
+            'line': Line,
+            'bar': Bar,
+            'pie': Pie,
+            'scatter': Scatter,
+            'box': Boxplot,
+            'histogram': Bar,
+            'segmented-bar': Bar
+        }
+        
+        if chart_type not in chart_types:
+            raise ValueError(f'Unsupported chart type: {chart_type}. Supported types are: {", ".join(chart_types.keys())}')
+            
+        ChartClass = chart_types[chart_type]
+        return ChartClass()
+
+    @staticmethod
+    def create_chart(chart_type: str, df: pd.DataFrame, selected_columns: list, options: dict = None):
+        """
+        Creates a responsive chart with the specified type and data.
+        Now uses correct parameter names for grid options and other configurations.
+        """
+        try:
+            chart = ChartGenerator._initialize_chart(chart_type)
+            options = options or {}
+            
+            # Process data based on chart type
+            if chart_type in ['line', 'bar', 'segmented-bar']:
+                x_data = df[selected_columns[0]].tolist()
+                chart.add_xaxis(x_data)
+                for col in selected_columns[1:]:
+                    y_data = df[col].tolist()
+                    chart.add_yaxis(
+                        col,
+                        y_data,
+                        label_opts=opts.LabelOpts(is_show=False),
+                        stack="total" if chart_type == 'segmented-bar' else None
+                    )
+                    
+            elif chart_type == 'histogram':
+                values = df[selected_columns[0]].dropna()
+                bin_count = options.get('binSize', 10)
+                hist, bins = np.histogram(values, bins=bin_count)
+                bin_labels = [f"{bins[i]:.2f}-{bins[i+1]:.2f}" for i in range(len(bins)-1)]
+                
+                chart.add_xaxis(bin_labels)
+                chart.add_yaxis(
+                    "Frequency",
+                    hist.tolist(),
+                    label_opts=opts.LabelOpts(is_show=False)
+                )
+                
+            elif chart_type == 'pie':
+                data_pairs = list(zip(
+                    df[selected_columns[0]].tolist(),
+                    df[selected_columns[1]].tolist()
+                ))
+                chart.add(
+                    series_name="",
+                    data_pair=data_pairs,
+                    label_opts=opts.LabelOpts(
+                        formatter="{b}: {c}",
+                        position="outside"
+                    )
+                )
+                
+            elif chart_type == 'box':
+                data = [df[col].dropna().tolist() for col in selected_columns]
+                chart.add_xaxis(selected_columns)
+                chart.add_yaxis("Boxplot", chart.prepare_data(data))
+            
+            # Configure global options
+            chart.set_global_opts(
+                title_opts=opts.TitleOpts(
+                    title="Chart Title",
+                    subtitle="Chart Subtitle",
+                    title_textstyle_opts=opts.TextStyleOpts(font_size=16)
+                ),
+                tooltip_opts=opts.TooltipOpts(trigger="axis"),
+                datazoom_opts=[
+                    opts.DataZoomOpts(type_="slider"),
+                    opts.DataZoomOpts(type_="inside")
+                ],
+                toolbox_opts=opts.ToolboxOpts(
+                    feature={
+                        "dataZoom": {},
+                        "restore": {},
+                        "saveAsImage": {},
+                        "dataView": {}
+                    }
+                ),
+                legend_opts=opts.LegendOpts(
+                    type_="scroll",
+                    pos_top="top",
+                    orient="horizontal"
+                )
+            )
+            
+            # Set chart to be responsive
+            chart.width = "100%"
+            chart.height = "100%"
+            chart.renderer = "canvas"
+            
+            # If grid options are provided, add the chart to a Grid instance
+            if 'grid_opts' in options:
+                grid = Grid()
+                grid.add(chart, grid_opts=options['grid_opts'])
+                return grid
+            
+            return chart
+            
+        except Exception as e:
+            # Error logging (replace app.logger if not using Flask)
+            print(f"Error creating chart: {str(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
+            raise
+
+
+
+@cache.memoize(timeout=CACHE_TIMEOUT)
+def get_table_data(table_name, selected_columns):
+    """
+    Fetch and cache data from database.
+    Only retrieves requested columns for better performance.
+    """
     try:
-        cursor.execute(f'PRAGMA table_info("{table_name}")')
-        columns = cursor.fetchall()
-        app.logger.debug(f"Table {table_name} columns: {columns}")
-    except Exception as e:
-        app.logger.error(f"Error getting table info: {str(e)}")
+        conn = sqlite3.connect('user_files.db')
+        # Only select requested columns
+        columns_str = ', '.join(f'"{col}"' for col in selected_columns)
+        query = f'SELECT {columns_str} FROM "{table_name}" LIMIT {CHUNK_SIZE}'
         
+        df = pd.read_sql_query(query, conn)
+        return df
+    finally:
+        if conn:
+            conn.close()        
 def process_pdf_content(pdf_content):
     """Process PDF content and return text with formatting preserved"""
     try:
@@ -336,7 +762,6 @@ def upload_file(user_id):
 
     finally:
         conn.close()
-# Updated backend endpoints with proper SQL quoting
 
 @app.route('/update-row/<user_id>/<file_id>', methods=['POST'])
 def update_row(user_id, file_id):
@@ -643,7 +1068,6 @@ def list_files(user_id):
         return f'Error listing files: {str(e)}', 500
     finally:
         conn.close()
-#############################################
 
 def handle_excel_upload(file, user_id, filename, c, conn):
     """Handle Excel file by extracting sheets and storing them similarly to DB tables."""
@@ -1334,6 +1758,7 @@ def analyze_data(user_id: str, file_id: str):
 
         # Read data in chunks if it's a large dataset
         chunk_size = 100000  # Adjust based on memory constraints
+
         chunks = []
         for chunk in pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn, chunksize=chunk_size):
             chunks.append(chunk)
@@ -1444,147 +1869,268 @@ def update_blob(user_id, filename):
         app.logger.error(f"Error updating blob content: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+# @app.route('/generate-graph/<user_id>/<file_id>', methods=['POST'])
+# def generate_graph(user_id, file_id):
+#     try:
+#         app.logger.debug(f"Received request: user_id={user_id}, file_id={file_id}")
+#         data = request.json
+#         app.logger.debug(f"Request data: {data}")
+
+#         # Convert file_id to string if needed
+#         file_id = str(file_id)
+        
+#         conn = sqlite3.connect('user_files.db')
+#         c = conn.cursor()
+        
+#         # First, check if this is a parent file
+#         c.execute("""
+#             SELECT file_type
+#             FROM user_files
+#             WHERE file_id = ? AND user_id = ?
+#         """, (file_id, user_id))
+        
+#         file_info = c.fetchone()
+#         if not file_info:
+#             return jsonify({'error': 'File not found'}), 404
+            
+#         file_type = file_info[0]
+        
+#         # Get the actual table data based on file type
+#         if file_type in ['xlsx', 'xls', 'db']:
+#             # For Excel and DB files, get child file metadata
+#             c.execute("""
+#                 SELECT f.file_id, f.unique_key, f.sheet_table
+#                 FROM user_files f
+#                 WHERE f.parent_file_id = ? AND f.user_id = ?
+#             """, (file_id, user_id))
+            
+#             children = c.fetchall()
+#             if children:
+#                 # Use the first child's data
+#                 child_id, unique_key, sheet_table = children[0]
+#                 table_name = f"table_{unique_key}"
+#             else:
+#                 # If no children, try to get the file's own table
+#                 c.execute("""
+#                     SELECT f.unique_key
+#                     FROM user_files f
+#                     WHERE f.file_id = ? AND f.user_id = ?
+#                 """, (file_id, user_id))
+#                 result = c.fetchone()
+#                 if result:
+#                     unique_key = result[0]
+#                     table_name = f"table_{unique_key}"
+#                 else:
+#                     return jsonify({'error': 'No data table found'}), 400
+#         else:
+#             # For other structured files (CSV, etc.)
+#             c.execute("""
+#                 SELECT f.unique_key
+#                 FROM user_files f
+#                 WHERE f.file_id = ? AND f.user_id = ?
+#             """, (file_id, user_id))
+#             result = c.fetchone()
+#             if result:
+#                 unique_key = result[0]
+#                 table_name = f"table_{unique_key}"
+#             else:
+#                 return jsonify({'error': 'No data table found'}), 400
+
+#         # Verify table exists
+#         c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+#         if not c.fetchone():
+#             return jsonify({'error': f'Table {table_name} not found'}), 404
+
+#         # Get data from the table
+#         query = f'SELECT * FROM "{table_name}"'
+#         app.logger.debug(f"SQL Query: {query}")
+#         df = pd.read_sql_query(query, conn)
+#         app.logger.debug(f"DataFrame shape: {df.shape}")
+#         data = request.json
+#         chart_type = data.get('chartType')
+#         selected_columns = data.get('selectedColumns')
+#         options = data.get('options', {})
+#         chart_type = data.get('chartType')
+#         selected_columns = data.get('selectedColumns', [])
+#         app.logger.debug(f"Chart type: {chart_type}, Selected columns: {selected_columns}")
+        
+#         # Create figure based on chart type
+#         try:
+#             if chart_type == 'line':
+#                 fig = px.line(df, x=selected_columns[0], y=selected_columns[1:])
+#             elif chart_type == 'bar':
+#                 fig = px.bar(df, x=selected_columns[0], y=selected_columns[1:])
+#             elif chart_type == 'pie':
+#                 fig = px.pie(df, values=selected_columns[1], names=selected_columns[0])
+#             elif chart_type == 'scatter':
+#                 fig = px.scatter(df, x=selected_columns[0], y=selected_columns[1])
+#             elif chart_type == 'box':
+#                 fig = px.box(df, y=selected_columns[1:])
+#             elif chart_type == 'histogram':
+#                    fig = px.histogram(df, x=selected_columns[0], nbins=options.get('binSize', 10))
+#             elif chart_type == 'segmented-bar':
+#                    fig = px.bar(df, x=selected_columns[0], y=selected_columns[1:],barmode=options.get('stackType', 'stack'))            
+#             else:
+#                 return jsonify({'error': f'Unsupported chart type: {chart_type}'}), 400
+                
+#             # Update layout for better appearance
+#             fig.update_layout(
+#                 template='plotly_white',
+#                 margin=dict(l=40, r=40, t=40, b=40),
+#                 height=400
+#             )
+            
+#             # Generate HTML
+#             html = fig.to_html(full_html=False, include_plotlyjs='cdn')
+            
+#             # Save to graph cache
+#             graph_id = str(uuid.uuid4())
+#             c.execute("""
+#                 INSERT INTO graph_cache (graph_id, html_content, created_at)
+#                 VALUES (?, ?, CURRENT_TIMESTAMP)
+#             """, (graph_id, html))
+            
+#             conn.commit()
+#             return jsonify({
+#                 'graph_id': graph_id,
+#                 'url': f'/graph/{graph_id}'
+#             })
+            
+#         except Exception as e:
+#             app.logger.error(f"Error creating plot: {str(e)}")
+#             return jsonify({'error': f'Error creating plot: {str(e)}'}), 500
+            
+#     except Exception as e:
+#         app.logger.error(f"Error generating graph: {str(e)}")
+#         app.logger.error(traceback.format_exc())
+#         return jsonify({'error': str(e)}), 500
+#     finally:
+#         if 'conn' in locals():
+#             conn.close()
+
+# @app.route('/graph/<graph_id>', methods=['GET'])
+# def serve_graph(graph_id):
+#     try:
+#         conn = sqlite3.connect('user_files.db')
+#         c = conn.cursor()
+        
+#         c.execute("""
+#             SELECT html_content
+#             FROM graph_cache
+#             WHERE graph_id = ?
+#         """, (graph_id,))
+        
+#         result = c.fetchone()
+#         if not result:
+#             return 'Graph not found', 404
+            
+#         html_content = result[0]
+        
+#         # Create a full HTML page with necessary styling
+#         full_html = f"""
+#         <!DOCTYPE html>
+#         <html>
+#         <head>
+#             <meta charset="utf-8">
+#             <style>
+#                 body {{ margin: 0; padding: 0; overflow: hidden; }}
+#                 #graph {{ width: 100%; height: 100vh; }}
+#             </style>
+#         </head>
+#         <body>
+#             <div id="graph">
+#                 {html_content}
+#             </div>
+#         </body>
+#         </html>
+#         """
+        
+#         return Response(full_html, mimetype='text/html')
+        
+#     except Exception as e:
+#         app.logger.error(f"Error serving graph: {str(e)}")
+#         return str(e), 500
+#     finally:
+#         conn.close()
+
 @app.route('/generate-graph/<user_id>/<file_id>', methods=['POST'])
 def generate_graph(user_id, file_id):
+    """
+    Generate interactive charts while maintaining compatibility with existing frontend.
+    Uses ECharts for better performance and interactivity.
+    """
     try:
         app.logger.debug(f"Received request: user_id={user_id}, file_id={file_id}")
         data = request.json
-        app.logger.debug(f"Request data: {data}")
-
-        # Convert file_id to string if needed
-        file_id = str(file_id)
         
+        # Get chart parameters
+        chart_type = data.get('chartType')
+        selected_columns = data.get('selectedColumns', [])
+        options = data.get('options', {})
+        
+        # Validate input
+        if not chart_type or not selected_columns:
+            return jsonify({'error': 'Missing required parameters'}), 400
+
+        # Database connection
         conn = sqlite3.connect('user_files.db')
         c = conn.cursor()
         
-        # First, check if this is a parent file
-        c.execute("""
-            SELECT file_type
-            FROM user_files
-            WHERE file_id = ? AND user_id = ?
-        """, (file_id, user_id))
-        
-        file_info = c.fetchone()
-        if not file_info:
-            return jsonify({'error': 'File not found'}), 404
-            
-        file_type = file_info[0]
-        
-        # Get the actual table data based on file type
-        if file_type in ['xlsx', 'xls', 'db']:
-            # For Excel and DB files, get child file metadata
-            c.execute("""
-                SELECT f.file_id, f.unique_key, f.sheet_table
-                FROM user_files f
-                WHERE f.parent_file_id = ? AND f.user_id = ?
-            """, (file_id, user_id))
-            
-            children = c.fetchall()
-            if children:
-                # Use the first child's data
-                child_id, unique_key, sheet_table = children[0]
-                table_name = f"table_{unique_key}"
-            else:
-                # If no children, try to get the file's own table
-                c.execute("""
-                    SELECT f.unique_key
-                    FROM user_files f
-                    WHERE f.file_id = ? AND f.user_id = ?
-                """, (file_id, user_id))
-                result = c.fetchone()
-                if result:
-                    unique_key = result[0]
-                    table_name = f"table_{unique_key}"
-                else:
-                    return jsonify({'error': 'No data table found'}), 400
-        else:
-            # For other structured files (CSV, etc.)
-            c.execute("""
-                SELECT f.unique_key
-                FROM user_files f
-                WHERE f.file_id = ? AND f.user_id = ?
-            """, (file_id, user_id))
-            result = c.fetchone()
-            if result:
-                unique_key = result[0]
-                table_name = f"table_{unique_key}"
-            else:
-                return jsonify({'error': 'No data table found'}), 400
-
-        # Verify table exists
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-        if not c.fetchone():
-            return jsonify({'error': f'Table {table_name} not found'}), 404
-
-        # Get data from the table
-        query = f'SELECT * FROM "{table_name}"'
-        app.logger.debug(f"SQL Query: {query}")
-        df = pd.read_sql_query(query, conn)
-        app.logger.debug(f"DataFrame shape: {df.shape}")
-        data = request.json
-        chart_type = data.get('chartType')
-        selected_columns = data.get('selectedColumns')
-        options = data.get('options', {})
-        chart_type = data.get('chartType')
-        selected_columns = data.get('selectedColumns', [])
-        app.logger.debug(f"Chart type: {chart_type}, Selected columns: {selected_columns}")
-        
-        # Create figure based on chart type
         try:
-            if chart_type == 'line':
-                fig = px.line(df, x=selected_columns[0], y=selected_columns[1:])
-            elif chart_type == 'bar':
-                fig = px.bar(df, x=selected_columns[0], y=selected_columns[1:])
-            elif chart_type == 'pie':
-                fig = px.pie(df, values=selected_columns[1], names=selected_columns[0])
-            elif chart_type == 'scatter':
-                fig = px.scatter(df, x=selected_columns[0], y=selected_columns[1])
-            elif chart_type == 'box':
-                fig = px.box(df, y=selected_columns[1:])
-            elif chart_type == 'histogram':
-                   fig = px.histogram(df, x=selected_columns[0], nbins=options.get('binSize', 10))
-            elif chart_type == 'segmented-bar':
-                   fig = px.bar(df, x=selected_columns[0], y=selected_columns[1:],barmode=options.get('stackType', 'stack'))            
-            else:
-                return jsonify({'error': f'Unsupported chart type: {chart_type}'}), 400
+            # Get file information
+            c.execute("""
+                SELECT file_type, unique_key
+                FROM user_files
+                WHERE file_id = ? AND user_id = ?
+            """, (file_id, user_id))
+            
+            file_info = c.fetchone()
+            if not file_info:
+                return jsonify({'error': 'File not found'}), 404
                 
-            # Update layout for better appearance
-            fig.update_layout(
-                template='plotly_white',
-                margin=dict(l=40, r=40, t=40, b=40),
-                height=400
-            )
+            file_type, unique_key = file_info
+            table_name = f"table_{unique_key}"
+
+            # Verify table exists
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+            if not c.fetchone():
+                return jsonify({'error': f'Table {table_name} not found'}), 404
+
+            # Get data using optimized function
+            df = get_table_data(table_name, selected_columns)
             
-            # Generate HTML
-            html = fig.to_html(full_html=False, include_plotlyjs='cdn')
+            # Generate chart
+            chart = ChartGenerator.create_chart(chart_type, df, selected_columns, options)
             
-            # Save to graph cache
+            # Generate HTML and cache it
             graph_id = str(uuid.uuid4())
+            html_content = chart.render_embed()
+            
             c.execute("""
                 INSERT INTO graph_cache (graph_id, html_content, created_at)
                 VALUES (?, ?, CURRENT_TIMESTAMP)
-            """, (graph_id, html))
+            """, (graph_id, html_content))
             
             conn.commit()
+            
             return jsonify({
                 'graph_id': graph_id,
                 'url': f'/graph/{graph_id}'
             })
             
-        except Exception as e:
-            app.logger.error(f"Error creating plot: {str(e)}")
-            return jsonify({'error': f'Error creating plot: {str(e)}'}), 500
+        finally:
+            conn.close()
             
     except Exception as e:
         app.logger.error(f"Error generating graph: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
-    finally:
-        if 'conn' in locals():
-            conn.close()
 
 @app.route('/graph/<graph_id>', methods=['GET'])
 def serve_graph(graph_id):
+    """
+    Serve the cached graph with proper HTML wrapper.
+    """
     try:
         conn = sqlite3.connect('user_files.db')
         c = conn.cursor()
@@ -1601,32 +2147,89 @@ def serve_graph(graph_id):
             
         html_content = result[0]
         
-        # Create a full HTML page with necessary styling
+        # Create a full HTML page
         full_html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-                body {{ margin: 0; padding: 0; overflow: hidden; }}
-                #graph {{ width: 100%; height: 100vh; }}
+                html, body {{
+                    margin: 0;
+                    padding: 0;
+                    width: 100%;
+                    height: 100%;
+                    overflow: hidden;
+                }}
+                
+                #chart-container {{
+                    width: 100%;
+                    height: 100%;
+                    position: relative;
+                }}
+                
+                .echarts-container {{
+                    width: 100% !important;
+                    height: 100% !important;
+                }}
             </style>
         </head>
         <body>
-            <div id="graph">
+            <div id="chart-container">
                 {html_content}
             </div>
+            
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {{
+                    // Get the chart instance
+                    const chartInstance = echarts.getInstanceByDom(
+                        document.querySelector('#chart-container div')
+                    );
+                    
+                    if (chartInstance) {{
+                        // Store reference for resize handling
+                        window.chart = chartInstance;
+                        
+                        // Set up resize observer
+                        const resizeObserver = new ResizeObserver(entries => {{
+                            for (let entry of entries) {{
+                                if (window.chart) {{
+                                    window.chart.resize({{
+                                        width: entry.contentRect.width,
+                                        height: entry.contentRect.height,
+                                        animation: {{
+                                            duration: 300
+                                        }}
+                                    }});
+                                }}
+                            }}
+                        }});
+                        
+                        // Observe the container
+                        resizeObserver.observe(document.getElementById('chart-container'));
+                    }}
+                    
+                    // Also handle window resize events
+                    window.addEventListener('resize', function() {{
+                        if (window.chart) {{
+                            window.chart.resize();
+                        }}
+                    }});
+                }});
+            </script>
         </body>
         </html>
         """
-        
         return Response(full_html, mimetype='text/html')
         
     except Exception as e:
         app.logger.error(f"Error serving graph: {str(e)}")
         return str(e), 500
     finally:
-        conn.close()
+        if conn:
+            conn.close()
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

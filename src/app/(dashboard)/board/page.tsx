@@ -23,9 +23,11 @@ interface Chart {
   id: string;
   type: string;
   title: string;
+  description?: string;  
   graphUrl: string;
   position: Position;
 }
+
 
 interface Column {
   header: string;
@@ -53,6 +55,7 @@ interface ChartCreationData {
   type: string;
   columns: string[];
   title?: string;
+  description?: string; // Add the 'description' property
   options?: ChartOptions; // Add the 'options' property
 }
 
@@ -126,6 +129,13 @@ const BoardMain: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [charts, selectedDashboard]);
 
+  const handleDescriptionChange = useCallback((chartId: string, description: string) => {
+    setCharts(prev => prev.map(chart => 
+      chart.id === chartId 
+        ? { ...chart, description } 
+        : chart
+    ));
+  }, []);
   // Handle chart position change
   const handleChartPosition = useCallback((chartId: string, newPosition: Position) => {
     setCharts(prev => prev.map(chart => 
@@ -233,12 +243,26 @@ const BoardMain: React.FC = () => {
 
       const { graph_id, url } = await response.json();
       
+      // const newChart = {
+      //   id: graph_id,
+      //   type: chartData.type,
+      //   title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
+      //   graphUrl: `http://localhost:5000${url}`,
+      //   position: clickPosition
+      // };
+
       const newChart = {
         id: graph_id,
         type: chartData.type,
         title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
+        description: chartData.description || '',
         graphUrl: `http://localhost:5000${url}`,
-        position: clickPosition
+        position: {
+          x: chartData.position.x,
+          y: chartData.position.y,
+          width: 800,  // Default width
+          height: 600  // Default height
+        }
       };
 
       setCharts(prev => [...prev, newChart]);
@@ -375,21 +399,23 @@ const BoardMain: React.FC = () => {
       <div className="flex-1 relative bg-gray-100 overflow-hidden p-6">
         <div
           className="absolute inset-0 p-6"
-          onClick={handleGraphAreaClick}
+          onDoubleClick={handleGraphAreaClick}
         >
           {charts.map(chart => (
-            <DraggableChart
-              key={chart.id}
-              id={chart.id}
-              title={chart.title}
-              graphUrl={chart.graphUrl}
-              position={chart.position}
-              onPositionChange={handleChartPosition}
-              onRemove={handleRemoveChart}
-              isMaximized={maximizedChart === chart.id}
-              onMaximizeToggle={handleMaximizeToggle}
-            />
-          ))}
+  <DraggableChart
+    key={chart.id}
+    id={chart.id}
+    title={chart.title}
+    description={chart.description}
+    graphUrl={chart.graphUrl}
+    position={chart.position}
+    onPositionChange={handleChartPosition}
+    onRemove={handleRemoveChart}
+    isMaximized={maximizedChart === chart.id}
+    onMaximizeToggle={handleMaximizeToggle}
+    onDescriptionChange={handleDescriptionChange}
+  />
+))}
         </div>
       </div>
 
