@@ -35,11 +35,15 @@ import { SplitDialog } from "./split-dialog";
 
 import DataAnalysisModal from "./data-analysis-modal-component";
 import EnhancedEditForm from "./EditForm";
+import { FetchEventLike } from "hono/types";
 
 
-const DataTable = dynamic<DataTableProps<FileData>>(() =>
+// Update the dynamic import with proper typing
+const DataTable = dynamic<React.ComponentProps<typeof import('@/components/data-table').DataTable>>(() =>
   import('@/components/data-table').then((mod) => mod.DataTable), {
-  loading: () => <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-teal-500" /></div>,
+  loading: () => <div className="flex justify-center items-center h-64">
+    <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+  </div>,
   ssr: false,
 });
 
@@ -132,7 +136,7 @@ const DataTablePage: React.FC = () => {
   const dataRef = useRef<DataItem[]>([]);
   const { user, isLoaded: isUserLoaded } = useUser();
   const { fileList, error: fileListError, loading: fileListLoading, refetch: refetchFileList } = useFilesList(user?.id);
-  
+  const [filterkey, setFilterkey] = useState<string>(Date.now().toString());
   const [editItem, setEditItem] = useState<Partial<DataItem> | null>(null);
  
   const [selectedRows, setSelectedRows] = useState<Row<DataItem>[]>([]);
@@ -736,6 +740,11 @@ const handleDelete = async () => {
 
   const handleReset = () => {
     setTableKey(prevKey => prevKey + 1);
+    setFilterkey(Date.now().toString())
+    if(selectedFile)
+    {
+      fetchFileData(selectedFile.file_id,selectedFile.filename);
+    }
     toast({
       title: "Reset",
       description: "All filters and sorting have been reset.",
@@ -1019,12 +1028,22 @@ const handleDelete = async () => {
           ) : data.length > 0 ? (
             <>
               <DataTable
+                // key={tableKey}
+                // columns={columns}
+                // data={data}
+                // onRowSelectionChange={setSelectedRows}
+                // onReset={handleReset}
+                // filterkey=""
+                
                 key={tableKey}
-                columns={columns}
-                data={data}
-                onRowSelectionChange={setSelectedRows}
-                onReset={handleReset}
-                filterkey=""
+    columns={columns}
+    data={data}
+    userId={user?.id || ''}
+    fileId={selectedFile?.file_id || ''}
+    onRowSelectionChange={setSelectedRows}
+    filterkey={filterkey}
+    onReset={handleReset}
+              
               />
               {renderPagination()}
             </>

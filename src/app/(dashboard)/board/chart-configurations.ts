@@ -17,6 +17,47 @@ const createBasicChartOptions = (type: string, data: any[], columns: string[]) =
     };
   };
   
+  const createDataTable = (data: any[], columns: string[], options: any = {}) => {
+    // Get specified number of rows or default to 10
+    const numRows = options.numRows || 10;
+    const tableData = data.slice(0, numRows);
+  
+    return {
+      type: 'custom',
+      componentType: 'DataTable',
+      data: tableData,
+      columns: columns,
+      options: {
+        pageSize: numRows,
+        ...options
+      }
+    };
+  };
+
+  const createNumberCard = (data: any[], columns: string[], options: any = {}) => {
+    // Get the first value from selected column
+    const value = data[0][columns[0]];
+    const title = options.title || columns[0];
+  
+    return {
+      type: 'custom',
+      componentType: 'NumberCard',
+      data: {
+        title: title,
+        value: value
+      }
+    };
+  };
+  const createTextBox = (options: any = {}) => {
+    return {
+      type: 'custom',
+      componentType: 'TextBox',
+      data: {
+        text: options.text || '',
+        position: options.position || { x: 0, y: 0 }
+      }
+    };
+  };
   // Line Chart
   const createLineChart = (data: any[], columns: string[]) => {
     return createBasicChartOptions('line', data, columns);
@@ -542,7 +583,12 @@ const createBasicChartOptions = (type: string, data: any[], columns: string[]) =
       'liquid': createLiquid,
       'parallel': createParallel,
       'sankey': createSankey,
-      'sunburst': createSunburst
+      'sunburst': createSunburst,
+    //    'datatable': (data: any[], columns: string[]) => 
+    //   createDataTable(data, columns, options),
+    // 'numbercard': (data: any[], columns: string[]) => 
+    //   createNumberCard(data, columns, options),
+    // 'textbox': () => createTextBox(options)
     };
   
     // Get the appropriate chart creator function

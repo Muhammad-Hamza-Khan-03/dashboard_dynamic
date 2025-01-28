@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DraggableChart from './drag-chart';
 import ChartModal from './chartmodal';
+import FlowBoard from './flow-board';
+import { ThemeProvider, ThemeSelector } from './theme-provider';
 
 // Interfaces
 interface Position {
@@ -23,10 +25,16 @@ interface Chart {
   id: string;
   type: string;
   title: string;
-  description?: string;  
+  description?: string;
   graphUrl: string;
-  position: Position;
+  position: {
+    x: number;
+    y: number;
+    width?: number;
+    height?: number;
+  };
 }
+
 
 
 interface Column {
@@ -59,6 +67,15 @@ interface ChartCreationData {
   options?: ChartOptions; // Add the 'options' property
 }
 
+// Custom Node Component for Charts
+const ChartNode = ({ data }: { data: any }) => {
+  return (
+    <div className="bg-white rounded-lg shadow-lg">
+      <DraggableChart {...data} />
+    </div>
+  );
+};
+
 const BoardMain: React.FC = () => {
   const { user, isLoaded: userLoaded } = useUser();
   const userId = user?.id;
@@ -75,8 +92,7 @@ const BoardMain: React.FC = () => {
   const [selectedDashboard, setSelectedDashboard] = useState<string | null>(null);
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [newDashboardName, setNewDashboardName] = useState<string>('');
-  // const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  // const [dashboardToDelete, setDashboardToDelete] = useState<string | null>(null);
+  
   useEffect(() => {
     if (userId) {
       const savedDashboards = localStorage.getItem(`dashboards_${userId}`);
@@ -220,10 +236,62 @@ const BoardMain: React.FC = () => {
     }
   }, [userId]);
 
-  // Create chart handler
-  const handleChartCreate = useCallback(async (chartData: ChartCreationData & { position: Position,options?:ChartOptions }) => {
-    if (!userId || !selectedFile || !selectedDashboard) return;
+  // // Create chart handler
+  // const handleChartCreate = useCallback(async (chartData: ChartCreationData & { position: Position,options?:ChartOptions }) => {
+  //   if (!userId || !selectedFile || !selectedDashboard) return;
 
+  //   try {
+  //     const response = await fetch(`http://localhost:5000/generate-graph/${userId}/${selectedFile.id}`, {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({
+  //         chartType: chartData.type,
+  //         selectedColumns: chartData.columns,
+  //         options: chartData.options // New options for additional chart types
+  //       }),
+  //     });
+
+  //     if (!response.ok) {
+  //       throw new Error('Failed to generate chart');
+  //     }
+
+  //     const { graph_id, url } = await response.json();
+      
+  //     // const newChart = {
+  //     //   id: graph_id,
+  //     //   type: chartData.type,
+  //     //   title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
+  //     //   graphUrl: `http://localhost:5000${url}`,
+  //     //   position: clickPosition
+  //     // };
+
+  //     const newChart = {
+  //       id: graph_id,
+  //       type: chartData.type,
+  //       title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
+  //       description: chartData.description || '',
+  //       graphUrl: `http://localhost:5000${url}`,
+  //       position: {
+  //         x: chartData.position.x,
+  //         y: chartData.position.y,
+  //         width: 800,  // Default width
+  //         height: 600  // Default height
+  //       }
+  //     };
+
+  //     setCharts(prev => [...prev, newChart]);
+  //     setShowChartModal(false);
+  //   } catch (error) {
+  //     console.error('Error creating chart:', error);
+  //     setDataError('Failed to create chart');
+  //   }
+  // }, [userId, selectedFile, selectedDashboard, clickPosition]);
+
+  const handleChartCreate = useCallback(async (chartData: ChartCreationData & { position: Position }) => {
+    if (!userId || !selectedFile || !selectedDashboard) return;
+  
     try {
       const response = await fetch(`http://localhost:5000/generate-graph/${userId}/${selectedFile.id}`, {
         method: 'POST',
@@ -233,25 +301,17 @@ const BoardMain: React.FC = () => {
         body: JSON.stringify({
           chartType: chartData.type,
           selectedColumns: chartData.columns,
-          options: chartData.options // New options for additional chart types
+          options: chartData.options
         }),
       });
-
+  
       if (!response.ok) {
         throw new Error('Failed to generate chart');
       }
-
+  
       const { graph_id, url } = await response.json();
       
-      // const newChart = {
-      //   id: graph_id,
-      //   type: chartData.type,
-      //   title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
-      //   graphUrl: `http://localhost:5000${url}`,
-      //   position: clickPosition
-      // };
-
-      const newChart = {
+      const newChart: Chart = {
         id: graph_id,
         type: chartData.type,
         title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
@@ -264,14 +324,15 @@ const BoardMain: React.FC = () => {
           height: 600  // Default height
         }
       };
-
+  
       setCharts(prev => [...prev, newChart]);
       setShowChartModal(false);
     } catch (error) {
       console.error('Error creating chart:', error);
       setDataError('Failed to create chart');
     }
-  }, [userId, selectedFile, selectedDashboard, clickPosition]);
+  }, [userId, selectedFile, selectedDashboard]);
+  
   // Create dashboard handler
   const handleCreateDashboard = useCallback(() => {
     if (!newDashboardName.trim()) return;
@@ -296,6 +357,7 @@ const BoardMain: React.FC = () => {
   }
 
   return (
+    <ThemeProvider defaultTheme="light">
     <div className="h-screen flex flex-col">
       {/* Top Navigation */}
        <div className="bg-white border-b p-4 flex items-center justify-between shadow-sm">
@@ -359,19 +421,7 @@ const BoardMain: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            {/* {selectedDashboard && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                onClick={() => {
-                  setDashboardToDelete(selectedDashboard);
-                  setDeleteDialogOpen(true);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )} */}
+            
           </div>
 
           {/* New Dashboard Creation */}
@@ -396,7 +446,7 @@ const BoardMain: React.FC = () => {
       </div>
 
       {/* Graph Area with improved styling */}
-      <div className="flex-1 relative bg-gray-100 overflow-hidden p-6">
+  {/*    <div className="flex-1 relative bg-gray-100 overflow-hidden p-6">
         <div
           className="absolute inset-0 p-6"
           onDoubleClick={handleGraphAreaClick}
@@ -418,31 +468,41 @@ const BoardMain: React.FC = () => {
 ))}
         </div>
       </div>
-
-      {/* Delete Dashboard Dialog */}
-      {/* <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Dashboard</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this dashboard? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={handleDeleteDashboard}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog> */}
-
+*/}
+<div className="flex-1 relative bg-gray-100 overflow-hidden">
+  <FlowBoard
+    charts={charts}
+    onChartPositionChange={(id, newPosition) => {
+      handleChartPosition(id, {
+        x: newPosition.x,
+        y: newPosition.y,
+        // Preserve existing width and height if they exist
+        ...(charts.find(c => c.id === id)?.position.width && {
+          width: charts.find(c => c.id === id)?.position.width
+        }),
+        ...(charts.find(c => c.id === id)?.position.height && {
+          height: charts.find(c => c.id === id)?.position.height
+        })
+      });
+    }}
+    onChartRemove={handleRemoveChart}
+    onChartMaximize={handleMaximizeToggle}
+    onChartDescriptionChange={handleDescriptionChange}
+    maximizedChart={maximizedChart}
+    onAreaDoubleClick={(e) => {
+      // Get the position relative to the flow container
+      const flowContainer = e.currentTarget.getBoundingClientRect();
+      const position = {
+        x: e.clientX - flowContainer.left,
+        y: e.clientY - flowContainer.top
+      };
+      setClickPosition(position);
+      setShowChartModal(true);
+    }}
+    
+  />
+</div>
+     
       {/* Enhanced Chart Modal */}
       {showChartModal && selectedFile && (
         <ChartModal
@@ -475,7 +535,14 @@ const BoardMain: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+
+        {/* Add Theme Selector */}
+        <ThemeSelector />
+        </div>
+        
+    {/* </div> */}
+    
+    </ThemeProvider>
   );
 };
 

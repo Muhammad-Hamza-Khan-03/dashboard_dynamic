@@ -2378,148 +2378,189 @@ def update_blob(user_id, filename):
         app.logger.error(f"Error updating blob content: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-# Add these new endpoints to your backend.py
+# Add these new routes to your Flask backend (backend.py)
 
-@app.route('/get-column-stats/<user_id>/<file_id>/<column_name>', methods=['GET'])
-def get_column_stats(user_id, file_id, column_name):
-    """Get statistics and metadata for a specific column."""
+@app.route('/get-column-metadata/<user_id>/<file_id>/<column_name>', methods=['GET'])
+def get_column_metadata(user_id, file_id, column_name):
+    """Get metadata about a specific column including unique values, statistics etc."""
     try:
         conn = sqlite3.connect('user_files.db')
         c = conn.cursor()
         
-        # Get table name from file metadata
+        # Get file metadata and table name
         c.execute("""
-            SELECT unique_key
-            FROM user_files
-            WHERE file_id = ? AND user_id = ?
+            SELECT f.unique_key
+            FROM user_files f
+            WHERE f.file_id = ? AND f.user_id = ?
         """, (file_id, user_id))
         
         result = c.fetchone()
         if not result:
             return jsonify({'error': 'File not found'}), 404
             
-        table_name = f"table_{result[0]}"
-        
-        # Read column data
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
+
+        # Get column data
         df = pd.read_sql_query(f'SELECT "{column_name}" FROM "{table_name}"', conn)
         
-        # Determine column type
-        sample = df[column_name].dropna().iloc[0] if not df[column_name].empty else None
+        # Determine if column is numeric
         is_numeric = pd.api.types.is_numeric_dtype(df[column_name])
         
         if is_numeric:
-            stats = {
+            metadata = {
                 'type': 'numeric',
                 'min': float(df[column_name].min()),
                 'max': float(df[column_name].max()),
                 'mean': float(df[column_name].mean()),
-                'median': float(df[column_name].median()),
-                'unique_count': int(df[column_name].nunique()),
-                'null_count': int(df[column_name].isnull().sum()),
+                'unique_values': df[column_name].nunique(),
                 'value_counts': df[column_name].value_counts().head(10).to_dict()
             }
         else:
-            value_counts = df[column_name].value_counts()
-            stats = {
+            metadata = {
                 'type': 'categorical',
-                'unique_values': df[column_name].unique().tolist(),
-                'unique_count': int(df[column_name].nunique()),
-                'null_count': int(df[column_name].isnull().sum()),
-                'value_counts': value_counts.head(50).to_dict()
+                'unique_values': df[column_name].nunique(),
+                'value_counts': df[column_name].value_counts().head(50).to_dict()
             }
             
-        return jsonify(stats)
+        return jsonify(metadata)
         
     except Exception as e:
-        app.logger.error(f"Error getting column stats: {str(e)}")
+        app.logger.error(f"Error getting column metadata: {str(e)}")
         return jsonify({'error': str(e)}), 500
     finally:
-        conn.close()
+        if 'conn' in locals():
+            conn.close()
+
+# Add this helper function at the top of your backend.py file
+def convert_numpy_types(obj):
+    """
+    Recursively convert numpy types to Python native types for JSON serialization.
+    This ensures all data can be properly converted to JSON.
+    """
+    if isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32,
+                       np.int64, np.uint8, np.uint16, np.uint32, np.uint64)):
+        return int(obj)
+    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+        return float(obj)
+    elif isinstance(obj, (np.bool_)):
+        return bool(obj)
+    elif isinstance(obj, (np.ndarray,)):
+        return obj.tolist()
+    elif isinstance(obj, (pd.Timestamp)):
+        return obj.isoformat()
+    elif isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
+    elif isinstance(obj, (pd.Series)):
+        return convert_numpy_types(obj.values)
+    elif isinstance(obj, (decimal.Decimal)):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_numpy_types(item) for item in obj]
+    return obj
 
 @app.route('/apply-filters/<user_id>/<file_id>', methods=['POST'])
 def apply_filters(user_id, file_id):
-    """Apply filters and sorting to the dataset."""
+    """
+    Apply filters and sorting to the data, handling all numeric types properly.
+    Returns paginated, filtered, and sorted data in JSON format.
+    """
     try:
-        filters = request.json.get('filters', [])
+        app.logger.info(f"Applying filters for user {user_id}, file {file_id}")
+        filters = request.json.get('filters', {})
         sort_by = request.json.get('sort_by', {})
         page = request.json.get('page', 1)
         page_size = request.json.get('page_size', 50)
+        
+        app.logger.debug(f"Received filters: {filters}")
+        app.logger.debug(f"Sort by: {sort_by}")
         
         conn = sqlite3.connect('user_files.db')
         c = conn.cursor()
         
         # Get table name
         c.execute("""
-            SELECT unique_key
-            FROM user_files
-            WHERE file_id = ? AND user_id = ?
+            SELECT f.unique_key
+            FROM user_files f
+            WHERE f.file_id = ? AND f.user_id = ?
         """, (file_id, user_id))
         
         result = c.fetchone()
         if not result:
             return jsonify({'error': 'File not found'}), 404
             
-        table_name = f"table_{result[0]}"
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
         
-        # Build SQL query with filters
-        query = f'SELECT * FROM "{table_name}"'
+        # Build the SQL query with filters
+        where_clauses = []
         params = []
         
-        if filters:
-            conditions = []
-            for f in filters:
-                column = f['column']
-                operator = f['operator']
-                value = f['value']
-                
-                if operator == 'between':
-                    conditions.append(f'"{column}" BETWEEN ? AND ?')
-                    params.extend([value[0], value[1]])
-                elif operator in ['=', '>', '<', '>=', '<=']:
-                    conditions.append(f'"{column}" {operator} ?')
-                    params.append(value)
-                elif operator == 'in':
-                    placeholders = ','.join(['?' for _ in value])
-                    conditions.append(f'"{column}" IN ({placeholders})')
-                    params.extend(value)
-                elif operator == 'like':
-                    conditions.append(f'"{column}" LIKE ?')
-                    params.append(f'%{value}%')
-                    
-            if conditions:
-                query += ' WHERE ' + ' AND '.join(conditions)
+        for column, filter_value in filters.items():
+            if isinstance(filter_value, dict):
+                # Numeric range filter
+                if 'min' in filter_value and filter_value['min'] is not None:
+                    where_clauses.append(f'CAST("{column}" AS FLOAT) >= ?')
+                    params.append(float(filter_value['min']))
+                if 'max' in filter_value and filter_value['max'] is not None:
+                    where_clauses.append(f'CAST("{column}" AS FLOAT) <= ?')
+                    params.append(float(filter_value['max']))
+            else:
+                # Categorical filter
+                where_clauses.append(f'"{column}" = ?')
+                params.append(str(filter_value))
+        
+        where_sql = ' AND '.join(where_clauses) if where_clauses else '1=1'
         
         # Add sorting
+        order_by = ''
         if sort_by:
-            query += f' ORDER BY "{sort_by["column"]}" {sort_by["direction"]}'
-            
+            column = sort_by.get('column')
+            direction = sort_by.get('direction', 'asc').upper()
+            if column:
+                # Add CAST for numeric columns to ensure proper sorting
+                order_by = f' ORDER BY CAST("{column}" AS FLOAT) {direction}' if column in numericColumns else f' ORDER BY "{column}" {direction}'
+        
         # Add pagination
-        query += ' LIMIT ? OFFSET ?'
-        params.extend([page_size, (page - 1) * page_size])
+        offset = (page - 1) * page_size
+        limit_sql = f' LIMIT {page_size} OFFSET {offset}'
         
         # Execute query
+        query = f'SELECT * FROM "{table_name}" WHERE {where_sql}{order_by}{limit_sql}'
+        app.logger.debug(f"Executing query: {query} with params: {params}")
+        
         df = pd.read_sql_query(query, conn, params=params)
         
         # Get total count for pagination
-        count_query = f'SELECT COUNT(*) FROM "{table_name}"'
-        if filters:
-            count_query += ' WHERE ' + ' AND '.join(conditions)
-        total_count = pd.read_sql_query(count_query, conn, params=params[:-2]).iloc[0, 0]
+        count_query = f'SELECT COUNT(*) FROM "{table_name}" WHERE {where_sql}'
+        total_rows = pd.read_sql_query(count_query, conn, params=params).iloc[0, 0]
         
-        return jsonify({
-            'data': df.to_dict('records'),
-            'total': total_count,
-            'page': page,
-            'page_size': page_size,
-            'total_pages': (total_count + page_size - 1) // page_size
-        })
+        # Convert the data to a format that can be JSON serialized
+        result_data = convert_numpy_types(df.to_dict('records'))
+        
+        response_data = {
+            'data': result_data,
+            'pagination': {
+                'total_rows': int(total_rows),  # Convert numpy.int64 to native int
+                'page': page,
+                'page_size': page_size,
+                'total_pages': int((total_rows + page_size - 1) // page_size)
+            }
+        }
+        
+        app.logger.info(f"Successfully applied filters. Returning {len(result_data)} rows")
+        return jsonify(response_data)
         
     except Exception as e:
         app.logger.error(f"Error applying filters: {str(e)}")
+        app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
     finally:
-        conn.close()
-        
+        if 'conn' in locals():
+            conn.close()
+
 # @app.route('/generate-graph/<user_id>/<file_id>', methods=['POST'])
 # def generate_graph(user_id, file_id):
 #     try:
