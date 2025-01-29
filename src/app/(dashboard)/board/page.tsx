@@ -5,7 +5,7 @@ import { useUser } from '@clerk/clerk-react';
 import useFilesList from '@/features/sqlite/api/file-list';
 import { handleUseCSV } from '@/features/sqlite/api/file-content';
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, FileText, Loader, Menu, Plus } from 'lucide-react';
+import { AlertCircle, FileText, Loader, Menu, Plus, PlusCircle, Type } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,8 @@ import DraggableChart from './drag-chart';
 import ChartModal from './chartmodal';
 import FlowBoard from './flow-board';
 import { ThemeProvider, ThemeSelector } from './theme-provider';
-
+import FileSelectionPopover from './FileSelectionPopover';
+import { useNodesState, useEdgesState, Node } from 'reactflow';
 // Interfaces
 interface Position {
   x: number;
@@ -67,6 +68,13 @@ interface ChartCreationData {
   options?: ChartOptions; // Add the 'options' property
 }
 
+interface TextBoxData {
+  id: string;
+  type: 'textbox';
+  content: string;
+  position: { x: number; y: number };
+}
+
 // Custom Node Component for Charts
 const ChartNode = ({ data }: { data: any }) => {
   return (
@@ -93,6 +101,11 @@ const BoardMain: React.FC = () => {
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [newDashboardName, setNewDashboardName] = useState<string>('');
   
+  const [nodes, setNodes] = useNodesState([]);
+const [edges, setEdges] = useEdgesState([]);
+
+  const [mode, setMode] = useState<'none' | 'chart' | 'textbox'>('none');
+  const [textBoxes, setTextBoxes] = useState<TextBoxData[]>([]);
   useEffect(() => {
     if (userId) {
       const savedDashboards = localStorage.getItem(`dashboards_${userId}`);
@@ -186,19 +199,65 @@ const BoardMain: React.FC = () => {
   // }, [dashboardToDelete, selectedDashboard]);
 
   // Graph area click handler
-  const handleGraphAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!selectedFile || maximizedChart) return;
 
-    const rect = e.currentTarget.getBoundingClientRect();
+  // const handleGraphAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+  //   if (!selectedFile || maximizedChart) return;
+
+  //   const rect = e.currentTarget.getBoundingClientRect();
+  //   const position = {
+  //     x: e.clientX - rect.left,
+  //     y: e.clientY - rect.top
+  //   };
+    
+  //   setClickPosition(position);
+  //   setShowChartModal(true);
+  // }, [selectedFile, maximizedChart]);
+
+  const handleGraphAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (maximizedChart || mode === 'none') return;
+  
+    const flowContainer = e.currentTarget.closest('.react-flow');
+    if (!flowContainer) return;
+  
+    const rect = flowContainer.getBoundingClientRect();
     const position = {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top
     };
     
-    setClickPosition(position);
-    setShowChartModal(true);
-  }, [selectedFile, maximizedChart]);
+    if (mode === 'chart') {
+      setClickPosition(position);
+      setShowChartModal(true);
+    } else if (mode === 'textbox') {
+      const newTextBox: TextBoxData = {
+        id: `textbox-${Date.now()}`,
+        type: 'textbox',
+        content: 'Click to edit',
+        position
+      };
+      setTextBoxes(prev => [...prev, newTextBox]);
+    }
+    
+    setMode('none');
+  }, [maximizedChart, mode]);
+  
+// Update the text box handlers to use textBoxes state instead of nodes
+const handleTextBoxContentChange = useCallback((id: string, content: string) => {
+  setTextBoxes(prev => prev.map(box => 
+    box.id === id ? { ...box, content } : box
+  ));
+}, []);
 
+const handleTextBoxRemove = useCallback((id: string) => {
+  setTextBoxes(prev => prev.filter(box => box.id !== id));
+}, []);
+
+// Add textbox position change handler
+const handleTextBoxPositionChange = useCallback((id: string, position: Position) => {
+  setTextBoxes(prev => prev.map(box => 
+    box.id === id ? { ...box, position } : box
+  ));
+}, []);
   // File selection handler
   const handleFileSelection = useCallback(async (fileId: string) => {
     if (!userId) return;
@@ -361,8 +420,9 @@ const BoardMain: React.FC = () => {
     <div className="h-screen flex flex-col">
       {/* Top Navigation */}
        <div className="bg-white border-b p-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center space-x-6">
-          {/* File Selection */}
+        
+         {/* <div className="flex items-center space-x-6">
+          
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="hover:bg-gray-100">
@@ -396,7 +456,7 @@ const BoardMain: React.FC = () => {
               </div>
             </SheetContent>
           </Sheet>
-           {/* Selected File Name Display */}
+          
            {selectedFile && (
             <div className="flex items-center px-3 py-1.5 bg-blue-50 rounded-md">
               <FileText className="h-4 w-4 text-blue-600 mr-2" />
@@ -404,7 +464,25 @@ const BoardMain: React.FC = () => {
                 {fileList?.find(f => f.file_id === selectedFile.id)?.filename || 'Selected File'}
               </span>
             </div>
-          )}
+          )} 
+           */}
+           <div className="flex items-center space-x-6">
+  <FileSelectionPopover
+    files={fileList || []}
+    loading={filesLoading}
+    selectedFileId={selectedFile?.id || null}
+    onSelect={handleFileSelection}
+  />
+
+  {/* Selected File Name Display */}
+  {selectedFile && (
+    <div className="flex items-center px-3 py-1.5 bg-blue-50 rounded-md">
+      <FileText className="h-4 w-4 text-blue-600 mr-2" />
+      <span className="text-sm font-medium text-blue-700">
+        {fileList?.find(f => f.file_id === selectedFile.id)?.filename || 'Selected File'}
+      </span>
+    </div>
+  )}
 
 
           {/* Dashboard Selection with Delete Option */}
@@ -469,37 +547,38 @@ const BoardMain: React.FC = () => {
         </div>
       </div>
 */}
+ {/* Creation Controls */}
+ <div className="fixed left-4 top-1/2 -translate-y-1/2 flex flex-col space-y-2">
+          <Button
+            variant={mode === 'chart' ? "default" : "outline"}
+            size="icon"
+            className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+            onClick={() => setMode(prev => prev === 'chart' ? 'none' : 'chart')}
+          >
+            <PlusCircle className="h-5 w-5" />
+          </Button>
+          <Button
+            variant={mode === 'textbox' ? "default" : "outline"}
+            size="icon"
+            className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+            onClick={() => setMode(prev => prev === 'textbox' ? 'none' : 'textbox')}
+          >
+            <Type className="h-5 w-5" />
+          </Button>
+        </div>
 <div className="flex-1 relative bg-gray-100 overflow-hidden">
-  <FlowBoard
+<FlowBoard
     charts={charts}
-    onChartPositionChange={(id, newPosition) => {
-      handleChartPosition(id, {
-        x: newPosition.x,
-        y: newPosition.y,
-        // Preserve existing width and height if they exist
-        ...(charts.find(c => c.id === id)?.position.width && {
-          width: charts.find(c => c.id === id)?.position.width
-        }),
-        ...(charts.find(c => c.id === id)?.position.height && {
-          height: charts.find(c => c.id === id)?.position.height
-        })
-      });
-    }}
+    textBoxes={textBoxes}
+    onChartPositionChange={handleChartPosition}
     onChartRemove={handleRemoveChart}
     onChartMaximize={handleMaximizeToggle}
     onChartDescriptionChange={handleDescriptionChange}
+    onTextBoxPositionChange={handleTextBoxPositionChange}
+    onTextBoxContentChange={handleTextBoxContentChange}
+    onTextBoxRemove={handleTextBoxRemove}
     maximizedChart={maximizedChart}
-    onAreaDoubleClick={(e) => {
-      // Get the position relative to the flow container
-      const flowContainer = e.currentTarget.getBoundingClientRect();
-      const position = {
-        x: e.clientX - flowContainer.left,
-        y: e.clientY - flowContainer.top
-      };
-      setClickPosition(position);
-      setShowChartModal(true);
-    }}
-    
+    onAreaClick={(event) => handleGraphAreaClick(event)} // Updated prop name and handler
   />
 </div>
      

@@ -1,3 +1,7 @@
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Check, Palette } from 'lucide-react';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 // First, let's define our theme configurations
@@ -30,6 +34,64 @@ const themes = {
     controlsBackground: '#262626',
     minimapBackground: 'rgba(38, 38, 38, 0.9)',
   },
+  // New sophisticated gray themes
+  platinum: {
+    name: 'Platinum',
+    background: '#f8fafc',
+    text: '#334155',
+    primary: '#64748b',
+    secondary: '#94a3b8',
+    accent: '#475569',
+    border: '#e2e8f0',
+    nodeBackground: '#ffffff',
+    nodeShadow: '0 4px 6px -1px rgb(100 116 139 / 0.1)',
+    backgroundDots: '#cbd5e1',
+    controlsBackground: '#ffffff',
+    minimapBackground: 'rgba(248, 250, 252, 0.95)',
+  },
+  graphite: {
+    name: 'Graphite',
+    background: '#1e293b',
+    text: '#e2e8f0',
+    primary: '#94a3b8',
+    secondary: '#64748b',
+    accent: '#cbd5e1',
+    border: '#334155',
+    nodeBackground: '#0f172a',
+    nodeShadow: '0 4px 6px -1px rgb(15 23 42 / 0.3)',
+    backgroundDots: '#334155',
+    controlsBackground: '#0f172a',
+    minimapBackground: 'rgba(15, 23, 42, 0.95)',
+  },
+  // New blue themes
+  azure: {
+    name: 'Azure',
+    background: '#f0f9ff',
+    text: '#0c4a6e',
+    primary: '#0ea5e9',
+    secondary: '#38bdf8',
+    accent: '#0284c7',
+    border: '#bae6fd',
+    nodeBackground: '#ffffff',
+    nodeShadow: '0 4px 6px -1px rgb(14 165 233 / 0.1)',
+    backgroundDots: '#7dd3fc',
+    controlsBackground: '#ffffff',
+    minimapBackground: 'rgba(255, 255, 255, 0.9)',
+  },
+  sapphire: {
+    name: 'Sapphire',
+    background: '#172554',
+    text: '#bfdbfe',
+    primary: '#3b82f6',
+    secondary: '#60a5fa',
+    accent: '#2563eb',
+    border: '#1e40af',
+    nodeBackground: '#1e3a8a',
+    nodeShadow: '0 4px 6px -1px rgb(30 58 138 / 0.3)',
+    backgroundDots: '#1e40af',
+    controlsBackground: '#1e3a8a',
+    minimapBackground: 'rgba(30, 58, 138, 0.95)',
+  },
   crimson: {
     name: 'Crimson',
     background: '#fef2f2',
@@ -43,6 +105,35 @@ const themes = {
     backgroundDots: '#fee2e2',
     controlsBackground: '#ffffff',
     minimapBackground: 'rgba(255, 255, 255, 0.9)',
+  },
+  // New modern dashboard themes
+  frost: {
+    name: 'Frost',
+    background: '#f8fafc',
+    text: '#0f172a',
+    primary: '#38bdf8',
+    secondary: '#7dd3fc',
+    accent: '#0ea5e9',
+    border: '#e2e8f0',
+    nodeBackground: '#ffffff',
+    nodeShadow: '0 4px 6px -1px rgb(56 189 248 / 0.1)',
+    backgroundDots: '#bae6fd',
+    controlsBackground: '#ffffff',
+    minimapBackground: 'rgba(255, 255, 255, 0.95)',
+  },
+  midnight: {
+    name: 'Midnight',
+    background: '#020617',
+    text: '#e2e8f0',
+    primary: '#818cf8',
+    secondary: '#a5b4fc',
+    accent: '#6366f1',
+    border: '#1e293b',
+    nodeBackground: '#0f172a',
+    nodeShadow: '0 4px 6px -1px rgb(99 102 241 / 0.3)',
+    backgroundDots: '#1e293b',
+    controlsBackground: '#0f172a',
+    minimapBackground: 'rgba(15, 23, 42, 0.95)',
   },
   aqua: {
     name: 'Aqua',
@@ -71,6 +162,21 @@ const themes = {
     backgroundDots: '#86efac',
     controlsBackground: '#ffffff',
     minimapBackground: 'rgba(255, 255, 255, 0.9)',
+  },
+  // New professional dashboard theme
+  corporate: {
+    name: 'Corporate',
+    background: '#f9fafb',
+    text: '#111827',
+    primary: '#4f46e5',
+    secondary: '#6366f1',
+    accent: '#4338ca',
+    border: '#e5e7eb',
+    nodeBackground: '#ffffff',
+    nodeShadow: '0 4px 6px -1px rgb(79 70 229 / 0.1)',
+    backgroundDots: '#e0e7ff',
+    controlsBackground: '#ffffff',
+    minimapBackground: 'rgba(255, 255, 255, 0.95)',
   }
 };
 
@@ -119,21 +225,44 @@ export const ThemeSelector: React.FC = () => {
   const { themeName, setThemeName } = useTheme();
 
   return (
-    <div className="flex items-center space-x-2">
-      {Object.keys(themes).map((name) => (
-        <button
-          key={name}
-          onClick={() => setThemeName(name as ThemeNames)}
-          className={`w-8 h-8 rounded-full border-2 transition-all ${
-            themeName === name ? 'scale-110 border-white' : 'border-transparent'
-          }`}
-          style={{
-            backgroundColor: themes[name as ThemeNames].primary,
-          }}
-          title={themes[name as ThemeNames].name}
-        />
-      ))}
-    </div>
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button 
+          variant="outline" 
+          size="icon"
+          className="fixed bottom-4 right-4 h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+        >
+          <Palette className="h-5 w-5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent 
+        className="w-56 p-2" 
+        side="top" 
+        align="end"
+      >
+        <ScrollArea className="h-auto max-h-[300px]">
+          <div className="space-y-1">
+            {Object.entries(themes).map(([name, theme]) => (
+              <Button
+                key={name}
+                variant="ghost"
+                className="w-full justify-start gap-2 px-2 py-4 hover:bg-accent/5"
+                onClick={() => setThemeName(name as ThemeNames)}
+              >
+                <div 
+                  className="h-6 w-6 rounded-full border"
+                  style={{ backgroundColor: theme.primary }}
+                />
+                <span className="flex-1 text-sm">{theme.name}</span>
+                {themeName === name && (
+                  <Check className="h-4 w-4 text-primary" />
+                )}
+              </Button>
+            ))}
+          </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
   );
 };
 
