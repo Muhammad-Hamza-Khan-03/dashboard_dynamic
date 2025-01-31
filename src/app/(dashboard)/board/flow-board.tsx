@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { X, Maximize2, Minimize2, Edit2 } from 'lucide-react';
 import { useTheme } from './theme-provider';
 import TextBoxNode from './TextBoxNode';
+import DataTableNode from './dataTableNode';
+import StatCardNode from './statCardNode';
 
 interface ChartNodeData {
   id: string;
@@ -89,6 +91,21 @@ interface FlowBoardProps {
     content: string;
     position: { x: number; y: number };
   }>;
+  dataTables: Array<{
+    id: string;
+    columns: string[];
+    data: any[];
+    title: string;
+    position: { x: number; y: number };
+  }>;
+  statCards: Array<{
+    id: string;
+    column: string;
+    statType: string;
+    title: string;
+    position: { x: number; y: number };
+    data: any[];
+  }>;
   onChartPositionChange: (id: string, position: { x: number; y: number }) => void;
   onChartRemove: (id: string) => void;
   onChartMaximize: (id: string) => void;
@@ -96,6 +113,10 @@ interface FlowBoardProps {
   onTextBoxPositionChange: (id: string, position: { x: number; y: number }) => void;
   onTextBoxContentChange: (id: string, content: string) => void;
   onTextBoxRemove: (id: string) => void;
+  onDataTablePositionChange: (id: string, position: { x: number; y: number }) => void;
+  onDataTableRemove: (id: string) => void;
+  onStatCardPositionChange: (id: string, position: { x: number; y: number }) => void;
+  onStatCardRemove: (id: string) => void;
   maximizedChart: string | null;
   onAreaClick: (event: React.MouseEvent<HTMLDivElement>) => void;
 }
@@ -174,12 +195,16 @@ const ChartNode: React.FC<NodeProps<ChartNodeData>> = ({ data }) => {
 
 const nodeTypes: NodeTypes = {
   chartNode: ChartNode,
-  textBoxNode:TextBoxNode,
+  textBoxNode: TextBoxNode,
+  dataTableNode: DataTableNode,
+  statCardNode: StatCardNode,
 };
 
 const FlowBoard: React.FC<FlowBoardProps> = ({
   charts,
   textBoxes,
+  dataTables,
+  statCards,
   onChartPositionChange,
   onChartRemove,
   onChartMaximize,
@@ -187,15 +212,19 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
   onTextBoxPositionChange,
   onTextBoxContentChange,
   onTextBoxRemove,
+  onDataTablePositionChange,
+  onDataTableRemove,
+  onStatCardPositionChange,
+  onStatCardRemove,
   maximizedChart,
   onAreaClick,
 }) => {
     const {theme} = useTheme();
   // Convert charts to React Flow nodes
 // Update the createNodes function with better typing
-const createNodes = useCallback((): FlowNode[] => {
-  // Create chart nodes with the new typing
-  const chartNodes: FlowNode[] = charts.map((chart) => ({
+const createNodes = useCallback((): Node[] => {
+  // Create chart nodes
+  const chartNodes: Node[] = charts.map((chart) => ({
     id: chart.id,
     type: 'chartNode',
     position: chart.position,
@@ -216,8 +245,9 @@ const createNodes = useCallback((): FlowNode[] => {
     draggable: maximizedChart !== chart.id,
   }));
 
+
   // Create textbox nodes with the new typing
-  const textBoxNodes: FlowNode[] = textBoxes.map((textBox) => ({
+  const textBoxNodes: Node[] = textBoxes.map((textBox) => ({
     id: textBox.id,
     type: 'textBoxNode',
     position: textBox.position,
@@ -231,39 +261,87 @@ const createNodes = useCallback((): FlowNode[] => {
     },
     draggable: true,
   }));
+  const dataTableNodes: Node[] = dataTables.map((table) => ({
+    id: table.id,
+    type: 'dataTableNode',
+    position: table.position,
+    data: {
+      id: table.id,
+      nodeType: 'datatable',
+      position: table.position,
+      columns: table.columns,
+      data: table.data,
+      title: table.title,
+      onRemove: onDataTableRemove,
+    },
+    draggable: true,
+  }));
+  // Create stat card nodes
+  const statCardNodes: Node[] = statCards.map((card) => ({
+    id: card.id,
+    type: 'statCardNode',
+    position: card.position,
+    data: {
+      id: card.id,
+      nodeType: 'statcard',
+      position: card.position,
+      column: card.column,
+      statType: card.statType,
+      title: card.title,
+      data: card.data,
+      onRemove: onStatCardRemove,
+    },
+    draggable: true,
+  }));
 
-  return [...chartNodes, ...textBoxNodes];
-}, [
+
+  return [...chartNodes, ...textBoxNodes, ...dataTableNodes, ...statCardNodes];
+},  [
   charts,
   textBoxes,
+  dataTables,
+  statCards,
   maximizedChart,
   onChartRemove,
   onChartMaximize,
   onChartDescriptionChange,
+  onTextBoxRemove,
   onTextBoxContentChange,
-  onTextBoxRemove
+  onDataTableRemove,
+  onStatCardRemove,
 ]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(createNodes());
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+const [nodes, setNodes, onNodesChange] = useNodesState(createNodes());
+const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-  useEffect(() => {
-    setNodes(createNodes());
-  }, [charts, textBoxes, createNodes, setNodes]);
+useEffect(() => {
+  setNodes(createNodes());
+}, [charts, textBoxes, dataTables, statCards, createNodes, setNodes]);
 
   
-  const onNodeDragStop = useCallback((event: React.MouseEvent, node: Node) => {
-    const position = { x: node.position.x, y: node.position.y };
-    
-    // Use type assertion to safely handle different node types
-    const nodeData = node.data as (ChartNodeData | TextBoxNodeData);
-    
-    if (nodeData.type === 'textbox') {
-      onTextBoxPositionChange(node.id, position);
-    } else {
+const onNodeDragStop = useCallback((event: React.MouseEvent, node: Node) => {
+  const position = { x: node.position.x, y: node.position.y };
+  
+  switch (node.data.nodeType) {
+    case 'chart':
       onChartPositionChange(node.id, position);
-    }
-  }, [onChartPositionChange, onTextBoxPositionChange]);
+      break;
+    case 'textbox':
+      onTextBoxPositionChange(node.id, position);
+      break;
+    case 'datatable':
+      onDataTablePositionChange(node.id, position);
+      break;
+    case 'statcard':
+      onStatCardPositionChange(node.id, position);
+      break;
+  }
+}, [
+  onChartPositionChange,
+  onTextBoxPositionChange,
+  onDataTablePositionChange,
+  onStatCardPositionChange,
+]);
 
   return (
     <ReactFlowProvider>
@@ -283,7 +361,7 @@ const createNodes = useCallback((): FlowNode[] => {
           }}
           fitView
           minZoom={0.1}
-          maxZoom={2}
+          maxZoom={5}
           snapToGrid
           snapGrid={[16, 16]}
           style={{ backgroundColor: theme.background }}

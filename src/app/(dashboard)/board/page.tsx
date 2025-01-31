@@ -6,7 +6,6 @@ import useFilesList from '@/features/sqlite/api/file-list';
 import { handleUseCSV } from '@/features/sqlite/api/file-content';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, FileText, Loader, Menu, Plus, PlusCircle, Type } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,6 +15,10 @@ import FlowBoard from './flow-board';
 import { ThemeProvider, ThemeSelector } from './theme-provider';
 import FileSelectionPopover from './FileSelectionPopover';
 import { useNodesState, useEdgesState, Node } from 'reactflow';
+import { Table, Database, PieChart } from 'lucide-react';
+import StatCardModal from './stat-Card-Modal';
+import DataTableModal from './dataTableSelection';
+
 // Interfaces
 interface Position {
   x: number;
@@ -74,6 +77,22 @@ interface TextBoxData {
   content: string;
   position: { x: number; y: number };
 }
+interface DataTable {
+  id: string;
+  columns: string[];
+  data: any[];
+  title: string;
+  position: { x: number; y: number };
+}
+
+interface StatCard {
+  id: string;
+  column: string;
+  statType: string;
+  title: string;
+  position: { x: number; y: number };
+  data: any[];
+}
 
 // Custom Node Component for Charts
 const ChartNode = ({ data }: { data: any }) => {
@@ -104,8 +123,18 @@ const BoardMain: React.FC = () => {
   const [nodes, setNodes] = useNodesState([]);
 const [edges, setEdges] = useEdgesState([]);
 
-  const [mode, setMode] = useState<'none' | 'chart' | 'textbox'>('none');
+  const [mode, setMode] = useState<'none' | 'chart' | 'textbox' | 'datatable' | 'statcard'>('none');
   const [textBoxes, setTextBoxes] = useState<TextBoxData[]>([]);
+
+
+  const [showDataTableModal, setShowDataTableModal] = useState<boolean>(false);
+const [showStatCardModal, setShowStatCardModal] = useState<boolean>(false);
+const [dataTables, setDataTables] = useState<DataTable[]>([]);
+const [statCards, setStatCards] = useState<StatCard[]>([]);
+
+
+type ContentMode = 'none' | 'chart' | 'textbox' | 'datatable' | 'statcard';
+
   useEffect(() => {
     if (userId) {
       const savedDashboards = localStorage.getItem(`dashboards_${userId}`);
@@ -158,6 +187,66 @@ const [edges, setEdges] = useEdgesState([]);
     return () => clearTimeout(timeoutId);
   }, [charts, selectedDashboard]);
 
+ const handleDataTableCreate = useCallback((config: {
+  columns: string[];
+  title: string;
+  position: { x: number; y: number };
+}) => {
+  if (!selectedFile) return;
+
+  // Filter data to only include selected columns
+  const filteredData = selectedFile.data.map(row => {
+    const newRow: Record<string, any> = {};
+    config.columns.forEach(col => {
+      newRow[col] = row[col];
+    });
+    return newRow;
+  });const newTable: DataTable = {
+    id: `table-${Date.now()}`,
+    columns: config.columns,
+    data: filteredData,
+    title: config.title,
+    position: config.position
+  };
+
+  setDataTables(prev => [...prev, newTable]);
+}, [selectedFile]);
+
+ const handleStatCardCreate = useCallback((config: {
+  column: string;
+  statType: string;
+  title: string;
+  position: { x: number; y: number };
+}) => {
+  if (!selectedFile) return;
+
+  const newCard: StatCard = {
+    id: `card-${Date.now()}`,
+    column: config.column,
+    statType: config.statType,
+    title: config.title,
+    position: config.position,
+    data: selectedFile.data
+  };
+
+  setStatCards(prev => [...prev, newCard]);
+}, [selectedFile]);
+
+  const handleStatCardPositionChange = useCallback((id: string, position: { x: number; y: number }) => {
+  setStatCards(prev => prev.map(card =>
+    card.id === id ? { ...card, position } : card
+  ));
+}, []);
+
+  const handleDataTableRemove = useCallback((id: string) => {
+    setDataTables(prev => prev.filter(table => table.id !== id));
+  }, []);
+  
+  const handleRemoveStatCard = useCallback((id: string) => {
+  // Update the statCards state by filtering out the card with the matching id
+  setStatCards(prevCards => prevCards.filter(card => card.id !== id));
+}, []); 
+  
   const handleDescriptionChange = useCallback((chartId: string, description: string) => {
     setCharts(prev => prev.map(chart => 
       chart.id === chartId 
@@ -236,8 +325,14 @@ const [edges, setEdges] = useEdgesState([]);
         position
       };
       setTextBoxes(prev => [...prev, newTextBox]);
+    }else if(mode === 'datatable'){
+      setClickPosition(position);
+      setShowDataTableModal(true);
     }
-    
+    else if(mode === 'statcard'){
+      setClickPosition(position);
+      setShowStatCardModal(true);
+    }
     setMode('none');
   }, [maximizedChart, mode]);
   
@@ -347,6 +442,14 @@ const handleTextBoxPositionChange = useCallback((id: string, position: Position)
   //     setDataError('Failed to create chart');
   //   }
   // }, [userId, selectedFile, selectedDashboard, clickPosition]);
+
+const handleDataTablePositionChange = useCallback((id: string, position: { x: number; y: number }) => {
+  setDataTables(prev => prev.map(table =>
+    table.id === id ? { ...table, position } : table
+  ));
+}, []);
+
+
 
   const handleChartCreate = useCallback(async (chartData: ChartCreationData & { position: Position }) => {
     if (!userId || !selectedFile || !selectedDashboard) return;
@@ -557,6 +660,7 @@ const handleTextBoxPositionChange = useCallback((id: string, position: Position)
           >
             <PlusCircle className="h-5 w-5" />
           </Button>
+          
           <Button
             variant={mode === 'textbox' ? "default" : "outline"}
             size="icon"
@@ -565,22 +669,64 @@ const handleTextBoxPositionChange = useCallback((id: string, position: Position)
           >
             <Type className="h-5 w-5" />
           </Button>
+          <Button
+      variant={mode === 'datatable' ? "default" : "outline"}
+      size="icon"
+      className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+      onClick={() => setMode(prev => prev === 'datatable' ? 'none' : 'datatable')}
+    >
+      <Table className="h-5 w-5" />
+    </Button>
+    <Button
+      variant={mode === 'statcard' ? "default" : "outline"}
+      size="icon"
+      className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+      onClick={() => setMode(prev => prev === 'statcard' ? 'none' : 'statcard')}
+    >
+      <Database className="h-5 w-5" />
+    </Button>
         </div>
+
+        {showDataTableModal && selectedFile && (
+    <DataTableModal
+      isOpen={showDataTableModal}
+      onClose={() => setShowDataTableModal(false)}
+      onExport={handleDataTableCreate}
+      position={clickPosition}
+      columns={selectedFile.columns}
+    />
+  )}
+
+  {showStatCardModal && selectedFile && (
+    <StatCardModal
+      isOpen={showStatCardModal}
+      onClose={() => setShowStatCardModal(false)}
+      onExport={handleStatCardCreate}
+      position={clickPosition}
+      columns={selectedFile.columns}
+    />
+  )}
 <div className="flex-1 relative bg-gray-100 overflow-hidden">
-<FlowBoard
-    charts={charts}
-    textBoxes={textBoxes}
-    onChartPositionChange={handleChartPosition}
-    onChartRemove={handleRemoveChart}
-    onChartMaximize={handleMaximizeToggle}
-    onChartDescriptionChange={handleDescriptionChange}
-    onTextBoxPositionChange={handleTextBoxPositionChange}
-    onTextBoxContentChange={handleTextBoxContentChange}
-    onTextBoxRemove={handleTextBoxRemove}
-    maximizedChart={maximizedChart}
-    onAreaClick={(event) => handleGraphAreaClick(event)} // Updated prop name and handler
-  />
-</div>
+  <FlowBoard
+charts={charts}
+  textBoxes={textBoxes}
+  dataTables={dataTables}
+  statCards={statCards}
+  onChartPositionChange={handleChartPosition}
+  onChartRemove={handleRemoveChart}
+  onChartMaximize={handleMaximizeToggle}
+  onChartDescriptionChange={handleDescriptionChange}
+  onTextBoxPositionChange={handleTextBoxPositionChange}
+  onTextBoxContentChange={handleTextBoxContentChange}
+  onTextBoxRemove={handleTextBoxRemove}
+  onDataTablePositionChange={handleDataTablePositionChange}
+  onDataTableRemove={handleDataTableRemove}
+  onStatCardPositionChange={handleStatCardPositionChange}
+  onStatCardRemove={handleRemoveStatCard}
+  maximizedChart={maximizedChart}
+  onAreaClick={handleGraphAreaClick}
+/>
+  </div>
      
       {/* Enhanced Chart Modal */}
       {showChartModal && selectedFile && (
