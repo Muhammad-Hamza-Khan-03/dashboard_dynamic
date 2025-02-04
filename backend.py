@@ -534,29 +534,113 @@ class EnhancedChartGenerator:
              # Configure global options
             chart.set_global_opts(
                 title_opts=opts.TitleOpts(
-                    title="Chart Title",
-                    subtitle="Chart Subtitle",
-                    title_textstyle_opts=opts.TextStyleOpts(font_size=16)
+                    title=selected_columns[0]+" vs "+selected_columns[1],
+                    pos_left="center",
+                    title_textstyle_opts=opts.TextStyleOpts(font_size=20)
                 ),
-                tooltip_opts=opts.TooltipOpts(trigger="axis"),
-                datazoom_opts=[
-                    opts.DataZoomOpts(type_="slider"),
-                    opts.DataZoomOpts(type_="inside")
-                ],
-                toolbox_opts=opts.ToolboxOpts(
-                    feature={
-                        "dataZoom": {},
-                        "restore": {},
-                        "saveAsImage": {},
-                        "dataView": {}
+               # Enhanced tooltip configuration
+        tooltip_opts=opts.TooltipOpts(
+            trigger="axis",
+            axis_pointer_type="cross",
+            background_color="rgba(255,255,255,0.9)",
+            border_color="#ccc",
+            border_width=1,
+            textstyle_opts=opts.TextStyleOpts(color="#333")
+        ),
+        
+        # Dual zoom functionality
+        datazoom_opts=[
+            opts.DataZoomOpts(
+                type_="slider",
+                range_start=0,
+                range_end=100,
+                filter_mode="filter"
+            ),
+            opts.DataZoomOpts(
+                type_="inside",
+                range_start=0,
+                range_end=100,
+                filter_mode="filter"
+            )
+        ],
+        
+        # Professional toolbox with extended features
+        toolbox_opts=opts.ToolboxOpts(
+            feature={
+                "dataZoom": {
+                    "yAxisIndex": "none",
+                    "title": {"zoom": "Area Zoom", "back": "Restore Zoom"}
+                },
+                "restore": {"title": "Reset"},
+                "saveAsImage": {"title": "Save as Image"},
+                "dataView": {
+                    "title": "Data View",
+                    "lang": ["Data View", "Close", "Refresh"]
+                },
+                "magicType": {
+                    "type": ["line", "bar", "stack", "tiled"],
+                    "title": {
+                        "line": "Switch to Line",
+                        "bar": "Switch to Bar",
+                        "stack": "Stack Series",
+                        "tiled": "Unstack Series"
                     }
-                ),
-                legend_opts=opts.LegendOpts(
-                    type_="scroll",
-                    pos_top="top",
-                    orient="horizontal"
+                }
+            }
+        ),
+        
+        # Enhanced legend configuration
+        legend_opts=opts.LegendOpts(
+            type_="scroll",
+            pos_top="5%",
+            pos_left="center",
+            orient="horizontal",
+            textstyle_opts=opts.TextStyleOpts(
+                font_size=12,
+                color="#333"
+            ),
+            item_gap=25
+        ),
+        
+        # Professional axis styling
+        xaxis_opts=opts.AxisOpts(
+            name=selected_columns[0],
+            name_location="middle",
+            name_gap=35,
+            name_textstyle_opts=opts.TextStyleOpts(font_size=14),
+            axisline_opts=opts.AxisLineOpts(
+                linestyle_opts=opts.LineStyleOpts(color="#333")
+            ),
+            axislabel_opts=opts.LabelOpts(
+                font_size=12,
+                color="#333",
+                rotate=0
+            )
+            
+        ),
+        yaxis_opts=opts.AxisOpts(
+            name=selected_columns[1:] if len(selected_columns) > 1 else "",
+            name_location="middle",
+            name_gap=50,
+            name_rotate=90,
+            name_textstyle_opts=opts.TextStyleOpts(font_size=14),
+            axisline_opts=opts.AxisLineOpts(
+                linestyle_opts=opts.LineStyleOpts(color="#333")
+            ),
+            axislabel_opts=opts.LabelOpts(
+                font_size=12,
+                color="#333"
+            ),
+            splitline_opts=opts.SplitLineOpts(
+                is_show=True,
+                linestyle_opts=opts.LineStyleOpts(
+                    type_="dashed",
+                    opacity=0.3
                 )
             )
+        )
+    )
+    
             
             # Set chart to be responsive
             chart.width = "100%"
@@ -588,16 +672,30 @@ class EnhancedChartGenerator:
             y_data,
             symbol_size=options.get('symbol_size', 10),
             effect_opts=opts.EffectOpts(
-                brush_type="stroke",
-                scale=options.get('effect_scale', 2.5)
-            )
+                brushType="stroke",
+            scale=options.get('effect_scale', 2.5),
+            period=4
+            ),
+            itemstyle_opts=opts.ItemStyleOpts(
+            color=options.get('color', '#5470c6'),
+            opacity=0.8
+        )
         )
         
         chart.set_global_opts(
-            title_opts=opts.TitleOpts(title="Effect Scatter Chart"),
-            xaxis_opts=opts.AxisOpts(type_="value"),
-            yaxis_opts=opts.AxisOpts(type_="value")
+        title_opts=opts.TitleOpts(
+            title=f"{selected_columns[0]} vs {selected_columns[1]}",
+            subtitle="Effect Scatter Chart"
+        ),
+        xaxis_opts=opts.AxisOpts(
+            type_="value",
+            splitline_opts=opts.SplitLineOpts(is_show=True)
+        ),
+        yaxis_opts=opts.AxisOpts(
+            type_="value",
+            splitline_opts=opts.SplitLineOpts(is_show=True)
         )
+    )
         
         return chart
 
@@ -606,18 +704,31 @@ class EnhancedChartGenerator:
         """Creates a funnel chart showing stages in a process."""
         chart = Funnel()
         
-        data = [
-            (row[selected_columns[0]], row[selected_columns[1]])
+          # Prepare data pairs (category, value)
+        data_pairs = [
+            (str(row[selected_columns[0]]), float(row[selected_columns[1]]))
             for _, row in df.iterrows()
         ]
+         # Sort data by value in descending order
+        data_pairs.sort(key=lambda x: x[1], reverse=True)
         
+        # Add funnel series
         chart.add(
-            series_name="",
-            data_pair=data,
+            series_name=selected_columns[1],
+            data_pair=data_pairs,
             gap=options.get('gap', 2),
-            label_opts=opts.LabelOpts(position="inside")
+            label_opts=opts.LabelOpts(
+                position="inside",
+                formatter="{b}: {c}"
+            ),
+            itemstyle_opts=opts.ItemStyleOpts(opacity=0.8)
         )
-        
+
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Funnel Analysis"),
+            legend_opts=opts.LegendOpts(is_show=False)
+        )
         chart.set_global_opts(title_opts=opts.TitleOpts(title="Funnel Chart"))
         return chart
 
@@ -625,131 +736,241 @@ class EnhancedChartGenerator:
     def _create_gauge(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
         """Creates a gauge chart showing a single value within a range."""
         chart = Gauge()
-        
-        # Take the first value from the selected column
-        value = df[selected_columns[0]].iloc[0]
-        
+
+        # Get the first value from selected column
+        value = float(df[selected_columns[0]].iloc[0])
+
+        # Calculate min and max values
+        min_val = options.get('min', 0)
+        max_val = options.get('max', 100)
+
+        # Add gauge series
         chart.add(
-            series_name="",
+            series_name=selected_columns[0],
             data_pair=[("", value)],
-            min_=options.get('min', 0),
-            max_=options.get('max', 100)
+            min_=min_val,
+            max_=max_val,
+            split_number=options.get('split_number', 10),
+            axisline_opts=opts.AxisLineOpts(
+                linestyle_opts=opts.LineStyleOpts(
+                    color=[[0.3, "#67e0e3"], [0.7, "#37a2da"], [1, "#fd666d"]], 
+                    width=30
+                )
+            )
+            # detail_label_opts=opts.GaugeTitleOpts(
+            #     formatter="{value}",
+            #     font_size=20
+            # )
         )
-        
+
         return chart
 
     @staticmethod
     def _create_heatmap(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a heatmap showing data density."""
+        """Creates a heatmap visualization."""
         chart = HeatMap()
-        
-        # Create heatmap data from selected columns
-        x_axis = df[selected_columns[0]].unique().tolist()
-        y_axis = df[selected_columns[1]].unique().tolist()
-        
-        data = [[i, j, df[
-            (df[selected_columns[0]] == x) & 
-            (df[selected_columns[1]] == y)
-        ][selected_columns[2]].mean()] 
-            for i, x in enumerate(x_axis) 
-            for j, y in enumerate(y_axis)
-        ]
-        
+
+        # Prepare data
+        x_axis = sorted(df[selected_columns[0]].unique().tolist())
+        y_axis = sorted(df[selected_columns[1]].unique().tolist())
+
+        # Create heatmap data matrix
+        data = []
+        for i, x in enumerate(x_axis):
+            for j, y in enumerate(y_axis):
+                value = df[
+                    (df[selected_columns[0]] == x) & 
+                    (df[selected_columns[1]] == y)
+                ][selected_columns[2]].mean()
+
+                if not pd.isna(value):
+                    data.append([i, j, float(value)])
+
+        # Add axes
         chart.add_xaxis(x_axis)
         chart.add_yaxis(
-            "",
-            y_axis,
-            data,
-            label_opts=opts.LabelOpts(is_show=True)
+            series_name="",
+            yaxis_data=y_axis,
+            value=data,
+            label_opts=opts.LabelOpts(is_show=True, formatter="{c}"),
         )
-        
+
+        # Configure visual mapping
         chart.set_global_opts(
-            title_opts=opts.TitleOpts(title="Heat Map"),
-            visualmap_opts=opts.VisualMapOpts()
+            title_opts=opts.TitleOpts(title="Heat Map Analysis"),
+            visualmap_opts=opts.VisualMapOpts(
+                min_=min(d[2] for d in data),
+                max_=max(d[2] for d in data),
+                is_calculable=True,
+                orient="horizontal",
+                pos_left="center"
+            ),
+            tooltip_opts=opts.TooltipOpts(
+                formatter="{a}: ({c})"
+            )
         )
-        
+
         return chart
 
     @staticmethod
     def _create_kline(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
         """Creates a K-line (candlestick) chart for financial data."""
         chart = Kline()
-        
-        # Expect columns: date, open, close, low, high
-        data = [
-            [
-                row[selected_columns[1]],  # open
-                row[selected_columns[2]],  # close
-                row[selected_columns[3]],  # low
-                row[selected_columns[4]]   # high
-            ]
-            for _, row in df.iterrows()
+    
+        # Prepare K-line data
+        kline_data = [
+        [
+            float(row[selected_columns[1]]),  # open
+            float(row[selected_columns[2]]),  # close
+            float(row[selected_columns[3]]),  # low
+            float(row[selected_columns[4]])   # high
         ]
-        
-        chart.add_xaxis(df[selected_columns[0]].tolist())  # dates
+        for _, row in df.iterrows()
+        ]
+
+        # Add X axis (dates)
+        chart.add_xaxis(df[selected_columns[0]].tolist())
+
+        # Add K-line series
         chart.add_yaxis(
-            "",
-            data,
-            itemstyle_opts=opts.ItemStyleOpts(color="#ec0000", color0="#00da3c")
+            series_name="Price",
+            y_axis=kline_data,
+            itemstyle_opts=opts.ItemStyleOpts(
+                color="#ef232a",
+                color0="#14b143",
+                border_color="#ef232a",
+                border_color0="#14b143",
+            ),
+            markpoint_opts=opts.MarkPointOpts(
+                data=[
+                    opts.MarkPointItem(type_="max", name="Maximum"),
+                    opts.MarkPointItem(type_="min", name="Minimum")
+                ]
+            )
         )
-        
+
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="K-Line Chart"),
+            xaxis_opts=opts.AxisOpts(
+                type_="category",
+                is_scale=True
+            ),
+            yaxis_opts=opts.AxisOpts(
+                is_scale=True,
+                splitarea_opts=opts.SplitAreaOpts(is_show=True)
+            ),
+            datazoom_opts=[
+                opts.DataZoomOpts(is_show=True, type_="slider"),
+                opts.DataZoomOpts(is_show=False, type_="inside")
+            ]
+        )
+
         return chart
 
     @staticmethod
     def _create_radar(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a radar chart comparing multiple variables."""
+        """Creates a radar chart for multi-dimensional data analysis."""
         chart = Radar()
-        
-        # Create indicator config from columns
+
+        # Prepare indicator schema
         indicators = [
-            opts.RadarIndicatorItem(name=col, max_=df[col].max())
+            opts.RadarIndicatorItem(
+                name=col,
+                max_=df[col].max() * 1.1  # Add 10% padding
+            )
             for col in selected_columns[1:]
         ]
-        
+
         # Prepare data for each category
         categories = df[selected_columns[0]].unique()
         data = []
         for category in categories:
-            category_data = df[df[selected_columns[0]] == category][selected_columns[1:]].iloc[0].tolist()
-            data.append({"value": category_data, "name": str(category)})
-        
-        chart.add_schema(schema=indicators)
-        chart.add("", data)
-        
+            category_data = df[df[selected_columns[0]] == category]
+            values = [float(category_data[col].iloc[0]) for col in selected_columns[1:]]
+            data.append({
+                "value": values,
+                "name": str(category)
+            })
+
+        # Add radar schema
+        chart.add_schema(
+            schema=indicators,
+            shape=options.get('shape', 'circle'),
+            center=['50%', '50%'],
+            radius='70%'
+        )
+
+        # Add data series
+        chart.add(
+            series_name="",
+            data=data,
+            areastyle_opts=opts.AreaStyleOpts(opacity=0.3),
+            linestyle_opts=opts.LineStyleOpts(width=2)
+        )
+
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Radar Analysis"),
+            legend_opts=opts.LegendOpts(
+                selected_mode='multiple',
+                pos_bottom='5%'
+            )
+        )
+
         return chart
 
     @staticmethod
     def _create_treemap(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a treemap for hierarchical data visualization."""
+        """Creates a treemap visualization."""
         chart = TreeMap()
-        
-        def create_tree_data(df, columns, current_level=0):
-            if current_level >= len(columns):
+
+        # Prepare hierarchical data
+        def build_tree(data, columns, level=0):
+            if level >= len(columns):
                 return []
-            
-            grouped = df.groupby(columns[current_level])
-            data = []
-            
+
+            grouped = data.groupby(columns[level])
+            result = []
+
             for name, group in grouped:
-                children = create_tree_data(group, columns, current_level + 1)
                 node = {
                     "name": str(name),
-                    "value": len(group) if not children else None,
+                    "value": len(group) if level == len(columns) - 1 else None
                 }
-                if children:
-                    node["children"] = children
-                data.append(node)
-            
-            return data
-        
-        data = create_tree_data(df, selected_columns)
-        
+
+                if level < len(columns) - 1:
+                    children = build_tree(group, columns, level + 1)
+                    if children:
+                        node["children"] = children
+
+                result.append(node)
+
+            return result
+
+        # Build tree data
+        tree_data = build_tree(df, selected_columns)
+
+        # Add treemap series
         chart.add(
             series_name="",
-            data=data,
-            leaf_depth=options.get('leaf_depth', 1)
+            data=tree_data,
+            leaf_depth=options.get('leaf_depth', 2),
+            label_opts=opts.LabelOpts(
+                position="inside",
+                formatter="{b}: {c}"
+            ),
+            upperLabel_opts=opts.LabelOpts(is_show=True)
         )
-        
+
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Tree Map Analysis"),
+            tooltip_opts=opts.TooltipOpts(
+                formatter="{b}: {c}"
+            )
+        )
+
         return chart
 
     @staticmethod
@@ -858,12 +1079,15 @@ class EnhancedChartGenerator:
     def _create_liquid(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
         """Creates a liquid fill chart showing percentage values."""
         chart = Liquid()
-        
-        # Get the first value from the selected column as percentage
-        value = df[selected_columns[0]].iloc[0] / 100.0
-        
+
+        # Get the first value and convert to percentage
+        value = float(df[selected_columns[0]].iloc[0])
+        if value > 1:
+            value = value / 100
+
+        # Add liquid fill series
         chart.add(
-            series_name="",
+            series_name=selected_columns[0],
             data=[value],
             label_opts=opts.LabelOpts(
                 font_size=50,
@@ -871,10 +1095,17 @@ class EnhancedChartGenerator:
                     "function(param){return Math.floor(param.value * 100) + '%';}"
                 ),
                 position="inside"
-            )
+            ),
+            is_outline_show=True,
+            outline_border_distance=8,
+            shape=options.get('shape', 'circle')
         )
-        
-        chart.set_global_opts(title_opts=opts.TitleOpts(title="Liquid Fill"))
+
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title=f"{selected_columns[0]} Progress")
+        )
+
         return chart
 
     @staticmethod
@@ -912,7 +1143,7 @@ class EnhancedChartGenerator:
         current_node = 0
         
         # Create nodes
-        for col in selected_columns[:2]:  # Source and target columns
+        for col in selected_columns[:2]:
             for value in df[col].unique():
                 if value not in node_map:
                     node_map[value] = current_node
@@ -924,7 +1155,7 @@ class EnhancedChartGenerator:
         for _, row in df.iterrows():
             source = str(row[selected_columns[0]])
             target = str(row[selected_columns[1]])
-            value = row[selected_columns[2]] if len(selected_columns) > 2 else 1
+            value = float(row[selected_columns[2]]) if len(selected_columns) > 2 else 1
             
             links.append({
                 "source": node_map[source],
@@ -932,17 +1163,29 @@ class EnhancedChartGenerator:
                 "value": value
             })
         
+        # Add Sankey series
         chart.add(
             series_name="",
             nodes=nodes,
             links=links,
-            linestyle_opts=opts.LineStyleOpts(opacity=0.3, curve=0.5),
+            linestyle_opts=opts.LineStyleOpts(
+                opacity=0.3,
+                curve=0.5
+            ),
             label_opts=opts.LabelOpts(position="right")
         )
         
-        chart.set_global_opts(title_opts=opts.TitleOpts(title="Sankey Diagram"))
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Flow Analysis"),
+            tooltip_opts=opts.TooltipOpts(
+                trigger="item",
+                formatter="{b}: {c}"
+            )
+        )
+        
         return chart
-
+    
     @staticmethod
     def _create_sunburst(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
         """Creates a sunburst chart for hierarchical data visualization."""
