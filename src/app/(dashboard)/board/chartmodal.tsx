@@ -5,7 +5,7 @@ import { BarChart, LineChart, PieChart, BoxplotChart, CustomChart } from 'echart
 import { UniversalTransition } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
-import { ScatterChart } from 'echarts/charts';
+
+import { createChart } from './chart-configurations';
 
 // Register necessary ECharts components
 echarts.use([
@@ -123,115 +124,93 @@ const ChartModal: React.FC<ChartModalProps> = ({
 
   useEffect(() => {
     if (!chartRef.current || selectedColumns.length < 2) return;
-
+  
     try {
       if (!chartInstance.current) {
         chartInstance.current = echarts.init(chartRef.current);
       }
-
-      let option: echarts.EChartsCoreOption = {
-        title: { text: 'Preview', left: 'center' },
-        tooltip: { trigger: 'axis' },
-        legend: { bottom: 10 },
-        grid: { left: '5%', right: '5%', top: '15%', bottom: '15%' }
-      };
-
-      if (chartType === 'histogram') {
-        const values = data.map(row => Number(row[selectedColumns[0]])).filter(val => !isNaN(val));
-        const { bins, binRanges } = calculateHistogramData(values, options.binSize || 10);
-
-        option = {
-          ...option,
-          xAxis: {
-            type: 'value',
-            name: selectedColumns[0],
-            data: binRanges
+  
+      // Create chart configuration using our helper
+      const chartConfig = createChart(
+        chartType,
+        data,
+        selectedColumns,
+        {
+          // Chart-specific options
+          binSize: options.binSize || 10,
+          showOutliers: options.showOutliers,
+          stackType: options.stackType,
+          // Common chart options
+          title: {
+            text: 'Preview',
+            left: 'center'
           },
-          yAxis: {
-            type: 'value',
-            name: 'Frequency'
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+              type: 'cross'
+            }
           },
-          series: [{
-            type: 'bar',
-            barWidth: '99%',
-            data: bins.map((count, i) => [binRanges[i], count])
-          }]
-        };
-      } else if (chartType === 'box') {
-        const boxData = prepareBoxplotData(data, selectedColumns);
-
-        option = {
-          ...option,
-          xAxis: {
-            type: 'category',
-            data: boxData.map(item => item.name)
+          toolbox: {
+            feature: {
+              dataZoom: {},
+              restore: {},
+              saveAsImage: {}
+            }
           },
-          yAxis: {
-            type: 'value'
-          },
-          series: [
-            {
-              type: 'boxplot',
-              data: boxData.map(item => item.boxData),
-              itemStyle: {
-                borderWidth: 2
-              }
-            },
-           
-            ...(options.showOutliers ? [{
-              type: 'scatter',
-              data: boxData.flatMap(item => item.outliers),
-              symbolSize: 6
-            }] : [])
-          ]
-        };
-      } else if (chartType === 'segmented-bar') {
-        const categories = [...new Set(data.map(row => row[selectedColumns[0]]))];
-        const series = selectedColumns.slice(1).map(col => ({
-          name: col,
-          type: 'bar',
-          stack: options.stackType === 'stacked' ? 'total' : undefined,
-          data: categories.map(cat => 
-            data.filter(row => row[selectedColumns[0]] === cat)
-              .reduce((sum, row) => sum + Number(row[col]), 0)
-          )
-        }));
-
-        option = {
-          ...option,
-          xAxis: {
-            type: 'category',
-            data: categories
-          },
-          yAxis: {
-            type: 'value'
-          },
-          series
-        };
-      } else {
-        // Handle other chart types (line, bar, pie)
-        const xAxisData = data.map(row => row[selectedColumns[0]]);
-        const series = selectedColumns.slice(1).map(col => ({
-          name: col,
-          type: chartType,
-          data: data.map(row => Number(row[col]))
-        }));
-
-        option = {
-          ...option,
-          xAxis: { type: 'category', data: xAxisData },
-          yAxis: { type: 'value' },
-          series
-        };
-      }
-
-      chartInstance.current.setOption(option);
+          grid: {
+            left: '5%',
+            right: '5%',
+            top: '15%',
+            bottom: '15%',
+            containLabel: true
+          }
+        }
+      );
+  
+      // Set the configuration to the chart instance
+      chartInstance.current.setOption(chartConfig, true);
       setPreviewError(null);
+  
+      // Handle resize events
+      const handleResize = () => {
+        chartInstance.current?.resize();
+      };
+  
+      window.addEventListener('resize', handleResize);
+      return () => {
+        window.removeEventListener('resize', handleResize);
+      };
     } catch (error) {
-      setPreviewError('Error generating chart preview');
-      console.error(error);
+      console.error('Error generating chart preview:', error);
+      if (error instanceof Error) {
+        setPreviewError('Error generating chart preview: ' + error.message);
+      } else {
+        setPreviewError('Error generating chart preview');
+      }
     }
   }, [chartType, selectedColumns, data, options]);
+
+  // Add validation for required columns based on chart type
+const validateColumns = (chartType: string, selectedColumns: string[]) => {
+  const requirements: { [key: string]: number } = {
+    'pie': 2,
+    'scatter': 2,
+    'box': 2,
+    'histogram': 1,
+    'heatmap': 3,
+    'kline': 5,
+    'surface3d': 3,
+    'bar3d': 3,
+    'line3d': 3,
+    'scatter3d': 3,
+    'graph': 2,
+    'sankey': 3
+  };
+
+  const required = requirements[chartType] || 2;
+  return selectedColumns.length >= required;
+};
 
   const handleColumnToggle = (columnKey: string) => {
     setSelectedColumns(prev => 
@@ -242,10 +221,26 @@ const ChartModal: React.FC<ChartModalProps> = ({
   };
 
   const handleExport = () => {
-    if (selectedColumns.length < 2) {
-      setPreviewError('Select at least two columns');
+    const requirements: { [key: string]: number } = {
+      'pie': 2,
+      'scatter': 2,
+      'box': 2,
+      'histogram': 1,
+      'heatmap': 3,
+      'kline': 5,
+      'surface3d': 3,
+      'bar3d': 3,
+      'line3d': 3,
+      'scatter3d': 3,
+      'graph': 2,
+      'sankey': 3
+    };
+
+    if (!validateColumns(chartType, selectedColumns)) {
+      setPreviewError(`${chartType} chart requires at least ${requirements[chartType] || 2} columns`);
       return;
     }
+  
     onExport({
       type: chartType,
       columns: selectedColumns,
@@ -272,15 +267,62 @@ const ChartModal: React.FC<ChartModalProps> = ({
                 <SelectTrigger className="mt-2 bg-white border-blue-200 hover:border-blue-300 transition-colors">
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="line">Line Chart</SelectItem>
-                  <SelectItem value="bar">Bar Chart</SelectItem>
-                  <SelectItem value="pie">Pie Chart</SelectItem>
-                  <SelectItem value="box">Box Plot</SelectItem>
-                  <SelectItem value="histogram">Histogram</SelectItem>
-                  <SelectItem value="segmented-bar">Segmented Bar</SelectItem>
+                <SelectContent className="max-h-[400px]">
+                  {/* Basic Charts */}
+                  <SelectGroup>
+                    <SelectLabel className="font-semibold text-blue-600">Basic Charts</SelectLabel>
+                    <SelectItem value="line">Line Chart</SelectItem>
+                    <SelectItem value="bar">Bar Chart</SelectItem>
+                    <SelectItem value="pie">Pie Chart</SelectItem>
+                    <SelectItem value="scatter">Scatter Plot</SelectItem>
+                  </SelectGroup>
+
+                  {/* Statistical Charts */}
+                  <SelectGroup>
+                    <SelectLabel className="font-semibold text-purple-600">Statistical Analysis</SelectLabel>
+                    <SelectItem value="box">Box Plot</SelectItem>
+                    <SelectItem value="histogram">Histogram</SelectItem>
+                    <SelectItem value="segmented-bar">Segmented Bar</SelectItem>
+                    <SelectItem value="radar">Radar Chart</SelectItem>
+                    <SelectItem value="parallel">Parallel Coordinates</SelectItem>
+                  </SelectGroup>
+
+                  {/* Financial Charts */}
+                  <SelectGroup>
+                    <SelectLabel className="font-semibold text-green-600">Financial Charts</SelectLabel>
+                    <SelectItem value="kline">K-Line Chart</SelectItem>
+                    <SelectItem value="funnel">Funnel Chart</SelectItem>
+                    <SelectItem value="gauge">Gauge Chart</SelectItem>
+                  </SelectGroup>
+
+                  {/* Advanced Visualizations */}
+                  <SelectGroup>
+                    <SelectLabel className="font-semibold text-orange-600">Advanced Visualizations</SelectLabel>
+                    <SelectItem value="heatmap">Heat Map</SelectItem>
+                    <SelectItem value="treemap">Tree Map</SelectItem>
+                    <SelectItem value="sankey">Sankey Diagram</SelectItem>
+                    <SelectItem value="sunburst">Sunburst Chart</SelectItem>
+                    <SelectItem value="graph">Network Graph</SelectItem>
+                    <SelectItem value="liquid">Liquid Fill</SelectItem>
+                  </SelectGroup>
+
+                  {/* 3D Charts */}
+                  <SelectGroup>
+                    <SelectLabel className="font-semibold text-red-600">3D Visualizations</SelectLabel>
+                    <SelectItem value="bar3d">3D Bar Chart</SelectItem>
+                    <SelectItem value="line3d">3D Line Chart</SelectItem>
+                    <SelectItem value="scatter3d">3D Scatter Plot</SelectItem>
+                    <SelectItem value="surface3d">3D Surface Chart</SelectItem>
+                  </SelectGroup>
+
+                  {/* Special Effects */}
+                  <SelectGroup>
+                    <SelectLabel className="font-semibold text-yellow-600">Special Effects</SelectLabel>
+                    <SelectItem value="effect-scatter">Effect Scatter</SelectItem>
+                  </SelectGroup>
                 </SelectContent>
               </Select>
+            
 
               {/* Chart-specific Options */}
               {chartType === 'histogram' && (

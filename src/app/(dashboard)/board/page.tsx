@@ -5,13 +5,19 @@ import { useUser } from '@clerk/clerk-react';
 import useFilesList from '@/features/sqlite/api/file-list';
 import { handleUseCSV } from '@/features/sqlite/api/file-content';
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, FileText, Loader, Menu, Plus } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { AlertCircle, FileText, Loader, Menu, Plus, PlusCircle, Type } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DraggableChart from './drag-chart';
 import ChartModal from './chartmodal';
+import FlowBoard from './flow-board';
+import { ThemeProvider, ThemeSelector } from './theme-provider';
+import FileSelectionPopover from './FileSelectionPopover';
+import { useNodesState, useEdgesState, Node } from 'reactflow';
+import { Table, Database, PieChart } from 'lucide-react';
+import StatCardModal from './stat-Card-Modal';
+import DataTableModal from './dataTableSelection';
 
 // Interfaces
 interface Position {
@@ -23,9 +29,17 @@ interface Chart {
   id: string;
   type: string;
   title: string;
+  description?: string;
   graphUrl: string;
-  position: Position;
+  position: {
+    x: number;
+    y: number;
+    width?: number;
+    height?: number;
+  };
 }
+
+
 
 interface Column {
   header: string;
@@ -53,8 +67,41 @@ interface ChartCreationData {
   type: string;
   columns: string[];
   title?: string;
+  description?: string; // Add the 'description' property
   options?: ChartOptions; // Add the 'options' property
 }
+
+interface TextBoxData {
+  id: string;
+  type: 'textbox';
+  content: string;
+  position: { x: number; y: number };
+}
+interface DataTable {
+  id: string;
+  columns: string[];
+  data: any[];
+  title: string;
+  position: { x: number; y: number };
+}
+
+interface StatCard {
+  id: string;
+  column: string;
+  statType: string;
+  title: string;
+  position: { x: number; y: number };
+  data: any[];
+}
+
+// Custom Node Component for Charts
+const ChartNode = ({ data }: { data: any }) => {
+  return (
+    <div className="bg-white rounded-lg shadow-lg">
+      <DraggableChart {...data} />
+    </div>
+  );
+};
 
 const BoardMain: React.FC = () => {
   const { user, isLoaded: userLoaded } = useUser();
@@ -72,8 +119,22 @@ const BoardMain: React.FC = () => {
   const [selectedDashboard, setSelectedDashboard] = useState<string | null>(null);
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [newDashboardName, setNewDashboardName] = useState<string>('');
-  // const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  // const [dashboardToDelete, setDashboardToDelete] = useState<string | null>(null);
+  
+  const [nodes, setNodes] = useNodesState([]);
+const [edges, setEdges] = useEdgesState([]);
+
+  const [mode, setMode] = useState<'none' | 'chart' | 'textbox' | 'datatable' | 'statcard'>('none');
+  const [textBoxes, setTextBoxes] = useState<TextBoxData[]>([]);
+
+
+  const [showDataTableModal, setShowDataTableModal] = useState<boolean>(false);
+const [showStatCardModal, setShowStatCardModal] = useState<boolean>(false);
+const [dataTables, setDataTables] = useState<DataTable[]>([]);
+const [statCards, setStatCards] = useState<StatCard[]>([]);
+
+
+type ContentMode = 'none' | 'chart' | 'textbox' | 'datatable' | 'statcard';
+
   useEffect(() => {
     if (userId) {
       const savedDashboards = localStorage.getItem(`dashboards_${userId}`);
@@ -126,6 +187,73 @@ const BoardMain: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [charts, selectedDashboard]);
 
+ const handleDataTableCreate = useCallback((config: {
+  columns: string[];
+  title: string;
+  position: { x: number; y: number };
+}) => {
+  if (!selectedFile) return;
+
+  // Filter data to only include selected columns
+  const filteredData = selectedFile.data.map(row => {
+    const newRow: Record<string, any> = {};
+    config.columns.forEach(col => {
+      newRow[col] = row[col];
+    });
+    return newRow;
+  });const newTable: DataTable = {
+    id: `table-${Date.now()}`,
+    columns: config.columns,
+    data: filteredData,
+    title: config.title,
+    position: config.position
+  };
+
+  setDataTables(prev => [...prev, newTable]);
+}, [selectedFile]);
+
+ const handleStatCardCreate = useCallback((config: {
+  column: string;
+  statType: string;
+  title: string;
+  position: { x: number; y: number };
+}) => {
+  if (!selectedFile) return;
+
+  const newCard: StatCard = {
+    id: `card-${Date.now()}`,
+    column: config.column,
+    statType: config.statType,
+    title: config.title,
+    position: config.position,
+    data: selectedFile.data
+  };
+
+  setStatCards(prev => [...prev, newCard]);
+}, [selectedFile]);
+
+  const handleStatCardPositionChange = useCallback((id: string, position: { x: number; y: number }) => {
+  setStatCards(prev => prev.map(card =>
+    card.id === id ? { ...card, position } : card
+  ));
+}, []);
+
+  const handleDataTableRemove = useCallback((id: string) => {
+    setDataTables(prev => prev.filter(table => table.id !== id));
+  }, []);
+  
+  const handleRemoveStatCard = useCallback((id: string) => {
+  // Update the statCards state by filtering out the card with the matching id
+  setStatCards(prevCards => prevCards.filter(card => card.id !== id));
+}, []); 
+  
+  const handleDescriptionChange = useCallback((chartId: string, description: string) => {
+    setCharts(prev => prev.map(chart => 
+      chart.id === chartId 
+        ? { ...chart, description } 
+        : chart
+    ));
+  }, []);
   // Handle chart position change
   const handleChartPosition = useCallback((chartId: string, newPosition: Position) => {
     setCharts(prev => prev.map(chart => 
@@ -160,19 +288,71 @@ const BoardMain: React.FC = () => {
   // }, [dashboardToDelete, selectedDashboard]);
 
   // Graph area click handler
-  const handleGraphAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!selectedFile || maximizedChart) return;
 
-    const rect = e.currentTarget.getBoundingClientRect();
+  // const handleGraphAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+  //   if (!selectedFile || maximizedChart) return;
+
+  //   const rect = e.currentTarget.getBoundingClientRect();
+  //   const position = {
+  //     x: e.clientX - rect.left,
+  //     y: e.clientY - rect.top
+  //   };
+    
+  //   setClickPosition(position);
+  //   setShowChartModal(true);
+  // }, [selectedFile, maximizedChart]);
+
+  const handleGraphAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (maximizedChart || mode === 'none') return;
+  
+    const flowContainer = e.currentTarget.closest('.react-flow');
+    if (!flowContainer) return;
+  
+    const rect = flowContainer.getBoundingClientRect();
     const position = {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top
     };
     
-    setClickPosition(position);
-    setShowChartModal(true);
-  }, [selectedFile, maximizedChart]);
+    if (mode === 'chart') {
+      setClickPosition(position);
+      setShowChartModal(true);
+    } else if (mode === 'textbox') {
+      const newTextBox: TextBoxData = {
+        id: `textbox-${Date.now()}`,
+        type: 'textbox',
+        content: 'Click to edit',
+        position
+      };
+      setTextBoxes(prev => [...prev, newTextBox]);
+    }else if(mode === 'datatable'){
+      setClickPosition(position);
+      setShowDataTableModal(true);
+    }
+    else if(mode === 'statcard'){
+      setClickPosition(position);
+      setShowStatCardModal(true);
+    }
+    setMode('none');
+  }, [maximizedChart, mode]);
+  
+// Update the text box handlers to use textBoxes state instead of nodes
+const handleTextBoxContentChange = useCallback((id: string, content: string) => {
+  setTextBoxes(prev => prev.map(box => 
+    box.id === id ? { ...box, content } : box
+  ));
+}, []);
 
+const handleTextBoxRemove = useCallback((id: string) => {
+  setTextBoxes(prev => prev.filter(box => box.id !== id));
+}, []);
+
+// Add textbox position change handler
+const handleTextBoxPositionChange = useCallback((id: string, position: Position) => {
+  setTextBoxes(prev => prev.map(box => 
+    box.id === id ? { ...box, position } : box
+  ));
+}, []);
   // File selection handler
   const handleFileSelection = useCallback(async (fileId: string) => {
     if (!userId) return;
@@ -210,10 +390,70 @@ const BoardMain: React.FC = () => {
     }
   }, [userId]);
 
-  // Create chart handler
-  const handleChartCreate = useCallback(async (chartData: ChartCreationData & { position: Position,options?:ChartOptions }) => {
-    if (!userId || !selectedFile || !selectedDashboard) return;
+  // // Create chart handler
+  // const handleChartCreate = useCallback(async (chartData: ChartCreationData & { position: Position,options?:ChartOptions }) => {
+  //   if (!userId || !selectedFile || !selectedDashboard) return;
 
+  //   try {
+  //     const response = await fetch(`http://localhost:5000/generate-graph/${userId}/${selectedFile.id}`, {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({
+  //         chartType: chartData.type,
+  //         selectedColumns: chartData.columns,
+  //         options: chartData.options // New options for additional chart types
+  //       }),
+  //     });
+
+  //     if (!response.ok) {
+  //       throw new Error('Failed to generate chart');
+  //     }
+
+  //     const { graph_id, url } = await response.json();
+      
+  //     // const newChart = {
+  //     //   id: graph_id,
+  //     //   type: chartData.type,
+  //     //   title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
+  //     //   graphUrl: `http://localhost:5000${url}`,
+  //     //   position: clickPosition
+  //     // };
+
+  //     const newChart = {
+  //       id: graph_id,
+  //       type: chartData.type,
+  //       title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
+  //       description: chartData.description || '',
+  //       graphUrl: `http://localhost:5000${url}`,
+  //       position: {
+  //         x: chartData.position.x,
+  //         y: chartData.position.y,
+  //         width: 800,  // Default width
+  //         height: 600  // Default height
+  //       }
+  //     };
+
+  //     setCharts(prev => [...prev, newChart]);
+  //     setShowChartModal(false);
+  //   } catch (error) {
+  //     console.error('Error creating chart:', error);
+  //     setDataError('Failed to create chart');
+  //   }
+  // }, [userId, selectedFile, selectedDashboard, clickPosition]);
+
+const handleDataTablePositionChange = useCallback((id: string, position: { x: number; y: number }) => {
+  setDataTables(prev => prev.map(table =>
+    table.id === id ? { ...table, position } : table
+  ));
+}, []);
+
+
+
+  const handleChartCreate = useCallback(async (chartData: ChartCreationData & { position: Position }) => {
+    if (!userId || !selectedFile || !selectedDashboard) return;
+  
     try {
       const response = await fetch(`http://localhost:5000/generate-graph/${userId}/${selectedFile.id}`, {
         method: 'POST',
@@ -223,31 +463,38 @@ const BoardMain: React.FC = () => {
         body: JSON.stringify({
           chartType: chartData.type,
           selectedColumns: chartData.columns,
-          options: chartData.options // New options for additional chart types
+          options: chartData.options
         }),
       });
-
+  
       if (!response.ok) {
         throw new Error('Failed to generate chart');
       }
-
+  
       const { graph_id, url } = await response.json();
       
-      const newChart = {
+      const newChart: Chart = {
         id: graph_id,
         type: chartData.type,
         title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
+        description: chartData.description || '',
         graphUrl: `http://localhost:5000${url}`,
-        position: clickPosition
+        position: {
+          x: chartData.position.x,
+          y: chartData.position.y,
+          width: 800,  // Default width
+          height: 600  // Default height
+        }
       };
-
+  
       setCharts(prev => [...prev, newChart]);
       setShowChartModal(false);
     } catch (error) {
       console.error('Error creating chart:', error);
       setDataError('Failed to create chart');
     }
-  }, [userId, selectedFile, selectedDashboard, clickPosition]);
+  }, [userId, selectedFile, selectedDashboard]);
+  
   // Create dashboard handler
   const handleCreateDashboard = useCallback(() => {
     if (!newDashboardName.trim()) return;
@@ -272,11 +519,13 @@ const BoardMain: React.FC = () => {
   }
 
   return (
+    <ThemeProvider defaultTheme="light">
     <div className="h-screen flex flex-col">
       {/* Top Navigation */}
        <div className="bg-white border-b p-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center space-x-6">
-          {/* File Selection */}
+        
+         {/* <div className="flex items-center space-x-6">
+          
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="hover:bg-gray-100">
@@ -310,7 +559,7 @@ const BoardMain: React.FC = () => {
               </div>
             </SheetContent>
           </Sheet>
-           {/* Selected File Name Display */}
+          
            {selectedFile && (
             <div className="flex items-center px-3 py-1.5 bg-blue-50 rounded-md">
               <FileText className="h-4 w-4 text-blue-600 mr-2" />
@@ -318,7 +567,25 @@ const BoardMain: React.FC = () => {
                 {fileList?.find(f => f.file_id === selectedFile.id)?.filename || 'Selected File'}
               </span>
             </div>
-          )}
+          )} 
+           */}
+           <div className="flex items-center space-x-6">
+  <FileSelectionPopover
+    files={fileList || []}
+    loading={filesLoading}
+    selectedFileId={selectedFile?.id || null}
+    onSelect={handleFileSelection}
+  />
+
+  {/* Selected File Name Display */}
+  {selectedFile && (
+    <div className="flex items-center px-3 py-1.5 bg-blue-50 rounded-md">
+      <FileText className="h-4 w-4 text-blue-600 mr-2" />
+      <span className="text-sm font-medium text-blue-700">
+        {fileList?.find(f => f.file_id === selectedFile.id)?.filename || 'Selected File'}
+      </span>
+    </div>
+  )}
 
 
           {/* Dashboard Selection with Delete Option */}
@@ -335,19 +602,7 @@ const BoardMain: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            {/* {selectedDashboard && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                onClick={() => {
-                  setDashboardToDelete(selectedDashboard);
-                  setDeleteDialogOpen(true);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )} */}
+            
           </div>
 
           {/* New Dashboard Creation */}
@@ -372,51 +627,107 @@ const BoardMain: React.FC = () => {
       </div>
 
       {/* Graph Area with improved styling */}
-      <div className="flex-1 relative bg-gray-100 overflow-hidden p-6">
+  {/*    <div className="flex-1 relative bg-gray-100 overflow-hidden p-6">
         <div
           className="absolute inset-0 p-6"
-          onClick={handleGraphAreaClick}
+          onDoubleClick={handleGraphAreaClick}
         >
           {charts.map(chart => (
-            <DraggableChart
-              key={chart.id}
-              id={chart.id}
-              title={chart.title}
-              graphUrl={chart.graphUrl}
-              position={chart.position}
-              onPositionChange={handleChartPosition}
-              onRemove={handleRemoveChart}
-              isMaximized={maximizedChart === chart.id}
-              onMaximizeToggle={handleMaximizeToggle}
-            />
-          ))}
+  <DraggableChart
+    key={chart.id}
+    id={chart.id}
+    title={chart.title}
+    description={chart.description}
+    graphUrl={chart.graphUrl}
+    position={chart.position}
+    onPositionChange={handleChartPosition}
+    onRemove={handleRemoveChart}
+    isMaximized={maximizedChart === chart.id}
+    onMaximizeToggle={handleMaximizeToggle}
+    onDescriptionChange={handleDescriptionChange}
+  />
+))}
         </div>
       </div>
+*/}
+ {/* Creation Controls */}
+ <div className="fixed left-4 top-1/2 -translate-y-1/2 flex flex-col space-y-2">
+          <Button
+            variant={mode === 'chart' ? "default" : "outline"}
+            size="icon"
+            className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+            onClick={() => setMode(prev => prev === 'chart' ? 'none' : 'chart')}
+          >
+            <PlusCircle className="h-5 w-5" />
+          </Button>
+          
+          <Button
+            variant={mode === 'textbox' ? "default" : "outline"}
+            size="icon"
+            className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+            onClick={() => setMode(prev => prev === 'textbox' ? 'none' : 'textbox')}
+          >
+            <Type className="h-5 w-5" />
+          </Button>
+          <Button
+      variant={mode === 'datatable' ? "default" : "outline"}
+      size="icon"
+      className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+      onClick={() => setMode(prev => prev === 'datatable' ? 'none' : 'datatable')}
+    >
+      <Table className="h-5 w-5" />
+    </Button>
+    <Button
+      variant={mode === 'statcard' ? "default" : "outline"}
+      size="icon"
+      className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+      onClick={() => setMode(prev => prev === 'statcard' ? 'none' : 'statcard')}
+    >
+      <Database className="h-5 w-5" />
+    </Button>
+        </div>
 
-      {/* Delete Dashboard Dialog */}
-      {/* <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Dashboard</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this dashboard? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={handleDeleteDashboard}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog> */}
+        {showDataTableModal && selectedFile && (
+    <DataTableModal
+      isOpen={showDataTableModal}
+      onClose={() => setShowDataTableModal(false)}
+      onExport={handleDataTableCreate}
+      position={clickPosition}
+      columns={selectedFile.columns}
+    />
+  )}
 
+  {showStatCardModal && selectedFile && (
+    <StatCardModal
+      isOpen={showStatCardModal}
+      onClose={() => setShowStatCardModal(false)}
+      onExport={handleStatCardCreate}
+      position={clickPosition}
+      columns={selectedFile.columns}
+    />
+  )}
+<div className="flex-1 relative bg-gray-100 overflow-hidden">
+  <FlowBoard
+charts={charts}
+  textBoxes={textBoxes}
+  dataTables={dataTables}
+  statCards={statCards}
+  onChartPositionChange={handleChartPosition}
+  onChartRemove={handleRemoveChart}
+  onChartMaximize={handleMaximizeToggle}
+  onChartDescriptionChange={handleDescriptionChange}
+  onTextBoxPositionChange={handleTextBoxPositionChange}
+  onTextBoxContentChange={handleTextBoxContentChange}
+  onTextBoxRemove={handleTextBoxRemove}
+  onDataTablePositionChange={handleDataTablePositionChange}
+  onDataTableRemove={handleDataTableRemove}
+  onStatCardPositionChange={handleStatCardPositionChange}
+  onStatCardRemove={handleRemoveStatCard}
+  maximizedChart={maximizedChart}
+  onAreaClick={handleGraphAreaClick}
+/>
+  </div>
+     
       {/* Enhanced Chart Modal */}
       {showChartModal && selectedFile && (
         <ChartModal
@@ -449,7 +760,14 @@ const BoardMain: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+
+        {/* Add Theme Selector */}
+        <ThemeSelector />
+        </div>
+        
+    {/* </div> */}
+    
+    </ThemeProvider>
   );
 };
 

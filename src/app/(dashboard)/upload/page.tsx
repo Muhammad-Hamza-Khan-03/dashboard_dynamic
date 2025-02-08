@@ -35,11 +35,15 @@ import { SplitDialog } from "./split-dialog";
 
 import DataAnalysisModal from "./data-analysis-modal-component";
 import EnhancedEditForm from "./EditForm";
+import { FetchEventLike } from "hono/types";
 
 
-const DataTable = dynamic<DataTableProps<FileData>>(() =>
+// Update the dynamic import with proper typing
+const DataTable = dynamic<React.ComponentProps<typeof import('@/components/data-table').DataTable>>(() =>
   import('@/components/data-table').then((mod) => mod.DataTable), {
-  loading: () => <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-teal-500" /></div>,
+  loading: () => <div className="flex justify-center items-center h-64">
+    <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+  </div>,
   ssr: false,
 });
 
@@ -132,7 +136,7 @@ const DataTablePage: React.FC = () => {
   const dataRef = useRef<DataItem[]>([]);
   const { user, isLoaded: isUserLoaded } = useUser();
   const { fileList, error: fileListError, loading: fileListLoading, refetch: refetchFileList } = useFilesList(user?.id);
-  
+  const [filterkey, setFilterkey] = useState<string>(Date.now().toString());
   const [editItem, setEditItem] = useState<Partial<DataItem> | null>(null);
  
   const [selectedRows, setSelectedRows] = useState<Row<DataItem>[]>([]);
@@ -569,7 +573,7 @@ const resetState = () => {
 
 
   const handleSaveItem = async () => {
-    // First, let's add comprehensive validation
+    // First, validate user authentication and file selection
     if (!user?.id) {
       toast({
         title: "Error",
@@ -578,7 +582,7 @@ const resetState = () => {
       });
       return;
     }
-
+  
     if (!selectedFile?.file_id) {
       toast({
         title: "Error",
@@ -587,7 +591,7 @@ const resetState = () => {
       });
       return;
     }
-
+  
     if (!activeRow) {
       toast({
         title: "Error",
@@ -596,24 +600,45 @@ const resetState = () => {
       });
       return;
     }
-
+  
     setLoading(true);
     try {
-      console.log("Saving item:", {
-        editItem: activeRow.data,
+      // Process the row data before sending
+      const processedData = Object.entries(activeRow.data).reduce((acc, [key, value]) => {
+        // Convert empty strings to null
+        if (value === '') {
+          acc[key] = null;
+        }
+        // Convert undefined to null
+        else if (value === undefined) {
+          acc[key] = null;
+        }
+        // Handle empty arrays
+        else if (Array.isArray(value) && value.length === 0) {
+          acc[key] = null;
+        }
+        // Keep other values as is
+        else {
+          acc[key] = value;
+        }
+        return acc;
+      }, {} as Record<string, any>);
+  
+      // Prepare the request payload
+      const payload = {
+        editItem: processedData,
         editIndex: activeRow.index
-      });
-
+      };
+  
+      console.log("Sending payload to backend:", payload);
+  
       const response = await axios.post(
         `http://localhost:5000/update-row/${user.id}/${selectedFile.file_id}`,
-        {
-          editItem: activeRow.data,
-          editIndex: activeRow.index
-        }
+        payload
       );
-
+  
       console.log("Save response:", response.data);
-
+  
       if (response.data.success) {
         // Update the data in both state and ref
         const updatedData = [...dataRef.current];
@@ -625,12 +650,12 @@ const resetState = () => {
           updatedData.push(response.data.data);
         }
         updateData(updatedData);
-
+  
         toast({
           title: "Success",
           description: activeRow.index >= 0 ? "Item updated successfully" : "Item created successfully",
         });
-
+  
         // Close the sheet and reset edit states
         setEditSheetOpen(false);
         setActiveRow(null);
@@ -647,9 +672,7 @@ const resetState = () => {
       setLoading(false);
     }
   };
-
-// In page.tsx
-
+  
 const handleDelete = async () => {
   if (!user?.id || !selectedFile?.file_id || !selectedRows.length) {
     toast({
@@ -717,6 +740,11 @@ const handleDelete = async () => {
 
   const handleReset = () => {
     setTableKey(prevKey => prevKey + 1);
+    setFilterkey(Date.now().toString())
+    if(selectedFile)
+    {
+      fetchFileData(selectedFile.file_id,selectedFile.filename);
+    }
     toast({
       title: "Reset",
       description: "All filters and sorting have been reset.",
@@ -1000,12 +1028,22 @@ const handleDelete = async () => {
           ) : data.length > 0 ? (
             <>
               <DataTable
+                // key={tableKey}
+                // columns={columns}
+                // data={data}
+                // onRowSelectionChange={setSelectedRows}
+                // onReset={handleReset}
+                // filterkey=""
+                
                 key={tableKey}
-                columns={columns}
-                data={data}
-                onRowSelectionChange={setSelectedRows}
-                onReset={handleReset}
-                filterkey=""
+    columns={columns}
+    data={data}
+    userId={user?.id || ''}
+    fileId={selectedFile?.file_id || ''}
+    onRowSelectionChange={setSelectedRows}
+    filterkey={filterkey}
+    onReset={handleReset}
+              
               />
               {renderPagination()}
             </>

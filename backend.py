@@ -15,17 +15,43 @@ import xml.etree.ElementTree as ET
 import PyPDF2
 from werkzeug.utils import secure_filename
 import uuid
-import plotly.express as px
-import plotly.graph_objects as go
 from pdfminer.high_level import extract_text
 from pdfminer.layout import LAParams
-import tempfile
 import os
+
+from flask_caching import Cache
+from pyecharts import options as opts
+from pyecharts.charts import (
+    Line, Bar, Pie, Scatter, Boxplot, Grid, EffectScatter,
+    Funnel, Gauge, HeatMap, Kline, Radar, TreeMap, Surface3D,
+    Bar3D, Line3D, Scatter3D, Map, Graph, Liquid, Parallel,
+    Sankey, Sunburst
+)
+from pyecharts.commons.utils import JsCode
+import pandas as pd
 import sqlite3
+import uuid
+import traceback
+
+import sqlite3
+import psutil
+import datetime
+import decimal
+import math
+import logging
+import json
+import time
+from typing import List, Dict, Any, Generator, Tuple,Optional
+from dataclasses import dataclass
+from flask import jsonify, request
+import traceback
 
 app = Flask(__name__)
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 CORS(app)
 logging.basicConfig(level=logging.DEBUG)
+CACHE_TIMEOUT = 300  # Cache timeout in seconds
+CHUNK_SIZE = 100000  # Maximum rows to fetch at once
 
 def init_db():
     conn = sqlite3.connect('user_files.db')
@@ -103,25 +129,1177 @@ def init_db():
     conn.close()
 
 init_db()
-
-# Add this to the top of your backend.py file
-
-def debug_sql(query, params=None):
-    """Debug helper for SQL queries"""
-    app.logger.debug(f"SQL Query: {query}")
-    if params:
-        app.logger.debug(f"Parameters: {params}")
         
-# Add this after creating the cursor in each route
-def get_table_info(cursor, table_name):
-    """Debug helper for table information"""
+# class ChartGenerator:
+#     """
+#     Helper class to generate interactive charts using ECharts.
+#     Maintains compatibility with existing frontend while providing better performance.
+#     """
+#     @staticmethod
+#     def create_chart(chart_type, df, selected_columns, options=None):
+#         options = options or {}
+        
+            
+#         try:
+#             if chart_type == 'histogram':
+#                 return ChartGenerator._create_histogram(df, selected_columns, options)
+#             elif chart_type == 'segmented-bar':
+#                 return ChartGenerator._create_segmented_bar(df, selected_columns, options)
+#             # elif chart_type == 'line':
+#             #     return ChartGenerator._create_line(df, selected_columns)
+#             # elif chart_type == 'bar':
+#             #     chart = Bar()
+#             #     x_data = df[selected_columns[0]].tolist()
+#             #     for col in selected_columns[1:]:
+#             #         y_data = df[col].tolist()
+#             #         chart.add_xaxis(x_data)
+#             #         chart.add_yaxis(col, y_data)
+#             elif chart_type in ['line', 'bar']:
+#                 x_data = df[selected_columns[0]].tolist()
+#                 for col in selected_columns[1:]:
+#                     y_data = df[col].tolist()
+#                     chart.add_xaxis(x_data)
+#                     chart.add_yaxis(
+#                         col,
+#                         y_data,
+#                         label_opts=opts.LabelOpts(
+#                             is_show=False,
+#                             font_size=12,
+#                             rotate=0
+#                         )
+#                     )        
+#             elif chart_type == 'pie':
+#                 chart = Pie()
+#                 data_pairs = list(zip(
+#                     df[selected_columns[0]].tolist(),
+#                     df[selected_columns[1]].tolist()
+#                 ))
+#                 chart.add(
+#                     series_name="",
+#                     data_pair=data_pairs,
+#                     label_opts=opts.LabelOpts(
+#                         is_show=True,
+#                         formatter="{b}: {c}"
+#                     )
+#                 )
+                
+#             elif chart_type == 'scatter':
+#                 return ChartGenerator._create_scatter(df, selected_columns)
+#             elif chart_type == 'box':
+#                 chart = Boxplot()
+#                 data = [df[col].tolist() for col in selected_columns[1:]]
+#                 chart.add_xaxis([selected_columns[1:]])
+#                 chart.add_yaxis("", chart.prepare_data(data))
+                
+#             else:
+#                 raise ValueError(f'Unsupported chart type: {chart_type}')
+
+#             chart.set_global_opts(
+#                 # Title configuration
+#                 title_opts=opts.TitleOpts(
+#                     title="",
+#                     subtitle="",
+#                     title_textstyle_opts=opts.TextStyleOpts(
+#                         font_size=16,
+#                         font_weight='bold'
+#                     )
+#                 ),
+                
+#                 # Tooltip configuration
+#                 tooltip_opts=opts.TooltipOpts(
+#                     trigger="axis",
+#                     axis_pointer_type="cross"
+#                 ),
+                
+#                 # Toolbox with interactive features
+#                 toolbox_opts=opts.ToolboxOpts(
+#                     is_show=True,
+#                     pos_left="right",
+#                     feature={
+#                         "dataZoom": {"yAxisIndex": "none"},
+#                         "restore": {},
+#                         "saveAsImage": {},
+#                         "dataView": {}
+#                     }
+#                 ),
+                
+#                 # Data zoom for interaction
+#                 datazoom_opts=[
+#                     opts.DataZoomOpts(
+#                         range_start=0,
+#                         range_end=100,
+#                         is_zoom_lock=False
+#                     ),
+#                     opts.DataZoomOpts(
+#                         type_="inside",
+#                         range_start=0,
+#                         range_end=100
+#                     )
+#                 ],
+                
+#                 # Legend configuration
+#                 legend_opts=opts.LegendOpts(
+#                     type_="scroll",
+#                     pos_top="top",
+#                     pos_left="center",
+#                     orient="horizontal",
+#                     text_style=opts.TextStyleOpts(
+#                         font_size=12
+#                     )
+#                 ),
+                
+#                 # Grid configuration for main chart area
+#                 grid_opts=opts.GridOpts(
+#                     pos_left="5%",
+#                     pos_right="5%",
+#                     pos_top="15%",
+#                     pos_bottom="15%",
+#                     containLabel=True,
+#                     is_contain_label=True
+#                 )
+#             )
+            
+#             # Configure the chart instance for responsiveness
+#             chart.width = "100%"
+#             chart.height = "100%"
+#             chart.renderer = "canvas"
+            
+#             return chart
+            
+#         except Exception as e:
+#             app.logger.error(f"Error creating chart: {str(e)}")
+#             raise
+        
+#     @staticmethod
+#     def _create_histogram(df, selected_columns, options):
+#         """
+#         Creates a histogram using ECharts.
+#         Supports customizable bin sizes and multiple series.
+#         """
+#         # Create a Bar chart (ECharts doesn't have a direct histogram type)
+#         chart = Bar()
+        
+#         # Get bin parameters
+#         bin_size = options.get('binSize', 10)
+#         column = selected_columns[0]  # Histogram works on a single column
+        
+#         # Calculate histogram data
+#         hist_data = np.histogram(df[column].dropna(), bins=bin_size)
+#         bin_edges = hist_data[1]
+#         counts = hist_data[0]
+        
+#         # Create bin labels (use middle of each bin)
+#         bin_labels = [f"{bin_edges[i]:.2f}-{bin_edges[i+1]:.2f}" 
+#                      for i in range(len(bin_edges)-1)]
+        
+#         # Add data to chart
+#         chart.add_xaxis(bin_labels)
+#         chart.add_yaxis("Frequency", counts.tolist(), 
+#                        label_opts=opts.LabelOpts(is_show=False))
+        
+#         # Configure chart options
+#         chart.set_global_opts(
+#             title_opts=opts.TitleOpts(title=f"Histogram of {column}"),
+#             xaxis_opts=opts.AxisOpts(name="Value Ranges"),
+#             yaxis_opts=opts.AxisOpts(name="Frequency"),
+#             tooltip_opts=opts.TooltipOpts(trigger="axis"),
+#             toolbox_opts=opts.ToolboxOpts(
+#                 feature={
+#                     "dataZoom": {},
+#                     "dataView": {},
+#                     "saveAsImage": {}
+#                 }
+#             ),
+#             datazoom_opts=[opts.DataZoomOpts()],
+#         )
+        
+#         return chart
+
+#     @staticmethod
+#     def _create_segmented_bar(df, selected_columns, options):
+#         """
+#         Creates a segmented (stacked) bar chart using ECharts.
+#         Supports both stacked and percentage stacked modes.
+#         """
+#         chart = Bar()
+#         stack_type = options.get('stackType', 'stack')  # 'stack' or 'percentage'
+        
+#         # First column is categories (x-axis)
+#         x_data = df[selected_columns[0]].unique().tolist()
+        
+#         # Handle percentage stacking if requested
+#         if stack_type == 'percentage':
+#             # Calculate percentages for each category
+#             total = df.groupby(selected_columns[0])[selected_columns[1:]].sum()
+#             for col in selected_columns[1:]:
+#                 total[col] = (total[col] / total.sum(axis=1) * 100)
+            
+#             # Add each series
+#             for col in selected_columns[1:]:
+#                 y_data = total[col].tolist()
+#                 chart.add_yaxis(
+#                     col, 
+#                     y_data,
+#                     stack="stack1",
+#                     label_opts=opts.LabelOpts(position="inside", formatter="{c}%")
+#                 )
+#         else:
+#             # Regular stacked bar chart
+#             for col in selected_columns[1:]:
+#                 y_data = df.groupby(selected_columns[0])[col].sum().tolist()
+#                 chart.add_yaxis(
+#                     col, 
+#                     y_data,
+#                     stack="stack1",
+#                     label_opts=opts.LabelOpts(position="inside")
+#                 )
+        
+#         # Set x-axis data
+#         chart.add_xaxis(x_data)
+        
+#         # Configure chart options
+#         chart.set_global_opts(
+#             title_opts=opts.TitleOpts(title=""),
+#             tooltip_opts=opts.TooltipOpts(trigger="axis", axis_pointer_type="shadow"),
+#             toolbox_opts=opts.ToolboxOpts(
+#                 feature={
+#                     "dataZoom": {},
+#                     "dataView": {},
+#                     "saveAsImage": {},
+#                     "magicType": {"show": True, "type": ["line", "bar"]}
+#                 }
+#             ),
+#             legend_opts=opts.LegendOpts(pos_top="5%"),
+#             datazoom_opts=[opts.DataZoomOpts()],
+#         )
+        
+#         return chart
+
+#     @staticmethod
+#     def _create_line(df, selected_columns):
+#         """Creates a line chart with multiple series support"""
+#         chart = Line()
+#         x_data = df[selected_columns[0]].tolist()
+        
+#         for col in selected_columns[1:]:
+#             y_data = df[col].tolist()
+#             chart.add_xaxis(x_data)
+#             chart.add_yaxis(
+#                 col, 
+#                 y_data,
+#                 label_opts=opts.LabelOpts(is_show=False),
+#                 is_smooth=True
+#             )
+        
+#         chart.set_global_opts(
+#             title_opts=opts.TitleOpts(title=""),
+#             tooltip_opts=opts.TooltipOpts(trigger="axis"),
+#             toolbox_opts=opts.ToolboxOpts(
+#                 feature={
+#                     "dataZoom": {},
+#                     "dataView": {},
+#                     "saveAsImage": {}
+#                 }
+#             ),
+#             datazoom_opts=[opts.DataZoomOpts()],
+#         )
+        
+#         return chart
+
+
+
+class EnhancedChartGenerator:
+    @staticmethod
+    def _initialize_chart(chart_type: str):
+        """Initialize the appropriate chart type with proper error handling."""
+        chart_types = {
+            'line': Line,
+            'bar': Bar,
+            'pie': Pie,
+            'scatter': Scatter,
+            'box': Boxplot,
+            'histogram': Bar,
+            'segmented-bar': Bar,
+            'effect-scatter': EffectScatter,
+            'funnel': Funnel,
+            'gauge': Gauge,
+            'heatmap': HeatMap,
+            'kline': Kline,
+            'radar': Radar,
+            'treemap': TreeMap,
+            'surface3d': Surface3D,
+            'bar3d': Bar3D,
+            'line3d': Line3D,
+            'scatter3d': Scatter3D,
+            'map': Map,
+            'graph': Graph,
+            'liquid': Liquid,
+            'parallel': Parallel,
+            'sankey': Sankey,
+            'sunburst': Sunburst
+        }
+        
+        if chart_type not in chart_types:
+            raise ValueError(f'Unsupported chart type: {chart_type}')
+            
+        ChartClass = chart_types[chart_type]
+        return ChartClass()
+
+    @staticmethod
+    def create_chart(
+        chart_type: str,
+        df: pd.DataFrame,
+        selected_columns: list,
+        options: Optional[Dict[str, Any]] = None
+    ):
+        """Creates a responsive chart with the specified type and data."""
+        try:
+            chart = EnhancedChartGenerator._initialize_chart(chart_type)
+            options = options or {}
+            
+            if chart_type in ['line', 'bar', 'segmented-bar']:
+                x_data = df[selected_columns[0]].tolist()
+                chart.add_xaxis(x_data)
+                for col in selected_columns[1:]:
+                    y_data = df[col].tolist()
+                    chart.add_yaxis(
+                        col,
+                        y_data,
+                        label_opts=opts.LabelOpts(is_show=False),
+                        stack="total" if chart_type == 'segmented-bar' else None
+                    )
+            elif chart_type == 'histogram':
+                values = df[selected_columns[0]].dropna()
+                bin_count = options.get('binSize', 10)
+                hist, bins = np.histogram(values, bins=bin_count)
+                bin_labels = [f"{bins[i]:.2f}-{bins[i+1]:.2f}" for i in range(len(bins)-1)]
+                
+                chart.add_xaxis(bin_labels)
+                chart.add_yaxis(
+                    "Frequency",
+                    hist.tolist(),
+                    label_opts=opts.LabelOpts(is_show=False)
+                )
+                
+            elif chart_type == 'pie':
+                data_pairs = list(zip(
+                    df[selected_columns[0]].tolist(),
+                    df[selected_columns[1]].tolist()
+                ))
+                chart.add(
+                    series_name="",
+                    data_pair=data_pairs,
+                    label_opts=opts.LabelOpts(
+                        formatter="{b}: {c}",
+                        position="outside"
+                    )
+                )
+                
+            elif chart_type == 'box':
+                data = [df[col].dropna().tolist() for col in selected_columns]
+                chart.add_xaxis(selected_columns)
+                chart.add_yaxis("Boxplot", chart.prepare_data(data))
+
+            # Process data based on chart type
+            elif chart_type in ['effect-scatter']:
+                return EnhancedChartGenerator._create_effect_scatter(df, selected_columns, options)
+            elif chart_type == 'funnel':
+                return EnhancedChartGenerator._create_funnel(df, selected_columns, options)
+            elif chart_type == 'gauge':
+                return EnhancedChartGenerator._create_gauge(df, selected_columns, options)
+            elif chart_type == 'heatmap':
+                return EnhancedChartGenerator._create_heatmap(df, selected_columns, options)
+            elif chart_type == 'kline':
+                return EnhancedChartGenerator._create_kline(df, selected_columns, options)
+            elif chart_type == 'radar':
+                return EnhancedChartGenerator._create_radar(df, selected_columns, options)
+            elif chart_type == 'treemap':
+                return EnhancedChartGenerator._create_treemap(df, selected_columns, options)
+            elif chart_type == 'surface3d':
+                return EnhancedChartGenerator._create_surface3d(df, selected_columns, options)
+            elif chart_type in ['bar3d', 'line3d', 'scatter3d']:
+                return EnhancedChartGenerator._create_3d_chart(chart_type, df, selected_columns, options)
+            elif chart_type == 'map':
+                return EnhancedChartGenerator._create_map(df, selected_columns, options)
+            elif chart_type == 'graph':
+                return EnhancedChartGenerator._create_graph(df, selected_columns, options)
+            elif chart_type == 'liquid':
+                return EnhancedChartGenerator._create_liquid(df, selected_columns, options)
+            elif chart_type == 'parallel':
+                return EnhancedChartGenerator._create_parallel(df, selected_columns, options)
+            elif chart_type == 'sankey':
+                return EnhancedChartGenerator._create_sankey(df, selected_columns, options)
+            elif chart_type == 'sunburst':
+                return EnhancedChartGenerator._create_sunburst(df, selected_columns, options)
+             # Configure global options
+            chart.set_global_opts(
+                title_opts=opts.TitleOpts(
+                    title=selected_columns[0]+" vs "+selected_columns[1],
+                    pos_left="center",
+                    title_textstyle_opts=opts.TextStyleOpts(font_size=20)
+                ),
+               # Enhanced tooltip configuration
+        tooltip_opts=opts.TooltipOpts(
+            trigger="axis",
+            axis_pointer_type="cross",
+            background_color="rgba(255,255,255,0.9)",
+            border_color="#ccc",
+            border_width=1,
+            textstyle_opts=opts.TextStyleOpts(color="#333")
+        ),
+        
+        # Dual zoom functionality
+        datazoom_opts=[
+            opts.DataZoomOpts(
+                type_="slider",
+                range_start=0,
+                range_end=100,
+                filter_mode="filter"
+            ),
+            opts.DataZoomOpts(
+                type_="inside",
+                range_start=0,
+                range_end=100,
+                filter_mode="filter"
+            )
+        ],
+        
+        # Professional toolbox with extended features
+        toolbox_opts=opts.ToolboxOpts(
+            feature={
+                "dataZoom": {
+                    "yAxisIndex": "none",
+                    "title": {"zoom": "Area Zoom", "back": "Restore Zoom"}
+                },
+                "restore": {"title": "Reset"},
+                "saveAsImage": {"title": "Save as Image"},
+                "dataView": {
+                    "title": "Data View",
+                    "lang": ["Data View", "Close", "Refresh"]
+                },
+                "magicType": {
+                    "type": ["line", "bar", "stack", "tiled"],
+                    "title": {
+                        "line": "Switch to Line",
+                        "bar": "Switch to Bar",
+                        "stack": "Stack Series",
+                        "tiled": "Unstack Series"
+                    }
+                }
+            }
+        ),
+        
+        # Enhanced legend configuration
+        legend_opts=opts.LegendOpts(
+            type_="scroll",
+            pos_top="5%",
+            pos_left="center",
+            orient="horizontal",
+            textstyle_opts=opts.TextStyleOpts(
+                font_size=12,
+                color="#333"
+            ),
+            item_gap=25
+        ),
+        
+        # Professional axis styling
+        xaxis_opts=opts.AxisOpts(
+            name=selected_columns[0],
+            name_location="middle",
+            name_gap=35,
+            name_textstyle_opts=opts.TextStyleOpts(font_size=14),
+            axisline_opts=opts.AxisLineOpts(
+                linestyle_opts=opts.LineStyleOpts(color="#333")
+            ),
+            axislabel_opts=opts.LabelOpts(
+                font_size=12,
+                color="#333",
+                rotate=0
+            )
+            
+        ),
+        yaxis_opts=opts.AxisOpts(
+            name=selected_columns[1:] if len(selected_columns) > 1 else "",
+            name_location="middle",
+            name_gap=50,
+            name_rotate=90,
+            name_textstyle_opts=opts.TextStyleOpts(font_size=14),
+            axisline_opts=opts.AxisLineOpts(
+                linestyle_opts=opts.LineStyleOpts(color="#333")
+            ),
+            axislabel_opts=opts.LabelOpts(
+                font_size=12,
+                color="#333"
+            ),
+            splitline_opts=opts.SplitLineOpts(
+                is_show=True,
+                linestyle_opts=opts.LineStyleOpts(
+                    type_="dashed",
+                    opacity=0.3
+                )
+            )
+        )
+    )
+    
+            
+            # Set chart to be responsive
+            chart.width = "100%"
+            chart.height = "100%"
+            chart.renderer = "canvas"
+            
+            # If grid options are provided, add the chart to a Grid instance
+            if 'grid_opts' in options:
+                grid = Grid()
+                grid.add(chart, grid_opts=options['grid_opts'])
+                return grid
+            return chart
+            
+        except Exception as e:
+            logging.error(f"Error creating chart: {str(e)}")
+            raise
+
+    @staticmethod
+    def _create_effect_scatter(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates an effect scatter plot with animated effects."""
+        chart = EffectScatter()
+        
+        x_data = df[selected_columns[0]].tolist()
+        y_data = df[selected_columns[1]].tolist()
+        
+        chart.add_xaxis(x_data)
+        chart.add_yaxis(
+            "",
+            y_data,
+            symbol_size=options.get('symbol_size', 10),
+            effect_opts=opts.EffectOpts(
+                brushType="stroke",
+            scale=options.get('effect_scale', 2.5),
+            period=4
+            ),
+            itemstyle_opts=opts.ItemStyleOpts(
+            color=options.get('color', '#5470c6'),
+            opacity=0.8
+        )
+        )
+        
+        chart.set_global_opts(
+        title_opts=opts.TitleOpts(
+            title=f"{selected_columns[0]} vs {selected_columns[1]}",
+            subtitle="Effect Scatter Chart"
+        ),
+        xaxis_opts=opts.AxisOpts(
+            type_="value",
+            splitline_opts=opts.SplitLineOpts(is_show=True)
+        ),
+        yaxis_opts=opts.AxisOpts(
+            type_="value",
+            splitline_opts=opts.SplitLineOpts(is_show=True)
+        )
+    )
+        
+        return chart
+
+    @staticmethod
+    def _create_funnel(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a funnel chart showing stages in a process."""
+        chart = Funnel()
+        
+          # Prepare data pairs (category, value)
+        data_pairs = [
+            (str(row[selected_columns[0]]), float(row[selected_columns[1]]))
+            for _, row in df.iterrows()
+        ]
+         # Sort data by value in descending order
+        data_pairs.sort(key=lambda x: x[1], reverse=True)
+        
+        # Add funnel series
+        chart.add(
+            series_name=selected_columns[1],
+            data_pair=data_pairs,
+            gap=options.get('gap', 2),
+            label_opts=opts.LabelOpts(
+                position="inside",
+                formatter="{b}: {c}"
+            ),
+            itemstyle_opts=opts.ItemStyleOpts(opacity=0.8)
+        )
+
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Funnel Analysis"),
+            legend_opts=opts.LegendOpts(is_show=False)
+        )
+        chart.set_global_opts(title_opts=opts.TitleOpts(title="Funnel Chart"))
+        return chart
+
+    @staticmethod
+    def _create_gauge(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a gauge chart showing a single value within a range."""
+        chart = Gauge()
+
+        # Get the first value from selected column
+        value = float(df[selected_columns[0]].iloc[0])
+
+        # Calculate min and max values
+        min_val = options.get('min', 0)
+        max_val = options.get('max', 100)
+
+        # Add gauge series
+        chart.add(
+            series_name=selected_columns[0],
+            data_pair=[("", value)],
+            min_=min_val,
+            max_=max_val,
+            split_number=options.get('split_number', 10),
+            axisline_opts=opts.AxisLineOpts(
+                linestyle_opts=opts.LineStyleOpts(
+                    color=[[0.3, "#67e0e3"], [0.7, "#37a2da"], [1, "#fd666d"]], 
+                    width=30
+                )
+            )
+            # detail_label_opts=opts.GaugeTitleOpts(
+            #     formatter="{value}",
+            #     font_size=20
+            # )
+        )
+
+        return chart
+
+    @staticmethod
+    def _create_heatmap(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a heatmap visualization."""
+        chart = HeatMap()
+
+        # Prepare data
+        x_axis = sorted(df[selected_columns[0]].unique().tolist())
+        y_axis = sorted(df[selected_columns[1]].unique().tolist())
+
+        # Create heatmap data matrix
+        data = []
+        for i, x in enumerate(x_axis):
+            for j, y in enumerate(y_axis):
+                value = df[
+                    (df[selected_columns[0]] == x) & 
+                    (df[selected_columns[1]] == y)
+                ][selected_columns[2]].mean()
+
+                if not pd.isna(value):
+                    data.append([i, j, float(value)])
+
+        # Add axes
+        chart.add_xaxis(x_axis)
+        chart.add_yaxis(
+            series_name="",
+            yaxis_data=y_axis,
+            value=data,
+            label_opts=opts.LabelOpts(is_show=True, formatter="{c}"),
+        )
+
+        # Configure visual mapping
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Heat Map Analysis"),
+            visualmap_opts=opts.VisualMapOpts(
+                min_=min(d[2] for d in data),
+                max_=max(d[2] for d in data),
+                is_calculable=True,
+                orient="horizontal",
+                pos_left="center"
+            ),
+            tooltip_opts=opts.TooltipOpts(
+                formatter="{a}: ({c})"
+            )
+        )
+
+        return chart
+
+    @staticmethod
+    def _create_kline(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a K-line (candlestick) chart for financial data."""
+        chart = Kline()
+    
+        # Prepare K-line data
+        kline_data = [
+        [
+            float(row[selected_columns[1]]),  # open
+            float(row[selected_columns[2]]),  # close
+            float(row[selected_columns[3]]),  # low
+            float(row[selected_columns[4]])   # high
+        ]
+        for _, row in df.iterrows()
+        ]
+
+        # Add X axis (dates)
+        chart.add_xaxis(df[selected_columns[0]].tolist())
+
+        # Add K-line series
+        chart.add_yaxis(
+            series_name="Price",
+            y_axis=kline_data,
+            itemstyle_opts=opts.ItemStyleOpts(
+                color="#ef232a",
+                color0="#14b143",
+                border_color="#ef232a",
+                border_color0="#14b143",
+            ),
+            markpoint_opts=opts.MarkPointOpts(
+                data=[
+                    opts.MarkPointItem(type_="max", name="Maximum"),
+                    opts.MarkPointItem(type_="min", name="Minimum")
+                ]
+            )
+        )
+
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="K-Line Chart"),
+            xaxis_opts=opts.AxisOpts(
+                type_="category",
+                is_scale=True
+            ),
+            yaxis_opts=opts.AxisOpts(
+                is_scale=True,
+                splitarea_opts=opts.SplitAreaOpts(is_show=True)
+            ),
+            datazoom_opts=[
+                opts.DataZoomOpts(is_show=True, type_="slider"),
+                opts.DataZoomOpts(is_show=False, type_="inside")
+            ]
+        )
+
+        return chart
+
+    @staticmethod
+    def _create_radar(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a radar chart for multi-dimensional data analysis."""
+        chart = Radar()
+
+        # Prepare indicator schema
+        indicators = [
+            opts.RadarIndicatorItem(
+                name=col,
+                max_=df[col].max() * 1.1  # Add 10% padding
+            )
+            for col in selected_columns[1:]
+        ]
+
+        # Prepare data for each category
+        categories = df[selected_columns[0]].unique()
+        data = []
+        for category in categories:
+            category_data = df[df[selected_columns[0]] == category]
+            values = [float(category_data[col].iloc[0]) for col in selected_columns[1:]]
+            data.append({
+                "value": values,
+                "name": str(category)
+            })
+
+        # Add radar schema
+        chart.add_schema(
+            schema=indicators,
+            shape=options.get('shape', 'circle'),
+            center=['50%', '50%'],
+            radius='70%'
+        )
+
+        # Add data series
+        chart.add(
+            series_name="",
+            data=data,
+            areastyle_opts=opts.AreaStyleOpts(opacity=0.3),
+            linestyle_opts=opts.LineStyleOpts(width=2)
+        )
+
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Radar Analysis"),
+            legend_opts=opts.LegendOpts(
+                selected_mode='multiple',
+                pos_bottom='5%'
+            )
+        )
+
+        return chart
+
+    @staticmethod
+    def _create_treemap(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a treemap visualization."""
+        chart = TreeMap()
+
+        # Prepare hierarchical data
+        def build_tree(data, columns, level=0):
+            if level >= len(columns):
+                return []
+
+            grouped = data.groupby(columns[level])
+            result = []
+
+            for name, group in grouped:
+                node = {
+                    "name": str(name),
+                    "value": len(group) if level == len(columns) - 1 else None
+                }
+
+                if level < len(columns) - 1:
+                    children = build_tree(group, columns, level + 1)
+                    if children:
+                        node["children"] = children
+
+                result.append(node)
+
+            return result
+
+        # Build tree data
+        tree_data = build_tree(df, selected_columns)
+
+        # Add treemap series
+        chart.add(
+            series_name="",
+            data=tree_data,
+            leaf_depth=options.get('leaf_depth', 2),
+            label_opts=opts.LabelOpts(
+                position="inside",
+                formatter="{b}: {c}"
+            ),
+            upperLabel_opts=opts.LabelOpts(is_show=True)
+        )
+
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Tree Map Analysis"),
+            tooltip_opts=opts.TooltipOpts(
+                formatter="{b}: {c}"
+            )
+        )
+
+        return chart
+
+    @staticmethod
+    def _create_surface3d(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a 3D surface chart."""
+        chart = Surface3D()
+        
+        # Create 3D surface data from three columns
+        x_data = df[selected_columns[0]].unique()
+        y_data = df[selected_columns[1]].unique()
+        
+        data = [[
+            x, y, df[
+                (df[selected_columns[0]] == x) & 
+                (df[selected_columns[1]] == y)
+            ][selected_columns[2]].iloc[0]
+        ] for x in x_data for y in y_data]
+        
+        chart.add(
+            series_name="",
+            data=data,
+            shading="realistic",
+            itemstyle_opts=opts.ItemStyleOpts(opacity=0.8)
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_3d_chart(chart_type: str, df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates various types of 3D charts (bar, line, scatter)."""
+        if chart_type == 'bar3d':
+            chart = Bar3D()
+        elif chart_type == 'line3d':
+            chart = Line3D()
+        else:  # scatter3d
+            chart = Scatter3D()
+        
+        data = [[
+            row[selected_columns[0]],
+            row[selected_columns[1]],
+            row[selected_columns[2]]
+        ] for _, row in df.iterrows()]
+        
+        chart.add(
+            series_name="",
+            data=data,
+            xaxis3d_opts=opts.Axis3DOpts(type_="value"),
+            yaxis3d_opts=opts.Axis3DOpts(type_="value"),
+            zaxis3d_opts=opts.Axis3DOpts(type_="value")
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_map(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a map visualization."""
+        chart = Map()
+        
+        # Prepare map data
+        data = [
+            (row[selected_columns[0]], row[selected_columns[1]])
+            for _, row in df.iterrows()
+        ]
+        
+        chart.add(
+            series_name="",
+            data_pair=data,
+            maptype=options.get('maptype', 'world')
+        )
+        
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Map"),
+            visualmap_opts=opts.VisualMapOpts()
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_graph(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a graph visualization showing relationships."""
+        chart = Graph()
+        
+        # Prepare nodes and links
+        nodes = [{"name": str(name)} for name in df[selected_columns[0]].unique()]
+        links = [
+            {
+                "source": str(row[selected_columns[0]]),
+                "target": str(row[selected_columns[1]]),
+                "value": row[selected_columns[2]] if len(selected_columns) > 2 else 1
+            }
+            for _, row in df.iterrows()
+        ]
+        
+        chart.add(
+            series_name="",
+            nodes=nodes,
+            links=links,
+            layout=options.get('layout', 'circular'),
+            is_roam=True,
+            is_focusnode=True
+        )
+        
+        return chart
+
+    @staticmethod
+    def _create_liquid(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a liquid fill chart showing percentage values."""
+        chart = Liquid()
+
+        # Get the first value and convert to percentage
+        value = float(df[selected_columns[0]].iloc[0])
+        if value > 1:
+            value = value / 100
+
+        # Add liquid fill series
+        chart.add(
+            series_name=selected_columns[0],
+            data=[value],
+            label_opts=opts.LabelOpts(
+                font_size=50,
+                formatter=JsCode(
+                    "function(param){return Math.floor(param.value * 100) + '%';}"
+                ),
+                position="inside"
+            ),
+            is_outline_show=True,
+            outline_border_distance=8,
+            shape=options.get('shape', 'circle')
+        )
+
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title=f"{selected_columns[0]} Progress")
+        )
+
+        return chart
+
+    @staticmethod
+    def _create_parallel(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a parallel coordinates plot for multi-dimensional data analysis."""
+        chart = Parallel()
+        
+        # Create schema for parallel axes
+        schema = [
+            {"dim": i, "name": col, "type": "value"}
+            for i, col in enumerate(selected_columns)
+        ]
+        
+        # Prepare data
+        data = df[selected_columns].values.tolist()
+        
+        chart.add(
+            series_name="",
+            data=data,
+            linestyle_opts=opts.LineStyleOpts(width=1, opacity=0.5),
+            schema=schema
+        )
+        
+        chart.set_global_opts(title_opts=opts.TitleOpts(title="Parallel"))
+        return chart
+
+    @staticmethod
+    def _create_sankey(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a Sankey diagram showing flow between entities."""
+        chart = Sankey()
+        
+        # Prepare nodes and links
+        nodes = []
+        node_map = {}
+        current_node = 0
+        
+        # Create nodes
+        for col in selected_columns[:2]:
+            for value in df[col].unique():
+                if value not in node_map:
+                    node_map[value] = current_node
+                    nodes.append({"name": str(value)})
+                    current_node += 1
+        
+        # Create links
+        links = []
+        for _, row in df.iterrows():
+            source = str(row[selected_columns[0]])
+            target = str(row[selected_columns[1]])
+            value = float(row[selected_columns[2]]) if len(selected_columns) > 2 else 1
+            
+            links.append({
+                "source": node_map[source],
+                "target": node_map[target],
+                "value": value
+            })
+        
+        # Add Sankey series
+        chart.add(
+            series_name="",
+            nodes=nodes,
+            links=links,
+            linestyle_opts=opts.LineStyleOpts(
+                opacity=0.3,
+                curve=0.5
+            ),
+            label_opts=opts.LabelOpts(position="right")
+        )
+        
+        # Configure chart options
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Flow Analysis"),
+            tooltip_opts=opts.TooltipOpts(
+                trigger="item",
+                formatter="{b}: {c}"
+            )
+        )
+        
+        return chart
+    
+    @staticmethod
+    def _create_sunburst(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
+        """Creates a sunburst chart for hierarchical data visualization."""
+        chart = Sunburst()
+        
+        def create_sunburst_data(df, columns, current_level=0):
+            """Recursively create hierarchical data structure for sunburst chart."""
+            if current_level >= len(columns):
+                return []
+            
+            grouped = df.groupby(columns[current_level])
+            data = []
+            
+            for name, group in grouped:
+                children = create_sunburst_data(group, columns, current_level + 1)
+                node = {
+                    "name": str(name),
+                    "value": len(group) if not children else None,
+                }
+                if children:
+                    node["children"] = children
+                data.append(node)
+            
+            return data
+        
+        # Create hierarchical data structure
+        data = create_sunburst_data(df, selected_columns)
+        
+        chart.add(
+            series_name="",
+            data_pair=data,
+            radius=[0, '90%'],
+            label_opts=opts.LabelOpts(
+                position="inside",
+                formatter="{b}"
+            )
+        )
+        
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(title="Sunburst Chart"),
+            toolbox_opts=opts.ToolboxOpts(
+                feature={
+                    "saveAsImage": {},
+                    "dataView": {},
+                    "restore": {}
+                }
+            )
+        )
+        
+        return chart
+
+    def _configure_common_options(chart, title="", options: Dict[str, Any] = None):
+        """Configure common options for all chart types."""
+        options = options or {}
+        
+        chart.set_global_opts(
+            title_opts=opts.TitleOpts(
+                title=title,
+                subtitle=options.get("subtitle", ""),
+                title_textstyle_opts=opts.TextStyleOpts(
+                    font_size=16,
+                    font_weight="bold"
+                )
+            ),
+            tooltip_opts=opts.TooltipOpts(
+                trigger="axis",
+                axis_pointer_type="cross"
+            ),
+            toolbox_opts=opts.ToolboxOpts(
+                feature={
+                    "dataZoom": {"yAxisIndex": "none"},
+                    "restore": {},
+                    "saveAsImage": {},
+                    "dataView": {}
+                }
+            ),
+            datazoom_opts=[
+                opts.DataZoomOpts(
+                    range_start=0,
+                    range_end=100
+                ),
+                opts.DataZoomOpts(
+                    type_="inside",
+                    range_start=0,
+                    range_end=100
+                )
+            ],
+            legend_opts=opts.LegendOpts(
+                type_="scroll",
+                pos_top="top",
+                orient="horizontal"
+            )
+        )
+        
+        return chart
+   
+
+@cache.memoize(timeout=CACHE_TIMEOUT)
+def get_table_data(table_name, selected_columns):
+    """
+    Fetch and cache data from database.
+    Only retrieves requested columns for better performance.
+    """
     try:
-        cursor.execute(f'PRAGMA table_info("{table_name}")')
-        columns = cursor.fetchall()
-        app.logger.debug(f"Table {table_name} columns: {columns}")
-    except Exception as e:
-        app.logger.error(f"Error getting table info: {str(e)}")
+        conn = sqlite3.connect('user_files.db')
+        # Only select requested columns
+        columns_str = ', '.join(f'"{col}"' for col in selected_columns)
+        query = f'SELECT {columns_str} FROM "{table_name}" LIMIT {CHUNK_SIZE}'
         
+        df = pd.read_sql_query(query, conn)
+        return df
+    finally:
+        if conn:
+            conn.close()        
 def process_pdf_content(pdf_content):
     """Process PDF content and return text with formatting preserved"""
     try:
@@ -336,7 +1514,6 @@ def upload_file(user_id):
 
     finally:
         conn.close()
-# Updated backend endpoints with proper SQL quoting
 
 @app.route('/update-row/<user_id>/<file_id>', methods=['POST'])
 def update_row(user_id, file_id):
@@ -364,24 +1541,41 @@ def update_row(user_id, file_id):
         
         if is_structured:
             edit_item = data.get('editItem', {})
-            # Remove any empty or null values
-            edit_item = {k: v for k, v in edit_item.items() if v is not None and v != ''}
+            # Process empty or null values
+            processed_item = {}
             
-            if edit_item:
-                # Properly quote column names
+            # Get column types from the table
+            c.execute(f'PRAGMA table_info("{table_name}")')
+            columns_info = {col[1]: col[2] for col in c.fetchall()}
+            
+            for key, value in edit_item.items():
+                # Handle different SQL types appropriately
+                if value is None:
+                    processed_item[key] = None
+                else:
+                    col_type = columns_info.get(key, '').upper()
+                    if 'INT' in col_type:
+                        processed_item[key] = int(value) if value != '' else None
+                    elif 'REAL' in col_type or 'FLOAT' in col_type:
+                        processed_item[key] = float(value) if value != '' else None
+                    elif 'BOOL' in col_type:
+                        processed_item[key] = bool(value) if value != '' else None
+                    else:
+                        # For text/varchar types, empty string is kept as empty string
+                        processed_item[key] = value
+            
+            if processed_item:
                 quoted_table = f'"{table_name}"'
                 
                 if data.get('editIndex') is not None:  # Update existing row
-                    # Get the ROWID using the offset
                     row_query = f'SELECT ROWID FROM {quoted_table} LIMIT 1 OFFSET ?'
                     c.execute(row_query, (data['editIndex'],))
                     row_result = c.fetchone()
                     
                     if row_result:
                         row_id = row_result[0]
-                        # Quote all column names in the SET clause
-                        set_clause = ', '.join([f'"{k}" = ?' for k in edit_item.keys()])
-                        values = list(edit_item.values())
+                        set_clause = ', '.join([f'"{k}" = ?' for k in processed_item.keys()])
+                        values = list(processed_item.values())
                         
                         update_query = f'''
                             UPDATE {quoted_table} 
@@ -394,9 +1588,8 @@ def update_row(user_id, file_id):
                         c.execute(f'SELECT * FROM {quoted_table} WHERE ROWID = ?', [row_id])
                         
                 else:  # Create new row
-                    # Quote column names in INSERT
-                    columns = [f'"{k}"' for k in edit_item.keys()]
-                    values = list(edit_item.values())
+                    columns = [f'"{k}"' for k in processed_item.keys()]
+                    values = list(processed_item.values())
                     placeholders = ','.join(['?' for _ in values])
                     
                     insert_query = f'''
@@ -420,8 +1613,7 @@ def update_row(user_id, file_id):
                 else:
                     raise Exception("Failed to retrieve updated row")
             else:
-                return jsonify({'error': 'No valid data provided for update'}), 400
-            
+                return jsonify({'error': 'No valid data provided for update'}), 400            
         else:  # Unstructured data handling remains the same
             c.execute("""
                 SELECT content 
@@ -628,7 +1820,6 @@ def list_files(user_id):
         return f'Error listing files: {str(e)}', 500
     finally:
         conn.close()
-#############################################
 
 def handle_excel_upload(file, user_id, filename, c, conn):
     """Handle Excel file by extracting sheets and storing them similarly to DB tables."""
@@ -1319,6 +2510,7 @@ def analyze_data(user_id: str, file_id: str):
 
         # Read data in chunks if it's a large dataset
         chunk_size = 100000  # Adjust based on memory constraints
+
         chunks = []
         for chunk in pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn, chunksize=chunk_size):
             chunks.append(chunk)
@@ -1429,147 +2621,485 @@ def update_blob(user_id, filename):
         app.logger.error(f"Error updating blob content: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/generate-graph/<user_id>/<file_id>', methods=['POST'])
-def generate_graph(user_id, file_id):
-    try:
-        app.logger.debug(f"Received request: user_id={user_id}, file_id={file_id}")
-        data = request.json
-        app.logger.debug(f"Request data: {data}")
+# Add these new routes to your Flask backend (backend.py)
 
-        # Convert file_id to string if needed
-        file_id = str(file_id)
+@app.route('/get-column-metadata/<user_id>/<file_id>/<column_name>', methods=['GET'])
+def get_column_metadata(user_id, file_id, column_name):
+    """Get metadata about a specific column including unique values, statistics etc."""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get file metadata and table name
+        c.execute("""
+            SELECT f.unique_key
+            FROM user_files f
+            WHERE f.file_id = ? AND f.user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
+
+        # Get column data
+        df = pd.read_sql_query(f'SELECT "{column_name}" FROM "{table_name}"', conn)
+        
+        # Determine if column is numeric
+        is_numeric = pd.api.types.is_numeric_dtype(df[column_name])
+        
+        if is_numeric:
+            metadata = {
+                'type': 'numeric',
+                'min': float(df[column_name].min()),
+                'max': float(df[column_name].max()),
+                'mean': float(df[column_name].mean()),
+                'unique_values': df[column_name].nunique(),
+                'value_counts': df[column_name].value_counts().head(10).to_dict()
+            }
+        else:
+            metadata = {
+                'type': 'categorical',
+                'unique_values': df[column_name].nunique(),
+                'value_counts': df[column_name].value_counts().head(50).to_dict()
+            }
+            
+        return jsonify(metadata)
+        
+    except Exception as e:
+        app.logger.error(f"Error getting column metadata: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+# Add this helper function at the top of your backend.py file
+def convert_numpy_types(obj):
+    """
+    Recursively convert numpy types to Python native types for JSON serialization.
+    This ensures all data can be properly converted to JSON.
+    """
+    if isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32,
+                       np.int64, np.uint8, np.uint16, np.uint32, np.uint64)):
+        return int(obj)
+    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+        return float(obj)
+    elif isinstance(obj, (np.bool_)):
+        return bool(obj)
+    elif isinstance(obj, (np.ndarray,)):
+        return obj.tolist()
+    elif isinstance(obj, (pd.Timestamp)):
+        return obj.isoformat()
+    elif isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
+    elif isinstance(obj, (pd.Series)):
+        return convert_numpy_types(obj.values)
+    elif isinstance(obj, (decimal.Decimal)):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_numpy_types(item) for item in obj]
+    return obj
+
+@app.route('/apply-filters/<user_id>/<file_id>', methods=['POST'])
+def apply_filters(user_id, file_id):
+    """
+    Apply filters and sorting to the data, handling all numeric types properly.
+    Returns paginated, filtered, and sorted data in JSON format.
+    """
+    try:
+        app.logger.info(f"Applying filters for user {user_id}, file {file_id}")
+        filters = request.json.get('filters', {})
+        sort_by = request.json.get('sort_by', {})
+        page = request.json.get('page', 1)
+        page_size = request.json.get('page_size', 50)
+        
+        app.logger.debug(f"Received filters: {filters}")
+        app.logger.debug(f"Sort by: {sort_by}")
         
         conn = sqlite3.connect('user_files.db')
         c = conn.cursor()
         
-        # First, check if this is a parent file
+        # Get table name
         c.execute("""
-            SELECT file_type
-            FROM user_files
-            WHERE file_id = ? AND user_id = ?
+            SELECT f.unique_key
+            FROM user_files f
+            WHERE f.file_id = ? AND f.user_id = ?
         """, (file_id, user_id))
         
-        file_info = c.fetchone()
-        if not file_info:
+        result = c.fetchone()
+        if not result:
             return jsonify({'error': 'File not found'}), 404
             
-        file_type = file_info[0]
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
         
-        # Get the actual table data based on file type
-        if file_type in ['xlsx', 'xls', 'db']:
-            # For Excel and DB files, get child file metadata
-            c.execute("""
-                SELECT f.file_id, f.unique_key, f.sheet_table
-                FROM user_files f
-                WHERE f.parent_file_id = ? AND f.user_id = ?
-            """, (file_id, user_id))
-            
-            children = c.fetchall()
-            if children:
-                # Use the first child's data
-                child_id, unique_key, sheet_table = children[0]
-                table_name = f"table_{unique_key}"
-            else:
-                # If no children, try to get the file's own table
-                c.execute("""
-                    SELECT f.unique_key
-                    FROM user_files f
-                    WHERE f.file_id = ? AND f.user_id = ?
-                """, (file_id, user_id))
-                result = c.fetchone()
-                if result:
-                    unique_key = result[0]
-                    table_name = f"table_{unique_key}"
-                else:
-                    return jsonify({'error': 'No data table found'}), 400
-        else:
-            # For other structured files (CSV, etc.)
-            c.execute("""
-                SELECT f.unique_key
-                FROM user_files f
-                WHERE f.file_id = ? AND f.user_id = ?
-            """, (file_id, user_id))
-            result = c.fetchone()
-            if result:
-                unique_key = result[0]
-                table_name = f"table_{unique_key}"
-            else:
-                return jsonify({'error': 'No data table found'}), 400
-
-        # Verify table exists
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-        if not c.fetchone():
-            return jsonify({'error': f'Table {table_name} not found'}), 404
-
-        # Get data from the table
-        query = f'SELECT * FROM "{table_name}"'
-        app.logger.debug(f"SQL Query: {query}")
-        df = pd.read_sql_query(query, conn)
-        app.logger.debug(f"DataFrame shape: {df.shape}")
-        data = request.json
-        chart_type = data.get('chartType')
-        selected_columns = data.get('selectedColumns')
-        options = data.get('options', {})
-        chart_type = data.get('chartType')
-        selected_columns = data.get('selectedColumns', [])
-        app.logger.debug(f"Chart type: {chart_type}, Selected columns: {selected_columns}")
+        # Build the SQL query with filters
+        where_clauses = []
+        params = []
         
-        # Create figure based on chart type
-        try:
-            if chart_type == 'line':
-                fig = px.line(df, x=selected_columns[0], y=selected_columns[1:])
-            elif chart_type == 'bar':
-                fig = px.bar(df, x=selected_columns[0], y=selected_columns[1:])
-            elif chart_type == 'pie':
-                fig = px.pie(df, values=selected_columns[1], names=selected_columns[0])
-            elif chart_type == 'scatter':
-                fig = px.scatter(df, x=selected_columns[0], y=selected_columns[1])
-            elif chart_type == 'box':
-                fig = px.box(df, y=selected_columns[1:])
-            elif chart_type == 'histogram':
-                   fig = px.histogram(df, x=selected_columns[0], nbins=options.get('binSize', 10))
-            elif chart_type == 'segmented-bar':
-                   fig = px.bar(df, x=selected_columns[0], y=selected_columns[1:],barmode=options.get('stackType', 'stack'))            
+        for column, filter_value in filters.items():
+            if isinstance(filter_value, dict):
+                # Numeric range filter
+                if 'min' in filter_value and filter_value['min'] is not None:
+                    where_clauses.append(f'CAST("{column}" AS FLOAT) >= ?')
+                    params.append(float(filter_value['min']))
+                if 'max' in filter_value and filter_value['max'] is not None:
+                    where_clauses.append(f'CAST("{column}" AS FLOAT) <= ?')
+                    params.append(float(filter_value['max']))
             else:
-                return jsonify({'error': f'Unsupported chart type: {chart_type}'}), 400
-                
-            # Update layout for better appearance
-            fig.update_layout(
-                template='plotly_white',
-                margin=dict(l=40, r=40, t=40, b=40),
-                height=400
-            )
-            
-            # Generate HTML
-            html = fig.to_html(full_html=False, include_plotlyjs='cdn')
-            
-            # Save to graph cache
-            graph_id = str(uuid.uuid4())
-            c.execute("""
-                INSERT INTO graph_cache (graph_id, html_content, created_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP)
-            """, (graph_id, html))
-            
-            conn.commit()
-            return jsonify({
-                'graph_id': graph_id,
-                'url': f'/graph/{graph_id}'
-            })
-            
-        except Exception as e:
-            app.logger.error(f"Error creating plot: {str(e)}")
-            return jsonify({'error': f'Error creating plot: {str(e)}'}), 500
-            
+                # Categorical filter
+                where_clauses.append(f'"{column}" = ?')
+                params.append(str(filter_value))
+        
+        where_sql = ' AND '.join(where_clauses) if where_clauses else '1=1'
+        
+        # Add sorting
+        order_by = ''
+        if sort_by:
+            column = sort_by.get('column')
+            direction = sort_by.get('direction', 'asc').upper()
+            if column:
+                # Add CAST for numeric columns to ensure proper sorting
+                order_by = f' ORDER BY CAST("{column}" AS FLOAT) {direction}' if column in numericColumns else f' ORDER BY "{column}" {direction}'
+        
+        # Add pagination
+        offset = (page - 1) * page_size
+        limit_sql = f' LIMIT {page_size} OFFSET {offset}'
+        
+        # Execute query
+        query = f'SELECT * FROM "{table_name}" WHERE {where_sql}{order_by}{limit_sql}'
+        app.logger.debug(f"Executing query: {query} with params: {params}")
+        
+        df = pd.read_sql_query(query, conn, params=params)
+        
+        # Get total count for pagination
+        count_query = f'SELECT COUNT(*) FROM "{table_name}" WHERE {where_sql}'
+        total_rows = pd.read_sql_query(count_query, conn, params=params).iloc[0, 0]
+        
+        # Convert the data to a format that can be JSON serialized
+        result_data = convert_numpy_types(df.to_dict('records'))
+        
+        response_data = {
+            'data': result_data,
+            'pagination': {
+                'total_rows': int(total_rows),  # Convert numpy.int64 to native int
+                'page': page,
+                'page_size': page_size,
+                'total_pages': int((total_rows + page_size - 1) // page_size)
+            }
+        }
+        
+        app.logger.info(f"Successfully applied filters. Returning {len(result_data)} rows")
+        return jsonify(response_data)
+        
     except Exception as e:
-        app.logger.error(f"Error generating graph: {str(e)}")
+        app.logger.error(f"Error applying filters: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
     finally:
         if 'conn' in locals():
             conn.close()
 
+# @app.route('/generate-graph/<user_id>/<file_id>', methods=['POST'])
+# def generate_graph(user_id, file_id):
+#     try:
+#         app.logger.debug(f"Received request: user_id={user_id}, file_id={file_id}")
+#         data = request.json
+#         app.logger.debug(f"Request data: {data}")
+
+#         # Convert file_id to string if needed
+#         file_id = str(file_id)
+        
+#         conn = sqlite3.connect('user_files.db')
+#         c = conn.cursor()
+        
+#         # First, check if this is a parent file
+#         c.execute("""
+#             SELECT file_type
+#             FROM user_files
+#             WHERE file_id = ? AND user_id = ?
+#         """, (file_id, user_id))
+        
+#         file_info = c.fetchone()
+#         if not file_info:
+#             return jsonify({'error': 'File not found'}), 404
+            
+#         file_type = file_info[0]
+        
+#         # Get the actual table data based on file type
+#         if file_type in ['xlsx', 'xls', 'db']:
+#             # For Excel and DB files, get child file metadata
+#             c.execute("""
+#                 SELECT f.file_id, f.unique_key, f.sheet_table
+#                 FROM user_files f
+#                 WHERE f.parent_file_id = ? AND f.user_id = ?
+#             """, (file_id, user_id))
+            
+#             children = c.fetchall()
+#             if children:
+#                 # Use the first child's data
+#                 child_id, unique_key, sheet_table = children[0]
+#                 table_name = f"table_{unique_key}"
+#             else:
+#                 # If no children, try to get the file's own table
+#                 c.execute("""
+#                     SELECT f.unique_key
+#                     FROM user_files f
+#                     WHERE f.file_id = ? AND f.user_id = ?
+#                 """, (file_id, user_id))
+#                 result = c.fetchone()
+#                 if result:
+#                     unique_key = result[0]
+#                     table_name = f"table_{unique_key}"
+#                 else:
+#                     return jsonify({'error': 'No data table found'}), 400
+#         else:
+#             # For other structured files (CSV, etc.)
+#             c.execute("""
+#                 SELECT f.unique_key
+#                 FROM user_files f
+#                 WHERE f.file_id = ? AND f.user_id = ?
+#             """, (file_id, user_id))
+#             result = c.fetchone()
+#             if result:
+#                 unique_key = result[0]
+#                 table_name = f"table_{unique_key}"
+#             else:
+#                 return jsonify({'error': 'No data table found'}), 400
+
+#         # Verify table exists
+#         c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+#         if not c.fetchone():
+#             return jsonify({'error': f'Table {table_name} not found'}), 404
+
+#         # Get data from the table
+#         query = f'SELECT * FROM "{table_name}"'
+#         app.logger.debug(f"SQL Query: {query}")
+#         df = pd.read_sql_query(query, conn)
+#         app.logger.debug(f"DataFrame shape: {df.shape}")
+#         data = request.json
+#         chart_type = data.get('chartType')
+#         selected_columns = data.get('selectedColumns')
+#         options = data.get('options', {})
+#         chart_type = data.get('chartType')
+#         selected_columns = data.get('selectedColumns', [])
+#         app.logger.debug(f"Chart type: {chart_type}, Selected columns: {selected_columns}")
+        
+#         # Create figure based on chart type
+#         try:
+#             if chart_type == 'line':
+#                 fig = px.line(df, x=selected_columns[0], y=selected_columns[1:])
+#             elif chart_type == 'bar':
+#                 fig = px.bar(df, x=selected_columns[0], y=selected_columns[1:])
+#             elif chart_type == 'pie':
+#                 fig = px.pie(df, values=selected_columns[1], names=selected_columns[0])
+#             elif chart_type == 'scatter':
+#                 fig = px.scatter(df, x=selected_columns[0], y=selected_columns[1])
+#             elif chart_type == 'box':
+#                 fig = px.box(df, y=selected_columns[1:])
+#             elif chart_type == 'histogram':
+#                    fig = px.histogram(df, x=selected_columns[0], nbins=options.get('binSize', 10))
+#             elif chart_type == 'segmented-bar':
+#                    fig = px.bar(df, x=selected_columns[0], y=selected_columns[1:],barmode=options.get('stackType', 'stack'))            
+#             else:
+#                 return jsonify({'error': f'Unsupported chart type: {chart_type}'}), 400
+                
+#             # Update layout for better appearance
+#             fig.update_layout(
+#                 template='plotly_white',
+#                 margin=dict(l=40, r=40, t=40, b=40),
+#                 height=400
+#             )
+            
+#             # Generate HTML
+#             html = fig.to_html(full_html=False, include_plotlyjs='cdn')
+            
+#             # Save to graph cache
+#             graph_id = str(uuid.uuid4())
+#             c.execute("""
+#                 INSERT INTO graph_cache (graph_id, html_content, created_at)
+#                 VALUES (?, ?, CURRENT_TIMESTAMP)
+#             """, (graph_id, html))
+            
+#             conn.commit()
+#             return jsonify({
+#                 'graph_id': graph_id,
+#                 'url': f'/graph/{graph_id}'
+#             })
+            
+#         except Exception as e:
+#             app.logger.error(f"Error creating plot: {str(e)}")
+#             return jsonify({'error': f'Error creating plot: {str(e)}'}), 500
+            
+#     except Exception as e:
+#         app.logger.error(f"Error generating graph: {str(e)}")
+#         app.logger.error(traceback.format_exc())
+#         return jsonify({'error': str(e)}), 500
+#     finally:
+#         if 'conn' in locals():
+#             conn.close()
+
+# @app.route('/graph/<graph_id>', methods=['GET'])
+# def serve_graph(graph_id):
+#     try:
+#         conn = sqlite3.connect('user_files.db')
+#         c = conn.cursor()
+        
+#         c.execute("""
+#             SELECT html_content
+#             FROM graph_cache
+#             WHERE graph_id = ?
+#         """, (graph_id,))
+        
+#         result = c.fetchone()
+#         if not result:
+#             return 'Graph not found', 404
+            
+#         html_content = result[0]
+        
+#         # Create a full HTML page with necessary styling
+#         full_html = f"""
+#         <!DOCTYPE html>
+#         <html>
+#         <head>
+#             <meta charset="utf-8">
+#             <style>
+#                 body {{ margin: 0; padding: 0; overflow: hidden; }}
+#                 #graph {{ width: 100%; height: 100vh; }}
+#             </style>
+#         </head>
+#         <body>
+#             <div id="graph">
+#                 {html_content}
+#             </div>
+#         </body>
+#         </html>
+#         """
+        
+#         return Response(full_html, mimetype='text/html')
+        
+#     except Exception as e:
+#         app.logger.error(f"Error serving graph: {str(e)}")
+#         return str(e), 500
+#     finally:
+#         conn.close()
+
+@app.route('/generate-graph/<user_id>/<file_id>', methods=['POST'])
+def generate_graph(user_id, file_id):
+    """
+    Enhanced route handler for generating interactive charts.
+    Supports an expanded set of chart types with improved data processing.
+    """
+    try:
+        app.logger.debug(f"Received request: user_id={user_id}, file_id={file_id}")
+        data = request.json
+        
+        # Get chart parameters
+        chart_type = data.get('chartType')
+        selected_columns = data.get('selectedColumns', [])
+        options = data.get('options', {})
+        
+        # Validate input
+        if not chart_type or not selected_columns:
+            return jsonify({'error': 'Missing required parameters'}), 400
+
+        # Special handling for different chart types
+        required_columns = {
+            'kline': 5,  # date, open, close, low, high
+            'surface3d': 3,
+            'bar3d': 3,
+            'line3d': 3,
+            'scatter3d': 3,
+            'sankey': 2,
+            'graph': 2
+        }
+
+        if chart_type in required_columns and len(selected_columns) < required_columns[chart_type]:
+            return jsonify({
+                'error': f'{chart_type} requires at least {required_columns[chart_type]} columns'
+            }), 400
+
+        # Database connection
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        try:
+            # Get file information
+            c.execute("""
+                SELECT file_type, unique_key
+                FROM user_files
+                WHERE file_id = ? AND user_id = ?
+            """, (file_id, user_id))
+            
+            file_info = c.fetchone()
+            if not file_info:
+                return jsonify({'error': 'File not found'}), 404
+                
+            file_type, unique_key = file_info
+            table_name = f"table_{unique_key}"
+
+            # Verify table exists
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+            if not c.fetchone():
+                return jsonify({'error': f'Table {table_name} not found'}), 404
+
+            # Get data using optimized function with specific handling for each chart type
+            df = get_table_data(table_name, selected_columns)
+            
+            # Special data processing for specific chart types
+            if chart_type == 'kline':
+                # Ensure data is sorted by date
+                df = df.sort_values(by=selected_columns[0])
+            elif chart_type in ['surface3d', 'bar3d', 'line3d', 'scatter3d']:
+                # Normalize 3D data
+                for col in selected_columns[1:]:
+                    df[col] = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
+            elif chart_type == 'gauge':
+                # Ensure single value for gauge
+                if len(df) > 1:
+                    df = df.iloc[[0]]
+            elif chart_type == 'liquid':
+                # Convert to percentage if needed
+                if df[selected_columns[0]].max() > 1:
+                    df[selected_columns[0]] = df[selected_columns[0]] / 100
+
+            # Generate chart
+            chart = EnhancedChartGenerator.create_chart(chart_type, df, selected_columns, options)
+            
+            # Generate HTML and cache it
+            graph_id = str(uuid.uuid4())
+            html_content = chart.render_embed()
+            
+            c.execute("""
+                INSERT INTO graph_cache (graph_id, html_content, created_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            """, (graph_id, html_content))
+            
+            conn.commit()
+            
+            return jsonify({
+                'graph_id': graph_id,
+                'url': f'/graph/{graph_id}'
+            })
+            
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error generating graph: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/graph/<graph_id>', methods=['GET'])
 def serve_graph(graph_id):
+    """
+    Enhanced route handler for serving cached graphs with improved responsive layout
+    and interaction features.
+    """
     try:
         conn = sqlite3.connect('user_files.db')
         c = conn.cursor()
@@ -1586,32 +3116,127 @@ def serve_graph(graph_id):
             
         html_content = result[0]
         
-        # Create a full HTML page with necessary styling
+        # Create a full HTML page with enhanced responsive layout
         full_html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-                body {{ margin: 0; padding: 0; overflow: hidden; }}
-                #graph {{ width: 100%; height: 100vh; }}
+                html, body {{
+                    margin: 0;
+                    padding: 0;
+                    width: 100%;
+                    height: 100%;
+                    overflow: hidden;
+                }}
+                
+                #chart-container {{
+                    width: 100%;
+                    height: 100%;
+                    position: relative;
+                }}
+                
+                .echarts-container {{
+                    width: 100% !important;
+                    height: 100% !important;
+                }}
+                
+                /* Dark mode support */
+                @media (prefers-color-scheme: dark) {{
+                    body {{
+                        background-color: #1a1a1a;
+                    }}
+                    
+                    .echarts-for-react {{
+                        background-color: #1a1a1a;
+                    }}
+                }}
+                
+                /* Enhanced tooltip styles */
+                .echarts-tooltip {{
+                    background: rgba(255, 255, 255, 0.9) !important;
+                    backdrop-filter: blur(4px);
+                    border-radius: 4px;
+                    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+                    padding: 8px 12px;
+                }}
+                
+                /* Responsive adjustments */
+                @media (max-width: 768px) {{
+                    .echarts-tooltip {{
+                        max-width: 200px;
+                    }}
+                }}
             </style>
         </head>
         <body>
-            <div id="graph">
+            <div id="chart-container">
                 {html_content}
             </div>
+            
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {{
+                    // Get the chart instance
+                    const chartInstance = echarts.getInstanceByDom(
+                        document.querySelector('#chart-container div')
+                    );
+                    
+                    if (chartInstance) {{
+                        // Store reference for resize handling
+                        window.chart = chartInstance;
+                        
+                        // Enhanced resize handling with debouncing
+                        let resizeTimeout;
+                        const handleResize = () => {{
+                            clearTimeout(resizeTimeout);
+                            resizeTimeout = setTimeout(() => {{
+                                if (window.chart) {{
+                                    window.chart.resize({{
+                                        animation: {{
+                                            duration: 300,
+                                            easing: 'cubicInOut'
+                                        }}
+                                    }});
+                                }}
+                            }}, 100);
+                        }};
+                        
+                        // Set up resize observer with enhanced options
+                        const resizeObserver = new ResizeObserver(entries => {{
+                            for (let entry of entries) {{
+                                handleResize();
+                            }}
+                        }});
+                        
+                        // Observe the container
+                        resizeObserver.observe(document.getElementById('chart-container'));
+                        
+                        // Also handle window resize events
+                        window.addEventListener('resize', handleResize);
+                        
+                        // Handle visibility changes
+                        document.addEventListener('visibilitychange', () => {{
+                            if (document.visibilityState === 'visible') {{
+                                handleResize();
+                            }}
+                        }});
+                    }}
+                }});
+            </script>
         </body>
         </html>
         """
         
-        return Response(full_html, mimetype='text/html')
-        
+        return Response(full_html, mimetype='text/html')        
     except Exception as e:
         app.logger.error(f"Error serving graph: {str(e)}")
         return str(e), 500
     finally:
-        conn.close()
+        if conn:
+            conn.close()
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
