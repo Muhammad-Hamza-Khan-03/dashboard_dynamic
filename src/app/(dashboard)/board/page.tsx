@@ -450,51 +450,59 @@ const handleDataTablePositionChange = useCallback((id: string, position: { x: nu
 }, []);
 
 
+const handleChartCreate = useCallback(async (chartData: ChartCreationData & { position: Position }) => {
+  if (!userId || !selectedFile || !selectedDashboard) return;
 
-  const handleChartCreate = useCallback(async (chartData: ChartCreationData & { position: Position }) => {
-    if (!userId || !selectedFile || !selectedDashboard) return;
-  
-    try {
-      const response = await fetch(`http://localhost:5000/generate-graph/${userId}/${selectedFile.id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          chartType: chartData.type,
-          selectedColumns: chartData.columns,
-          options: chartData.options
-        }),
-      });
-  
-      if (!response.ok) {
-        throw new Error('Failed to generate chart');
-      }
-  
-      const { graph_id, url } = await response.json();
-      
-      const newChart: Chart = {
-        id: graph_id,
-        type: chartData.type,
-        title: chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`,
-        description: chartData.description || '',
-        graphUrl: `http://localhost:5000${url}`,
-        position: {
-          x: chartData.position.x,
-          y: chartData.position.y,
-          width: 800,  // Default width
-          height: 600  // Default height
-        }
-      };
-  
-      setCharts(prev => [...prev, newChart]);
-      setShowChartModal(false);
-    } catch (error) {
-      console.error('Error creating chart:', error);
-      setDataError('Failed to create chart');
+  try {
+    const response = await fetch(`http://localhost:5000/generate-graph/${userId}/${selectedFile.id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chartType: chartData.type,
+        selectedColumns: chartData.columns,
+        options: chartData.options
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate chart');
     }
-  }, [userId, selectedFile, selectedDashboard]);
-  
+
+    const responseData = await response.json();
+    console.log('Response from generate-graph:', responseData);
+    
+    const { graph_id, url, title } = responseData;
+    console.log('Extracted title:', title);
+    
+    // Use the title returned from the backend or fall back to other options
+    const chartTitle =  title || chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`;
+    console.log('Final chart title being used:', chartTitle);
+    
+    const newChart: Chart = {
+      id: graph_id,
+      type: chartData.type,
+      title: chartTitle,
+      description: chartData.description || '',
+      graphUrl: `http://localhost:5000${url}`,
+      position: {
+        x: chartData.position.x,
+        y: chartData.position.y,
+        width: 800,
+        height: 600
+      }
+    };
+
+    console.log('New chart object:', newChart);
+    setCharts(prev => [...prev, newChart]);
+    setShowChartModal(false);
+  } catch (error) {
+    console.error('Error creating chart:', error);
+    setDataError('Failed to create chart');
+  }
+}, [userId, selectedFile, selectedDashboard]);
+
   // Create dashboard handler
   const handleCreateDashboard = useCallback(() => {
     if (!newDashboardName.trim()) return;

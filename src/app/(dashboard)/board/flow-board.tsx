@@ -123,76 +123,79 @@ interface FlowBoardProps {
 
 
 // Custom node component that directly renders the chart content
-// Update the ChartNode component with proper typing
+// ChartNode component with title moved to Card header
 const ChartNode: React.FC<NodeProps<ChartNodeData>> = ({ data }) => {
-  const { theme } = useTheme();
+  const { boardTheme } = useTheme();
   const width = data.position?.width || 800;
   const height = data.position?.height || 600;
 
   return (
     <Card 
-      className="shadow-lg transition-colors duration-200"
+      className="shadow-lg transition-colors duration-200 overflow-hidden"
       style={{ 
         width: `${width}px`, 
         height: `${height}px`,
-        backgroundColor: theme.nodeBackground,
-        color: theme.text,
-        boxShadow: theme.nodeShadow,
-        borderColor: theme.border
+        backgroundColor: boardTheme.nodeBackground,
+        color: boardTheme.text,
+        boxShadow: `0 4px 20px rgba(0, 0, 0, 0.1)`,
+        borderColor: boardTheme.border,
+        borderRadius: '12px'
       }}
     >
-      <CardHeader className="cursor-move p-3 flex flex-col space-y-2">
+      <CardHeader className="cursor-move p-3 flex flex-col space-y-1 bg-gradient-to-r from-transparent to-blue-50/30 dark:to-blue-900/10">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold">{data.title}</CardTitle>
-          <div className="flex items-center space-x-2">
+          <CardTitle className="text-lg font-semibold truncate mr-2">{data.title}</CardTitle>
+          <div className="flex items-center space-x-1">
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 hover:bg-opacity-10"
-              style={{ color: theme.text, backgroundColor: 'transparent' }}
+              className="h-7 w-7 rounded-full hover:bg-blue-50/80 dark:hover:bg-blue-900/20"
+              style={{ color: boardTheme.text }}
               onClick={() => data.onDescriptionChange(data.id, data.description || '')}
             >
-              <Edit2 className="h-4 w-4" />
+              <Edit2 className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 hover:bg-opacity-10"
-              style={{ color: theme.text, backgroundColor: 'transparent' }}
+              className="h-7 w-7 rounded-full hover:bg-blue-50/80 dark:hover:bg-blue-900/20"
+              style={{ color: boardTheme.text }}
               onClick={() => data.onMaximizeToggle(data.id)}
             >
               {data.isMaximized ? 
-                <Minimize2 className="h-4 w-4" /> : 
-                <Maximize2 className="h-4 w-4" />
+                <Minimize2 className="h-3.5 w-3.5" /> : 
+                <Maximize2 className="h-3.5 w-3.5" />
               }
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 hover:bg-opacity-10"
-              style={{ color: theme.text, backgroundColor: 'transparent' }}
+              className="h-7 w-7 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
+              style={{ color: boardTheme.text }}
               onClick={() => data.onRemove(data.id)}
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </Button>
           </div>
         </div>
         {data.description && (
-          <p className="text-sm" style={{ color: theme.secondary }}>{data.description}</p>
+          <p className="text-xs opacity-70 truncate" style={{ color: boardTheme.secondary }}>{data.description}</p>
         )}
       </CardHeader>
-      <CardContent className="p-0 h-[calc(100%-90px)]">
+      <CardContent className="p-0 h-[calc(100%-60px)]">
         <iframe
-          src={data.graphUrl}
-          className="w-full h-full rounded-b-lg"
-          style={{ backgroundColor: theme.background }}
+          src={`${data.graphUrl}?hideTitle=true`}
+          className="w-full h-full"
+          style={{ 
+            backgroundColor: boardTheme.background,
+            border: 'none'
+          }}
           title={data.title}
         />
       </CardContent>
     </Card>
   );
 };
-
 const nodeTypes: NodeTypes = {
   chartNode: ChartNode,
   textBoxNode: TextBoxNode,
@@ -219,7 +222,7 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
   maximizedChart,
   onAreaClick,
 }) => {
-    const {theme} = useTheme();
+    const { boardTheme: theme } = useTheme();
   // Convert charts to React Flow nodes
 // Update the createNodes function with better typing
 const createNodes = useCallback((): Node[] => {
