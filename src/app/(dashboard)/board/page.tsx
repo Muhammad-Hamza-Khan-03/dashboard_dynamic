@@ -454,20 +454,54 @@ const handleChartCreate = useCallback(async (chartData: ChartCreationData & { po
   if (!userId || !selectedFile || !selectedDashboard) return;
 
   try {
+    console.log('Sending chart creation request with data:', {
+      chartType: chartData.type,
+      selectedColumns: chartData.columns,
+      options: chartData.options
+    });
+
+    // Add a check for 3D chart types and convert to appropriate format for backend
+    const is3DChartType = ['surface3d', 'bar3d', 'line3d', 'scatter3d'].includes(chartData.type);
+    
+    // Convert chart type to backend-compatible format
+    let backendChartType = chartData.type;
+    
+    // Map 3D chart types to what the backend expects
+    const chartTypeMapping = {
+      'scatter3d': 'scatter3D',
+      'line3d': 'line3D',
+      'bar3d': 'bar3D',
+      'surface3d': 'surface3D'
+    };
+    
+    if (is3DChartType) {
+      console.log('Creating a 3D chart type:', chartData.type);
+      backendChartType = chartTypeMapping[chartData.type as keyof typeof chartTypeMapping] || chartData.type;
+      console.log('Mapped to backend chart type:', backendChartType);
+      
+      // For 3D charts, add extra validation
+      if (chartData.columns.length < 3) {
+        setDataError(`${chartData.type} requires at least 3 columns (x, y, z)`);
+        return;
+      }
+    }
+
     const response = await fetch(`http://localhost:5000/generate-graph/${userId}/${selectedFile.id}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        chartType: chartData.type,
+        chartType: backendChartType, // Use the mapped chart type for backend
         selectedColumns: chartData.columns,
         options: chartData.options
       }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to generate chart');
+      const errorText = await response.text();
+      console.error('Server responded with error:', errorText);
+      throw new Error(`Failed to generate chart: ${errorText}`);
     }
 
     const responseData = await response.json();
@@ -477,7 +511,7 @@ const handleChartCreate = useCallback(async (chartData: ChartCreationData & { po
     console.log('Extracted title:', title);
     
     // Use the title returned from the backend or fall back to other options
-    const chartTitle =  title || chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`;
+    const chartTitle = title || chartData.title || `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} Chart`;
     console.log('Final chart title being used:', chartTitle);
     
     const newChart: Chart = {
@@ -499,9 +533,9 @@ const handleChartCreate = useCallback(async (chartData: ChartCreationData & { po
     setShowChartModal(false);
   } catch (error) {
     console.error('Error creating chart:', error);
-    setDataError('Failed to create chart');
+    setDataError(error instanceof Error ? error.message : 'Failed to create chart');
   }
-}, [userId, selectedFile, selectedDashboard]);
+}, [userId, selectedFile, selectedDashboard, setDataError]);
 
   // Create dashboard handler
   const handleCreateDashboard = useCallback(() => {

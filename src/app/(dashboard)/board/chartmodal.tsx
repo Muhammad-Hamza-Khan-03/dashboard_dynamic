@@ -1,7 +1,40 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as echarts from 'echarts/core';
-import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components';
-import { BarChart, LineChart, PieChart, BoxplotChart, CustomChart } from 'echarts/charts';
+import {
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  GridComponent,
+  ToolboxComponent,
+  DataZoomComponent,
+  VisualMapComponent,
+  DatasetComponent,
+  AriaComponent,
+  TransformComponent,
+  MarkPointComponent,
+  MarkLineComponent,
+  BrushComponent,
+  CalendarComponent
+} from 'echarts/components';
+import {
+  LineChart,
+  BarChart,
+  PieChart,
+  ScatterChart,
+  BoxplotChart,
+  CandlestickChart,
+  EffectScatterChart,
+  HeatmapChart,
+  TreemapChart,
+  SunburstChart,
+  GraphChart,
+  GaugeChart,
+  FunnelChart,
+  ParallelChart,
+  SankeyChart,
+  RadarChart,
+  MapChart
+} from 'echarts/charts';
 import { UniversalTransition } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,18 +49,45 @@ import { Input } from "@/components/ui/input";
 
 import { createChart } from './chart-configurations';
 
-// Register necessary ECharts components
+// Import echarts-gl after echarts
+// Note: We need to import these in the correct order
+import 'echarts';
+import 'echarts-gl';
+
+// We still register the core components to be safe
 echarts.use([
-  TitleComponent, 
-  TooltipComponent, 
-  LegendComponent, 
-  GridComponent, 
-  BarChart, 
-  LineChart, 
-  PieChart, 
-  BoxplotChart, 
-  CustomChart,
-  CanvasRenderer, 
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  GridComponent,
+  ToolboxComponent,
+  DataZoomComponent,
+  VisualMapComponent,
+  DatasetComponent,
+  AriaComponent,
+  TransformComponent,
+  MarkPointComponent,
+  MarkLineComponent,
+  BrushComponent,
+  CalendarComponent,
+  LineChart,
+  BarChart,
+  PieChart,
+  ScatterChart,
+  BoxplotChart,
+  CandlestickChart,
+  EffectScatterChart,
+  HeatmapChart,
+  TreemapChart,
+  SunburstChart,
+  GraphChart,
+  GaugeChart,
+  FunnelChart,
+  ParallelChart,
+  SankeyChart,
+  RadarChart,
+  MapChart,
+  CanvasRenderer,
   UniversalTransition
 ]);
 
@@ -75,59 +135,53 @@ const ChartModal: React.FC<ChartModalProps> = ({
 
   useEffect(() => {
     return () => {
+      // Cleanup chart instance when component unmounts
       if (chartInstance.current) {
         chartInstance.current.dispose();
       }
     };
   }, []);
 
-  const calculateHistogramData = (values: number[], binCount: number) => {
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const binSize = (max - min) / binCount;
-    const bins = new Array(binCount).fill(0);
-    
-    values.forEach(value => {
-      const binIndex = Math.min(Math.floor((value - min) / binSize), binCount - 1);
-      bins[binIndex]++;
-    });
-
-    return {
-      bins,
-      binRanges: Array.from({ length: binCount }, (_, i) => min + i * binSize)
-    };
-  };
-
-  const prepareBoxplotData = (data: any[], columns: string[]) => {
-    return columns.slice(1).map(column => {
-      const values = data.map(row => Number(row[column])).filter(val => !isNaN(val));
-      values.sort((a, b) => a - b);
-      
-      const q1 = values[Math.floor(values.length * 0.25)];
-      const median = values[Math.floor(values.length * 0.5)];
-      const q3 = values[Math.floor(values.length * 0.75)];
-      const iqr = q3 - q1;
-      const whiskerBottom = Math.max(...values.filter(v => v >= q1 - 1.5 * iqr));
-      const whiskerTop = Math.min(...values.filter(v => v <= q3 + 1.5 * iqr));
-      
-      const outliers = options.showOutliers ? 
-        values.filter(v => v < whiskerBottom || v > whiskerTop) : 
-        [];
-
-      return {
-        name: column,
-        boxData: [whiskerBottom, q1, median, q3, whiskerTop],
-        outliers: outliers.map(value => [column, value])
-      };
-    });
-  };
-
   useEffect(() => {
-    if (!chartRef.current || selectedColumns.length < 2) return;
+    if (!chartRef.current || selectedColumns.length < 1) return;
   
     try {
-      if (!chartInstance.current) {
-        chartInstance.current = echarts.init(chartRef.current);
+      // Dispose previous chart instance if it exists
+      if (chartInstance.current) {
+        chartInstance.current.dispose();
+      }
+      
+      // Create a new chart instance
+      chartInstance.current = echarts.init(chartRef.current);
+      
+      console.log(`Initializing chart type: ${chartType}`);
+      console.log(`Selected columns: ${selectedColumns.join(", ")}`);
+  
+      // Basic validation for column count
+      const is3DChart = ['bar3d', 'line3d', 'scatter3d', 'surface3d'].includes(chartType);
+      
+      if (!validateColumns(chartType, selectedColumns)) {
+        const required = is3DChart ? 3 : 2;
+        setPreviewError(`${chartType} chart requires at least ${required} columns`);
+        return;
+      }
+  
+      // Additional validation for 3D charts
+      if (is3DChart && !validateNumericColumns(chartType, selectedColumns, columns)) {
+        setPreviewError(`${chartType} chart requires all selected columns to be numeric`);
+        return;
+      }
+      
+      // Special handling for surface3d which needs data in a specific format
+      if (chartType === 'surface3d' && selectedColumns.length >= 3) {
+        // Check if we have enough unique data points to create a surface
+        const xValues = [...new Set(data.map(row => row[selectedColumns[0]]))];
+        const yValues = [...new Set(data.map(row => row[selectedColumns[1]]))];
+        
+        if (xValues.length < 2 || yValues.length < 2) {
+          setPreviewError('Surface chart requires multiple unique values for X and Y axes');
+          return;
+        }
       }
   
       // Create chart configuration using our helper
@@ -158,15 +212,27 @@ const ChartModal: React.FC<ChartModalProps> = ({
               saveAsImage: {}
             }
           },
-          grid: {
-            left: '5%',
-            right: '5%',
-            top: '15%',
-            bottom: '15%',
-            containLabel: true
-          }
+          // Different grid options for 3D vs 2D charts
+          ...(is3DChart ? {
+            grid3D: {
+              viewControl: {
+                autoRotate: false,
+                rotateSensitivity: 5
+              }
+            }
+          } : {
+            grid: {
+              left: '5%',
+              right: '5%',
+              top: '15%',
+              bottom: '15%',
+              containLabel: true
+            }
+          })
         }
       );
+  
+      console.log(`Chart configuration created successfully for type: ${chartType}`);
   
       // Set the configuration to the chart instance
       chartInstance.current.setOption(chartConfig, true);
@@ -174,7 +240,9 @@ const ChartModal: React.FC<ChartModalProps> = ({
   
       // Handle resize events
       const handleResize = () => {
-        chartInstance.current?.resize();
+        if (chartInstance.current) {
+          chartInstance.current.resize();
+        }
       };
   
       window.addEventListener('resize', handleResize);
@@ -189,10 +257,51 @@ const ChartModal: React.FC<ChartModalProps> = ({
         setPreviewError('Error generating chart preview');
       }
     }
-  }, [chartType, selectedColumns, data, options]);
+  }, [chartType, selectedColumns, data, options, columns]);
 
   // Add validation for required columns based on chart type
-const validateColumns = (chartType: string, selectedColumns: string[]) => {
+  const validateColumns = (chartType: string, selectedColumns: string[]) => {
+    const requirements: { [key: string]: number } = {
+      'pie': 2,
+      'scatter': 2,
+      'box': 2,
+      'histogram': 1,
+      'heatmap': 3,
+      'kline': 5,
+      'surface3d': 3,
+      'bar3d': 3,
+      'line3d': 3,
+      'scatter3d': 3,
+      'graph': 2,
+      'sankey': 3
+    };
+  
+    const required = requirements[chartType] || 2;
+    return selectedColumns.length >= required;
+  };
+
+  const validateNumericColumns = (chartType: string, selectedColumns: string[], columnData: Array<{ header: string; accessorKey: string; isNumeric: boolean }>) => {
+    if (!['surface3d', 'bar3d', 'line3d', 'scatter3d'].includes(chartType)) {
+      return true; // Not a 3D chart, so no validation needed
+    }
+  
+    // For 3D charts, we need to ensure all selected columns are numeric
+    return selectedColumns.every(col => {
+      const column = columnData.find(c => c.accessorKey === col);
+      return column?.isNumeric === true;
+    });
+  };
+
+  const handleColumnToggle = (columnKey: string) => {
+    setSelectedColumns(prev => 
+      prev.includes(columnKey) 
+        ? prev.filter(key => key !== columnKey)
+        : [...prev, columnKey]
+    );
+  };
+
+  // Enhanced handleExport function with better validation
+const handleExport = () => {
   const requirements: { [key: string]: number } = {
     'pie': 2,
     'scatter': 2,
@@ -208,48 +317,26 @@ const validateColumns = (chartType: string, selectedColumns: string[]) => {
     'sankey': 3
   };
 
-  const required = requirements[chartType] || 2;
-  return selectedColumns.length >= required;
+  // Check if we have enough columns
+  if (!validateColumns(chartType, selectedColumns)) {
+    setPreviewError(`${chartType} chart requires at least ${requirements[chartType] || 2} columns`);
+    return;
+  }// For 3D charts, ensure all selected columns are numeric
+  if (['surface3d', 'bar3d', 'line3d', 'scatter3d'].includes(chartType) && 
+  !validateNumericColumns(chartType, selectedColumns, columns)) {
+setPreviewError(`${chartType} chart requires all selected columns to be numeric`);
+return;
+}
+
+onExport({
+type: chartType,
+columns: selectedColumns,
+options,
+title: `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart`,
+position
+});
+onClose();
 };
-
-  const handleColumnToggle = (columnKey: string) => {
-    setSelectedColumns(prev => 
-      prev.includes(columnKey) 
-        ? prev.filter(key => key !== columnKey)
-        : [...prev, columnKey]
-    );
-  };
-
-  const handleExport = () => {
-    const requirements: { [key: string]: number } = {
-      'pie': 2,
-      'scatter': 2,
-      'box': 2,
-      'histogram': 1,
-      'heatmap': 3,
-      'kline': 5,
-      'surface3d': 3,
-      'bar3d': 3,
-      'line3d': 3,
-      'scatter3d': 3,
-      'graph': 2,
-      'sankey': 3
-    };
-
-    if (!validateColumns(chartType, selectedColumns)) {
-      setPreviewError(`${chartType} chart requires at least ${requirements[chartType] || 2} columns`);
-      return;
-    }
-  
-    onExport({
-      type: chartType,
-      columns: selectedColumns,
-      options,
-      title: `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart`,
-      position
-    });
-    onClose();
-  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -322,8 +409,19 @@ const validateColumns = (chartType: string, selectedColumns: string[]) => {
                   </SelectGroup>
                 </SelectContent>
               </Select>
-            
+            {/* inside chart selection for 3d charts   */}
+{['surface3d', 'bar3d', 'line3d', 'scatter3d'].includes(chartType) && (
+  <div className="mt-2 text-xs text-blue-600 bg-blue-50 p-2 rounded">
+    <p>3D charts require exactly 3 numeric columns:</p>
+    <ul className="list-disc pl-4 mt-1">
+      <li>X-axis: First selected column</li>
+      <li>Y-axis: Second selected column</li>
+      <li>Z-axis: Third selected column</li>
+    </ul>
+  </div>
+)}
 
+{/* ///////////////////////////////////////// */}
               {/* Chart-specific Options */}
               {chartType === 'histogram' && (
                 <div className="mt-3 bg-white p-2 rounded border border-blue-100">
