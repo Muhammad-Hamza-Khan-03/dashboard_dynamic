@@ -1,0 +1,105 @@
+/* styles/node-resizer.css */
+
+/* Ensure nodes transition smoothly */
+.react-flow__node {
+    transition: transform 0.1s ease;
+  }
+  
+  /* Make selected nodes more visible */
+  .react-flow__node.selected {
+    z-index: 10 !important;
+  }
+  
+  /* Style for node while being dragged */
+  .node-dragging {
+    opacity: 0.8;
+    cursor: grabbing !important;
+  }
+  
+  /* Style for node while being resized */
+  .node-resizing {
+    opacity: 0.8;
+  }
+  
+  /* Make iframe content non-interactive during drag/resize */
+  .node-dragging iframe,
+  .node-resizing iframe {
+    pointer-events: none !important;
+  }
+  
+  /* Basic drag handle styling */
+  .handle {
+    cursor: grab;
+  }
+  .handle:active {
+    cursor: grabbing;
+  }
+  
+  /* Resize handle enhancements */
+  .react-flow__resize-control.handle {
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.2s;
+  }
+  
+  /* Show resize handles on hover and when selected */
+  .react-flow__node:hover .react-flow__resize-control.handle,
+  .react-flow__node.selected .react-flow__resize-control.handle {
+    opacity: 1;
+  }
+  
+  /* Scale up handles on hover for better targeting */
+  .react-flow__resize-control.handle:hover {
+    transform: scale(1.2);
+  }
+  
+  /* Custom cursor styles for each handle position */
+  .react-flow__resize-control.handle-top {
+    cursor: n-resize;
+  }
+  
+  .react-flow__resize-control.handle-right {
+    cursor: e-resize;
+  }
+  
+  .react-flow__resize-control.handle-bottom {
+    cursor: s-resize;
+  }
+  
+  .react-flow__resize-control.handle-left {
+    cursor: w-resize;
+  }
+  
+  .react-flow__resize-control.handle-top.handle-right {
+    cursor: ne-resize;
+  }
+  
+  .react-flow__resize-control.handle-bottom.handle-right {
+    cursor: se-resize;
+  }
+  
+  .react-flow__resize-control.handle-bottom.handle-left {
+    cursor: sw-resize;
+  }
+  
+  .react-flow__resize-control.handle-top.handle-left {
+    cursor: nw-resize;
+  }
+  
+  /* Visual indicator during resize/drag operations */
+  .chart-moving-indicator {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(255, 255, 255, 0.7);
+    z-index: 100;
+    pointer-events: none;
+    animation: pulse 2s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 0.9; }
+    100% { opacity: 0.7; }
+  }

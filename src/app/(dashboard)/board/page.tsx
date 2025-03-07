@@ -234,9 +234,17 @@ type ContentMode = 'none' | 'chart' | 'textbox' | 'datatable' | 'statcard';
   setStatCards(prev => [...prev, newCard]);
 }, [selectedFile]);
 
-  const handleStatCardPositionChange = useCallback((id: string, position: { x: number; y: number }) => {
-  setStatCards(prev => prev.map(card =>
-    card.id === id ? { ...card, position } : card
+const handleStatCardPositionChange = useCallback((id: string, position: Position) => {
+  setStatCards(prev => prev.map(card => 
+    card.id === id ? { 
+      ...card, 
+      position: {
+        x: position.x,
+        y: position.y,
+        width: position.width,
+        height: position.height
+      } 
+    } : card
   ));
 }, []);
 
@@ -359,7 +367,15 @@ const handleTextBoxRemove = useCallback((id: string) => {
 // Add textbox position change handler
 const handleTextBoxPositionChange = useCallback((id: string, position: Position) => {
   setTextBoxes(prev => prev.map(box => 
-    box.id === id ? { ...box, position } : box
+    box.id === id ? { 
+      ...box, 
+      position: {
+        x: position.x,
+        y: position.y,
+        width: position.width,
+        height: position.height
+      } 
+    } : box
   ));
 }, []);
   // File selection handler
@@ -452,11 +468,19 @@ const handleTextBoxPositionChange = useCallback((id: string, position: Position)
   //   }
   // }, [userId, selectedFile, selectedDashboard, clickPosition]);
 
-const handleDataTablePositionChange = useCallback((id: string, position: { x: number; y: number }) => {
-  setDataTables(prev => prev.map(table =>
-    table.id === id ? { ...table, position } : table
-  ));
-}, []);
+  const handleDataTablePositionChange = useCallback((id: string, position: Position) => {
+    setDataTables(prev => prev.map(table => 
+      table.id === id ? { 
+        ...table, 
+        position: {
+          x: position.x,
+          y: position.y,
+          width: position.width,
+          height: position.height
+        } 
+      } : table
+    ));
+  }, []);
 
 
 const handleChartCreate = useCallback(async (chartData: ChartCreationData & { position: Position }) => {

@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { NodeProps, XYPosition } from '@xyflow/react';
+import React, { useState, useCallback, memo, useEffect } from 'react';
+import { NodeProps, NodeResizer, XYPosition } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -26,10 +26,24 @@ interface DataTableNodeFull {
 const DataTableNode: React.FC<NodeProps<DataTableNodeFull>> = ({ id, data, selected}) => {
 const { boardTheme: theme } = useTheme();
   const [currentPage, setCurrentPage] = useState(0);
+  const [nodeWidth, setNodeWidth] = useState(data.position?.width || 600);
+  const [nodeHeight, setNodeHeight] = useState(data.position?.height || 400);
+  const [isResizing, setIsResizing] = useState(false);
+  
   const rowsPerPage = data.rowsPerPage || 10;
   
   // Calculate total pages
   const totalPages = Math.ceil((data.data?.length || 0) / rowsPerPage);
+
+  // Update dimensions from props
+  useEffect(() => {
+    if (data.position?.width) {
+      setNodeWidth(data.position.width);
+    }
+    if (data.position?.height) {
+      setNodeHeight(data.position.height);
+    }
+  }, [data.position]);
 
   // Handle pagination
   const handleNextPage = useCallback(() => {
@@ -68,21 +82,66 @@ const { boardTheme: theme } = useTheme();
     return String(value);
   }, []);
 
+  // Handle resize events
+  const onResize = useCallback((event: any, params: { width: number, height: number }) => {
+    setNodeWidth(params.width);
+    setNodeHeight(params.height);
+    setIsResizing(true);
+  }, []);
+
+  const onResizeStart = useCallback(() => {
+    setIsResizing(true);
+  }, []);
+
+  const onResizeEnd = useCallback((event: any, params: { width: number, height: number }) => {
+    const updatedPosition = {
+      ...data.position,
+      width: params.width,
+      height: params.height
+    };
+    
+    // Update position in parent component if handler exists
+    if (data.onPositionChange) {
+      data.onPositionChange(id, updatedPosition);
+    }
+    
+    setIsResizing(false);
+  }, [data, id]);
+
   // Get the current data to display
   const currentData = getCurrentPageData();
 
   return (
+    <>
+    {/* Standard NodeResizer that only appears when selected */}
+    {selected && (
+      <NodeResizer
+        minWidth={400}
+        minHeight={300}
+        maxWidth={1200}
+        maxHeight={800}
+        onResize={onResize}
+        onResizeStart={onResizeStart}
+        onResizeEnd={onResizeEnd}
+        color={theme.primary}
+        handleStyle={{ width: 8, height: 8, borderRadius: 4 }}
+        lineStyle={{ borderWidth: 1 }}
+      />
+    )}
+    
     <Card 
-      className="shadow-lg"
+      className={`shadow-lg ${isResizing ? 'pointer-events-none opacity-80' : ''}`}
       style={{ 
         backgroundColor: theme.nodeBackground,
         color: theme.text,
-        borderColor: theme.border,
-        width: '100%',
-        height: '100%'
+        borderColor: selected ? theme.primary : theme.border,
+        borderWidth: selected ? '2px' : '1px',
+        width: `${nodeWidth}px`,
+        height: `${nodeHeight}px`,
+        transition: isResizing ? 'none' : 'all 0.2s ease'
       }}
     >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 py-3 px-4 border-b" style={{ borderColor: theme.border }}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 py-3 px-4 border-b handle" style={{ borderColor: theme.border }}>
         <CardTitle className="text-lg font-semibold">
           {data.title || "Data Table"}
         </CardTitle>
@@ -183,7 +242,7 @@ const { boardTheme: theme } = useTheme();
         </div>
       </CardContent>
     </Card>
+  </>
   );
 };
-
-export default DataTableNode;
+export default memo(DataTableNode);

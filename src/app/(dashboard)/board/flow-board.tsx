@@ -25,7 +25,7 @@ import DataTableNode from './dataTableNode';
 import StatCardNode from './statCardNode';
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
+import './noderesizerstyles.css';
 type NodeDragHandler = (event: React.MouseEvent<Element, MouseEvent>, node: Node) => void;
 
 // CSS for enhanced drag and resize feedback
@@ -75,6 +75,7 @@ interface ChartNodeData {
   onMaximizeToggle: (id: string) => void;
   onDescriptionChange: (id: string, description: string) => void;
   onTitleChange: (id: string, title: string) => void;
+  onPositionChange: (id: string, position: { x: number; y: number; width?: number; height?: number; }) => void;
 }
 
 interface Position {
@@ -129,6 +130,7 @@ interface FlowBoardProps {
   maximizedChart: string | null;
   onAreaClick: (event: React.MouseEvent<HTMLDivElement>) => void;
 }
+
 
 interface ChartNodeProps {
   data: ChartNodeData;
@@ -385,18 +387,7 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
 }) => {
   const { boardTheme: theme } = useTheme();
   
-  // Inject custom styles
-  useEffect(() => {
-    const styleElement = document.createElement('style');
-    styleElement.innerHTML = additionalStyles;
-    document.head.appendChild(styleElement);
-    
-    return () => {
-      document.head.removeChild(styleElement);
-    };
-  }, []);
-  
-  // Define node types
+  // Define node types with our resizable chart node
   const nodeTypes = {
     chartNode: ChartNode as unknown as React.ComponentType<XYNodeProps>,
     textBoxNode: TextBoxNode as unknown as React.ComponentType<XYNodeProps>,
@@ -406,7 +397,7 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
   
   // Create nodes from the props with optimized approach
   const createNodes = useCallback((): Node[] => {
-    // Chart nodes
+    // Chart nodes with added position change handler
     const chartNodes: Node[] = charts.map((chart) => ({
       id: chart.id,
       type: 'chartNode',
@@ -429,12 +420,12 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
         onMaximizeToggle: onChartMaximize,
         onDescriptionChange: onChartDescriptionChange,
         onTitleChange: onChartTitleChange,
+        onPositionChange: onChartPositionChange, // Add the position change handler
       },
       draggable: maximizedChart !== chart.id,
       selectable: maximizedChart !== chart.id,
     }));
 
-    // Textbox nodes
     const textBoxNodes: Node[] = textBoxes.map((textBox) => ({
       id: textBox.id,
       type: 'textBoxNode',
@@ -511,6 +502,7 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
     onChartMaximize,
     onChartDescriptionChange,
     onChartTitleChange,
+    onChartPositionChange,
     onTextBoxRemove,
     onTextBoxContentChange,
     onDataTableRemove,
@@ -624,6 +616,7 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
           style={{ backgroundColor: theme.background }}
           nodesDraggable={!maximizedChart}
           proOptions={{ hideAttribution: true }}
+          deleteKeyCode={null} // Disable default delete key handling
         >
           <Background 
             color={theme.backgroundDots}
@@ -643,9 +636,13 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
             className="bg-white rounded-lg shadow-lg"
             style={{ backgroundColor: theme.controlsBackground }}
           />
-          {/* <Panel position="top-right"> */}
-            {/* Additional UI elements can go here */}
-          {/* </Panel> */}
+          <Panel position="top-right">
+            <div className="bg-white dark:bg-slate-800 p-2 rounded-lg shadow-md border border-gray-200 dark:border-slate-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Select and resize nodes by dragging the handles
+              </p>
+            </div>
+          </Panel>
         </ReactFlow>
       </div>
     </ReactFlowProvider>
