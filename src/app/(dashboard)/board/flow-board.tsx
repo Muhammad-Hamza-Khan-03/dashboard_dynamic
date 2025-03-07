@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
-import ReactFlow, {
+import {
+  ReactFlow,
   Background,
   Controls,
   MiniMap,
@@ -8,10 +9,14 @@ import ReactFlow, {
   Node,
   NodeTypes,
   ReactFlowProvider,
-  NodeProps
-} from 'reactflow';
-import 'reactflow/dist/style.css';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+  Panel,
+NodeMouseHandler,
+NodeProps as XYNodeProps,
+OnNodeDrag,
+
+} from '@xyflow/react';
+
+import '@xyflow/react/dist/style.css';
 import { Button } from "@/components/ui/button";
 import { X, Maximize2, Minimize2, Edit2, PenSquare, Check } from 'lucide-react';
 import { useTheme } from './theme-provider';
@@ -19,6 +24,9 @@ import TextBoxNode from './TextBoxNode';
 import DataTableNode from './dataTableNode';
 import StatCardNode from './statCardNode';
 import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+type NodeDragHandler = (event: React.MouseEvent<Element, MouseEvent>, node: Node) => void;
 
 // CSS for enhanced drag and resize feedback
 const additionalStyles = `
@@ -27,11 +35,6 @@ const additionalStyles = `
   cursor: grabbing !important;
 }
 
-.node-resizing {
-  outline: 2px dashed #3b82f6 !important;
-  outline-offset: 2px;
-}
-
 .react-flow__node {
   transition: transform 0.1s ease, width 0.1s ease, height 0.1s ease;
 }
@@ -41,50 +44,8 @@ const additionalStyles = `
   z-index: 10 !important;
 }
 
-.handle-feedback {
-  display: none;
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #3b82f6;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  z-index: 1000;
-}
-
-.resize-active .handle-feedback {
-  display: block;
-}
-  
-
-.node-dragging {
-  opacity: 0.8 !important;
-  cursor: grabbing !important;
-  transform: scale(1.01) !important;
-  z-index: 1000 !important;
-  transition: none !important;
-}
-
-.node-drag-active {
-  cursor: grabbing !important;
-}
-
-.react-flow__node {
-  transition: transform 0.1s ease, width 0.1s ease, height 0.1s ease;
-}
-
-.react-flow__node.selected {
-  outline: 2px solid #3b82f6 !important;
-  z-index: 10 !important;
-}
-
-/* Additional optimization - makes the iframe unselectable during movement */
 .node-dragging iframe {
   pointer-events: none !important;
-}
-.chart-moving {
-  cursor: grabbing !important;
 }
 
 .chart-moving-indicator {
@@ -99,28 +60,6 @@ const additionalStyles = `
   justify-content: center;
   z-index: 1000;
   pointer-events: none;
-}
-
-.chart-moving-indicator-content {
-  background-color: rgba(59, 130, 246, 0.9);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-weight: 500;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 0.7; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.05); }
-  100% { opacity: 0.7; transform: scale(1); }
-}
-
-/* Additional optimization - disable all hover effects during movement */
-.chart-moving * {
-  pointer-events: none !important;
-  transition: none !important;
 }
 `;
 
@@ -191,8 +130,14 @@ interface FlowBoardProps {
   onAreaClick: (event: React.MouseEvent<HTMLDivElement>) => void;
 }
 
+interface ChartNodeProps {
+  data: ChartNodeData;
+  id: string;
+  selected: boolean;
+}
+
 // Custom node component for charts with optimized rendering
-const ChartNode: React.FC<NodeProps<ChartNodeData>> = ({ data, selected, id }) => {
+const ChartNode: React.FC<ChartNodeProps> = ({ data, selected, id }) => {
   const { boardTheme } = useTheme();
   const width = data.position?.width || 800;
   const height = data.position?.height || 600;
@@ -224,70 +169,7 @@ const ChartNode: React.FC<NodeProps<ChartNodeData>> = ({ data, selected, id }) =
     }
   }, [isMoving, isResizing]);
 
-  useEffect(() => {
-    const node = document.querySelector(`[data-id="${id}"]`);
-    
-    if (node) {
-      // Create a movement indicator element if it doesn't exist
-      let indicator = node.querySelector('.chart-moving-indicator');
-      if (!indicator) {
-        indicator = document.createElement('div');
-        indicator.className = 'chart-moving-indicator';
-        indicator.innerHTML = '<div class="chart-moving-indicator-content">Moving...</div>';
-        (indicator as HTMLElement).style.display = 'none';
-        node.appendChild(indicator);
-      }
-      
-      // Create mutation observer to watch for style changes (position and size)
-      const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-          if (mutation.attributeName === 'style') {
-            const style = (mutation.target as HTMLElement).getAttribute('style') || '';
-            
-            // Check if the change is a movement
-            if (style.includes('transform') && !isMoving) {
-              setIsMoving(true);
-              setShouldRenderContent(false);
-              node.classList.add('chart-moving');
-              
-              // Show the movement indicator immediately
-              if (indicator) {
-                (indicator as HTMLElement).style.display = 'flex';
-              }
-            }
-          }
-        });
-      });
-      
-      // Start observing
-      observer.observe(node, { attributes: true, attributeFilter: ['style'] });
-      
-      // Detect when movement stops
-      const handleMouseUp = () => {
-        if (isMoving) {
-          setIsMoving(false);
-          node.classList.remove('chart-moving');
-          
-          // Hide the movement indicator
-          if (indicator) {
-            (indicator as HTMLElement).style.display = 'none';
-          }
-          
-          renderTimeoutRef.current = setTimeout(() => {
-            setShouldRenderContent(true);
-          }, 100);
-        }
-      };
-      
-      document.addEventListener('mouseup', handleMouseUp);
-      
-      return () => {
-        observer.disconnect();
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [id, isMoving]);
-
+  
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
       titleInputRef.current.focus();
@@ -308,7 +190,7 @@ const ChartNode: React.FC<NodeProps<ChartNodeData>> = ({ data, selected, id }) =
     const node = document.querySelector(`[data-id="${id}"]`);
     
     if (node) {
-      // Create mutation observer to watch for style changes (position and size)
+      // Create mutation observer to watch for style changes
       const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
           if (mutation.attributeName === 'style') {
@@ -448,11 +330,14 @@ const ChartNode: React.FC<NodeProps<ChartNodeData>> = ({ data, selected, id }) =
         )}
       </CardHeader>
       <CardContent className="p-0 h-[calc(100%-60px)] relative">
-  {isMoving && (
-    <div className="chart-moving-indicator">
-      <div className="chart-moving-indicator-content">Moving...</div>
-    </div>
-  )}
+        {/* Overlay during movement/resizing to provide visual feedback */}
+        {(isMoving || isResizing) && (
+          <div className="absolute inset-0 bg-white/50 dark:bg-black/30 flex items-center justify-center z-10 transition-opacity duration-150">
+            <div className="px-4 py-2 bg-blue-100 dark:bg-blue-900 rounded-md text-blue-700 dark:text-blue-100 font-medium animate-pulse">
+              {isMoving ? 'Moving...' : 'Resizing...'}
+            </div>
+          </div>
+        )}
         
         {/* Only render the iframe when not moving/resizing for better performance */}
         {shouldRenderContent ? (
@@ -478,14 +363,6 @@ const ChartNode: React.FC<NodeProps<ChartNodeData>> = ({ data, selected, id }) =
   );
 };
 
-// Define all node types with optimized components
-const nodeTypes: NodeTypes = {
-  chartNode: ChartNode,
-  textBoxNode: TextBoxNode,
-  dataTableNode: DataTableNode,
-  statCardNode: StatCardNode,
-};
-
 const FlowBoard: React.FC<FlowBoardProps> = ({
   charts,
   textBoxes,
@@ -507,8 +384,6 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
   onAreaClick,
 }) => {
   const { boardTheme: theme } = useTheme();
-  const [isNodeMoving, setIsNodeMoving] = useState(false);
-  const moveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Inject custom styles
   useEffect(() => {
@@ -520,6 +395,14 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
       document.head.removeChild(styleElement);
     };
   }, []);
+  
+  // Define node types
+  const nodeTypes = {
+    chartNode: ChartNode as unknown as React.ComponentType<XYNodeProps>,
+    textBoxNode: TextBoxNode as unknown as React.ComponentType<XYNodeProps>,
+    dataTableNode: DataTableNode as unknown as React.ComponentType<XYNodeProps>,
+    statCardNode: StatCardNode as unknown as React.ComponentType<XYNodeProps>
+  } as NodeTypes;
   
   // Create nodes from the props with optimized approach
   const createNodes = useCallback((): Node[] => {
@@ -549,7 +432,6 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
       },
       draggable: maximizedChart !== chart.id,
       selectable: maximizedChart !== chart.id,
-      resizing: false,
     }));
 
     // Textbox nodes
@@ -643,58 +525,28 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
     setNodes(createNodes());
   }, [charts, textBoxes, dataTables, statCards, createNodes, setNodes]);
 
-  // Optimize node dragging with batched updates
-  
-
   // Handle node dragging
-  // Handle node dragging
-  const onNodeDragStart = useCallback((event: React.MouseEvent, node: Node) => {
-    // Use a class-based approach instead of state updates for better performance
+  const onNodeDragStart: OnNodeDrag = useCallback(() => {
+    // Use a class-based approach for better performance
     document.body.classList.add('node-drag-active');
-    
-    // Get the node element
-    const nodeElement = document.querySelector(`[data-id="${node.id}"]`);
-    if (nodeElement) {
-      // Apply visual feedback directly to DOM for immediate response
-      nodeElement.classList.add('node-dragging');
-      
-      // Hide iframe content directly for better performance
-      const iframe = nodeElement.querySelector('iframe');
-      if (iframe) {
-        iframe.style.visibility = 'hidden';
-      }
-    }
   }, []);
   
-  const onNodeDragStop = useCallback((event: React.MouseEvent, node: Node) => {
+
+  const onNodeDragStop: NodeDragHandler = useCallback((event, node) => {
     // Remove global drag class
     document.body.classList.remove('node-drag-active');
-    
-    // Get the node element
-    const nodeElement = document.querySelector(`[data-id="${node.id}"]`);
-    if (nodeElement) {
-      // Remove visual feedback
-      nodeElement.classList.remove('node-dragging');
-      
-      // Restore iframe visibility
-      const iframe = nodeElement.querySelector('iframe');
-      if (iframe) {
-        // Use requestAnimationFrame for smoother visual transition
-        requestAnimationFrame(() => {
-          iframe.style.visibility = 'visible';
-        });
-      }
-    }
   
     // Get computed style for dimensions
     let width: number | undefined = undefined;
     let height: number | undefined = undefined;
-    
+  
+    const nodeElement = document.querySelector(`[data-id="${node.id}"]`);
+  
     if (nodeElement) {
       const computedStyle = window.getComputedStyle(nodeElement);
       width = parseInt(computedStyle.width);
       height = parseInt(computedStyle.height);
-      
+  
       if (isNaN(width)) width = undefined;
       if (isNaN(height)) height = undefined;
     } else if (node.style) {
@@ -704,7 +556,7 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
         width = parseInt(node.style.width);
         if (isNaN(width)) width = undefined;
       }
-      
+  
       if (typeof node.style.height === 'number') {
         height = node.style.height;
       } else if (typeof node.style.height === 'string') {
@@ -713,14 +565,15 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
       }
     }
   
-    // Update position data only after drag is complete
-    const position: Position = { 
-      x: node.position.x, 
+    // Update position data
+    const position = {
+      x: node.position.x,
       y: node.position.y,
       width,
-      height
+      height,
     };
-      
+  
+    // Call appropriate handler based on node type
     switch (node.data.nodeType) {
       case 'chart':
         onChartPositionChange(node.id, position);
@@ -734,6 +587,8 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
       case 'statcard':
         onStatCardPositionChange(node.id, position);
         break;
+      default:
+        break;
     }
   }, [
     onChartPositionChange,
@@ -741,6 +596,12 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
     onDataTablePositionChange,
     onStatCardPositionChange,
   ]);
+
+  const handlePaneClick = useCallback((event: React.MouseEvent) => {
+    if (!(event.target as HTMLElement).closest('.react-flow__node')) {
+      onAreaClick(event as React.MouseEvent<HTMLDivElement>);
+    }
+  }, [onAreaClick]);
 
   return (
     <ReactFlowProvider>
@@ -754,18 +615,13 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
           onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
-          onClick={(event: React.MouseEvent) => {
-            if (!(event.target as HTMLElement).closest('.react-flow__node')) {
-              onAreaClick(event as unknown as React.MouseEvent<HTMLDivElement>);
-            }
-          }}
+          onClick={handlePaneClick}
           fitView
           minZoom={0.1}
           maxZoom={5}
           snapToGrid
           snapGrid={[16, 16]}
           style={{ backgroundColor: theme.background }}
-          className={isNodeMoving ? 'nodes-moving' : ''}
           nodesDraggable={!maximizedChart}
           proOptions={{ hideAttribution: true }}
         >
@@ -787,12 +643,13 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
             className="bg-white rounded-lg shadow-lg"
             style={{ backgroundColor: theme.controlsBackground }}
           />
+          {/* <Panel position="top-right"> */}
+            {/* Additional UI elements can go here */}
+          {/* </Panel> */}
         </ReactFlow>
       </div>
     </ReactFlowProvider>
   );
 };
-
-
 
 export default FlowBoard;
