@@ -15,7 +15,7 @@ interface StatCardNodeData {
 }
 
 const StatCardNode: React.FC<NodeProps<StatCardNodeData>> = ({ data }) => {
-  const { theme } = useTheme();
+  const { boardTheme:theme } = useTheme();
 
   const calculateStat = () => {
     const values = data.data.map(row => row[data.column]);

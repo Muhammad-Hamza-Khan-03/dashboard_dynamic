@@ -18,7 +18,7 @@ import uuid
 from pdfminer.high_level import extract_text
 from pdfminer.layout import LAParams
 import os
-
+import threading
 from flask_caching import Cache
 from pyecharts import options as opts
 from pyecharts.charts import (
@@ -45,6 +45,9 @@ from typing import List, Dict, Any, Generator, Tuple,Optional
 from dataclasses import dataclass
 from flask import jsonify, request
 import traceback
+import queue
+from background_worker_implementation import *
+import threading
 
 app = Flask(__name__)
 cache = Cache(app, config={'CACHE_TYPE': 'simple'})
@@ -52,6 +55,212 @@ CORS(app)
 logging.basicConfig(level=logging.DEBUG)
 CACHE_TIMEOUT = 300  # Cache timeout in seconds
 CHUNK_SIZE = 100000  # Maximum rows to fetch at once
+stats_task_queue = queue.Queue()
+TASK_STATUS = {}
+
+
+## Background worker implementation starts
+def process_statistics_task(task):
+    """Process a statistics calculation task"""
+    task_id = task['task_id']
+    table_id = task['table_id']
+    table_name = task['table_name']
+    
+    try:
+        update_task_status(task_id, 'processing', 0.0, 'Starting statistics calculation')
+        
+        conn_user = sqlite3.connect('user_files.db')
+        conn_stats = sqlite3.connect('stats.db')
+        
+        # Load the data
+        query = f'SELECT * FROM "{table_name}"'
+        
+        # For large tables, check row count first
+        row_count_query = f'SELECT COUNT(*) FROM "{table_name}"'
+        row_count = pd.read_sql_query(row_count_query, conn_user).iloc[0, 0]
+        
+        # If table is very large, use chunking
+        if row_count > 100000:
+            chunk_size = 50000
+            # Just get the column names first
+            col_query = f'SELECT * FROM "{table_name}" LIMIT 1'
+            df_schema = pd.read_sql_query(col_query, conn_user)
+            columns = df_schema.columns.tolist()
+            
+            # Update status
+            update_task_status(task_id, 'processing', 0.1, f'Processing large table with {row_count} rows')
+            
+            # Process prioritized columns first
+            numeric_cols = []
+            categorical_cols = []
+            other_cols = []
+            
+            # Load a sample to determine column types
+            sample_query = f'SELECT * FROM "{table_name}" LIMIT 1000'
+            sample_df = pd.read_sql_query(sample_query, conn_user)
+            
+            # Categorize columns by type
+            for col in columns:
+                if pd.api.types.is_numeric_dtype(sample_df[col]):
+                    numeric_cols.append(col)
+                elif pd.api.types.is_categorical_dtype(sample_df[col]) or pd.api.types.is_object_dtype(sample_df[col]):
+                    categorical_cols.append(col)
+                else:
+                    other_cols.append(col)
+            
+            # Prioritize columns
+            prioritized_cols = numeric_cols + categorical_cols + other_cols
+            
+            # Calculate column statistics for each column with chunking
+            for i, column in enumerate(prioritized_cols):
+                # Update progress
+                progress = 0.1 + (0.7 * (i / len(prioritized_cols)))
+                update_task_status(
+                    task_id, 
+                    'processing', 
+                    progress, 
+                    f'Processing column {i+1}/{len(prioritized_cols)}: {column}'
+                )
+                
+                # Read column data in chunks
+                column_data = []
+                for chunk_df in pd.read_sql_query(query, conn_user, chunksize=chunk_size):
+                    column_data.append(chunk_df[column])
+                
+                # Combine chunks
+                full_column = pd.concat(column_data)
+                
+                # Calculate statistics for this column
+                column_stats = calculate_column_statistics_chunked(
+                    pd.DataFrame({column: full_column}), 
+                    column
+                )
+                
+                # Store or update column statistics
+                c_stats = conn_stats.cursor()
+                c_stats.execute("""
+                    INSERT OR REPLACE INTO column_stats 
+                    (table_id, column_name, data_type, basic_stats, distribution, 
+                     shape_stats, outlier_stats)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    table_id, 
+                    column, 
+                    column_stats['data_type'],
+                    column_stats['basic_stats'],
+                    column_stats['distribution'],
+                    column_stats['shape_stats'],
+                    column_stats['outlier_stats']
+                ))
+                conn_stats.commit()
+            
+            # Update progress
+            update_task_status(task_id, 'processing', 0.8, 'Calculating dataset statistics')
+            
+            # For dataset statistics, use a sample
+            if row_count > 10000:
+                sample_size = 10000
+                sample_query = f'SELECT * FROM "{table_name}" ORDER BY RANDOM() LIMIT {sample_size}'
+                sample_df = pd.read_sql_query(sample_query, conn_user)
+                dataset_stats = calculate_dataset_statistics_optimized(sample_df)
+            else:
+                full_df = pd.concat([chunk for chunk in pd.read_sql_query(query, conn_user, chunksize=chunk_size)])
+                dataset_stats = calculate_dataset_statistics_optimized(full_df)
+        else:
+            # For smaller tables, process everything at once
+            df = pd.read_sql_query(query, conn_user)
+            update_task_status(task_id, 'processing', 0.2, 'Processing columns')
+            
+            # Calculate statistics for each column
+            for i, column in enumerate(df.columns):
+                progress = 0.2 + (0.6 * (i / len(df.columns)))
+                update_task_status(
+                    task_id, 
+                    'processing', 
+                    progress, 
+                    f'Processing column {i+1}/{len(df.columns)}: {column}'
+                )
+                
+                column_stats = calculate_column_statistics_chunked(df, column)
+                
+                c_stats = conn_stats.cursor()
+                c_stats.execute("""
+                    INSERT OR REPLACE INTO column_stats 
+                    (table_id, column_name, data_type, basic_stats, distribution, 
+                     shape_stats, outlier_stats)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    table_id, 
+                    column, 
+                    column_stats['data_type'],
+                    column_stats['basic_stats'],
+                    column_stats['distribution'],
+                    column_stats['shape_stats'],
+                    column_stats['outlier_stats']
+                ))
+                conn_stats.commit()
+            
+            update_task_status(task_id, 'processing', 0.8, 'Calculating dataset statistics')
+            dataset_stats = calculate_dataset_statistics_optimized(df)
+        
+        # Store or update dataset statistics
+        c_stats = conn_stats.cursor()
+        c_stats.execute("""
+            INSERT OR REPLACE INTO dataset_stats 
+            (table_id, correlation_matrix, parallel_coords, 
+             violin_data, heatmap_data, scatter_matrix)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            table_id,
+            dataset_stats['correlation_matrix'],
+            dataset_stats['parallel_coords'],
+            dataset_stats['violin_data'],
+            dataset_stats['heatmap_data'],
+            dataset_stats['scatter_matrix']
+        ))
+        conn_stats.commit()
+        
+        # Update task status to completed
+        update_task_status(task_id, 'completed', 1.0, 'Statistics calculation completed')
+        
+        conn_user.close()
+        conn_stats.close()
+        
+        return True
+    except Exception as e:
+        logging.error(f"Error processing statistics task: {str(e)}")
+        traceback.print_exc()
+        update_task_status(task_id, 'failed', None, f'Error: {str(e)}')
+        return False
+
+def background_worker():
+    """Background worker function to process statistics tasks"""
+    logging.info("Starting background worker for statistics calculation")
+    while True:
+        try:
+            # Get a task from the queue with a timeout
+            task = stats_task_queue.get(timeout=5)
+            logging.info(f"Processing task: {task['task_id']}")
+            
+            # Process the task
+            process_statistics_task(task)
+            
+            # Mark the task as done
+            stats_task_queue.task_done()
+        except queue.Empty:
+            # No tasks in queue, just continue polling
+            pass
+        except Exception as e:
+            logging.error(f"Error in background worker: {str(e)}")
+            traceback.print_exc()
+
+def start_background_worker():
+    """Start the background worker thread"""
+    worker_thread = threading.Thread(target=background_worker)
+    worker_thread.daemon = True  # Thread will exit when main thread exits
+    worker_thread.start()
+    logging.info("Background worker started")
+## Background worker implementation ends
 
 def init_db():
     conn = sqlite3.connect('user_files.db')
@@ -128,8 +337,57 @@ def init_db():
     conn.commit()
     conn.close()
 
+def init_stats_db():
+    """Initialize the stats database structure"""
+    conn = sqlite3.connect('stats.db')
+    c = conn.cursor()
+    
+    # Table for column-level statistics
+    c.execute('''CREATE TABLE IF NOT EXISTS column_stats (
+        stats_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_id TEXT NOT NULL,
+        column_name TEXT NOT NULL,
+        data_type TEXT NOT NULL,
+        basic_stats TEXT,
+        distribution TEXT,
+        shape_stats TEXT,
+        outlier_stats TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(table_id, column_name)
+    )''')
+    
+    # Table for dataset-level statistics
+    c.execute('''CREATE TABLE IF NOT EXISTS dataset_stats (
+        stats_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_id TEXT NOT NULL UNIQUE,
+        correlation_matrix TEXT,
+        parallel_coords TEXT,
+        violin_data TEXT,
+        heatmap_data TEXT,
+        scatter_matrix TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    # Table for tracking task status
+    c.execute('''CREATE TABLE IF NOT EXISTS stats_tasks (
+        task_id TEXT PRIMARY KEY,
+        table_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        progress REAL DEFAULT 0.0,
+        message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
+    )''')
+    
+    conn.commit()
+    conn.close()
+    logging.info("Stats database initialized")
+    
+    # Start the background worker
+    start_background_worker()
+
 init_db()
-        
+init_stats_db()   
 
 class EnhancedChartGenerator:
     @staticmethod
@@ -1128,6 +1386,687 @@ def handle_sqlite_upload(file, user_id, filename, c, conn):
             os.unlink(temp_path)
         raise
 
+# //////////////////////////////////////////////
+
+def calculate_column_statistics_chunked(df, column_name, chunk_size=10000):
+    """Calculate statistics for a column using chunking for large datasets"""
+    column_data = df[column_name]
+    
+    # Determine data type
+    if pd.api.types.is_numeric_dtype(column_data):
+        data_type = 'numeric'
+        # Filter out NaN values for calculations
+        clean_data = column_data.dropna()
+        
+        if len(clean_data) == 0:
+            # Handle empty columns
+            return {
+                'data_type': 'numeric',
+                'basic_stats': json.dumps({'missing_count': len(column_data), 'missing_percentage': 100.0}),
+                'distribution': json.dumps({}),
+                'shape_stats': json.dumps({}),
+                'outlier_stats': json.dumps({})
+            }
+        
+        # Process in chunks for better performance
+        chunks = [clean_data[i:i+chunk_size] for i in range(0, len(clean_data), chunk_size)]
+        
+        # Calculate basic stats incrementally
+        count = 0
+        sum_val = 0
+        sum_sq = 0
+        min_val = float('inf')
+        max_val = float('-inf')
+        
+        # First pass - calculate sums, min, max
+        for chunk in chunks:
+            chunk_min = chunk.min()
+            chunk_max = chunk.max()
+            min_val = min(min_val, chunk_min)
+            max_val = max(max_val, chunk_max)
+            
+            chunk_count = len(chunk)
+            chunk_sum = chunk.sum()
+            
+            count += chunk_count
+            sum_val += chunk_sum
+            sum_sq += (chunk ** 2).sum()
+        
+        # Calculate mean and variance
+        mean = sum_val / count if count > 0 else 0
+        variance = (sum_sq / count) - (mean ** 2) if count > 0 else 0
+        std_dev = math.sqrt(variance) if variance > 0 else 0
+        
+        # Calculate median and quartiles
+        sorted_data = clean_data.sort_values().reset_index(drop=True)
+        median_idx = len(sorted_data) // 2
+        median = sorted_data.iloc[median_idx]
+        
+        q1_idx = len(sorted_data) // 4
+        q3_idx = q1_idx * 3
+        q1 = sorted_data.iloc[q1_idx]
+        q3 = sorted_data.iloc[q3_idx]
+        iqr = q3 - q1
+        
+        # Calculate mode efficiently
+        value_counts = clean_data.value_counts()
+        mode_value = value_counts.index[0] if not value_counts.empty else None
+        
+        # Basic stats
+        basic_stats = {
+            'min': float(min_val),
+            'max': float(max_val),
+            'mean': float(mean),
+            'median': float(median),
+            'mode': float(mode_value) if mode_value is not None else None,
+            'count': int(count),
+            'missing_count': int(len(column_data) - count),
+            'missing_percentage': float((len(column_data) - count) / len(column_data) * 100)
+        }
+        
+        # Calculate histogram with fewer bins for large datasets
+        bin_count = min(50, max(10, int(count / 1000)))
+        hist, bin_edges = np.histogram(clean_data, bins=bin_count)
+        
+        # Generate a sampled version of the data for QQ-plot
+        # Use sampling for huge datasets
+        if len(clean_data) > 10000:
+            sample_size = 5000
+            sampled_data = clean_data.sample(sample_size) if len(clean_data) > sample_size else clean_data
+            sorted_sample = sampled_data.sort_values().values
+            n = len(sorted_sample)
+            theoretical_quantiles = np.array([stats.norm.ppf((i + 0.5) / n) for i in range(n)])
+            valid_mask = ~np.isnan(theoretical_quantiles)
+            x_values = theoretical_quantiles[valid_mask].tolist()
+            y_values = sorted_sample[valid_mask].tolist()
+        else:
+            sorted_values = clean_data.sort_values().values
+            n = len(sorted_values)
+            theoretical_quantiles = np.array([stats.norm.ppf((i + 0.5) / n) for i in range(n)])
+            valid_mask = ~np.isnan(theoretical_quantiles)
+            x_values = theoretical_quantiles[valid_mask].tolist()
+            y_values = sorted_values[valid_mask].tolist()
+        
+        distribution = {
+            'histogram': {
+                'counts': hist.tolist(),
+                'bin_edges': bin_edges.tolist()
+            },
+            'boxplot': {
+                'q1': float(q1),
+                'q3': float(q3),
+                'median': float(median),
+                'whislo': float(max(min_val, q1 - 1.5 * iqr)),
+                'whishi': float(min(max_val, q3 + 1.5 * iqr))
+            },
+            'qqplot': {
+                'x': x_values,
+                'y': y_values
+            }
+        }
+        
+        # Calculate skewness and kurtosis on sampled data for large datasets
+        if len(clean_data) > 50000:
+            sample_size = 10000
+            skew_sample = clean_data.sample(sample_size) if len(clean_data) > sample_size else clean_data
+            skewness = float(skew_sample.skew())
+            kurtosis = float(skew_sample.kurtosis())
+        else:
+            skewness = float(clean_data.skew())
+            kurtosis = float(clean_data.kurtosis())
+        
+        shape_stats = {
+            'skewness': skewness,
+            'kurtosis': kurtosis,
+            'range': float(max_val - min_val)
+        }
+        
+        # Find outliers
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        outliers = clean_data[(clean_data < lower_bound) | (clean_data > upper_bound)]
+        
+        # Limit the number of outliers stored
+        max_outliers = 100
+        outlier_list = outliers.head(max_outliers).tolist()
+        
+        outlier_stats = {
+            'count': len(outliers),
+            'percentage': float((len(outliers) / len(clean_data)) * 100),
+            'lower_bound': float(lower_bound),
+            'upper_bound': float(upper_bound),
+            'outlier_values': outlier_list
+        }
+    
+    elif pd.api.types.is_categorical_dtype(column_data) or pd.api.types.is_object_dtype(column_data):
+        data_type = 'categorical'
+        
+        # For large datasets, limit the number of unique values processed
+        if len(column_data) > 100000:
+            sample = column_data.sample(min(50000, len(column_data)))
+            value_counts = sample.value_counts()
+        else:
+            value_counts = column_data.value_counts()
+        
+        # Limit to top 1000 categories for very large categorical columns
+        if len(value_counts) > 1000:
+            value_counts = value_counts.head(1000)
+        
+        basic_stats = {
+            'unique_count': int(value_counts.shape[0]),
+            'top': str(value_counts.index[0]) if not value_counts.empty else None,
+            'top_count': int(value_counts.iloc[0]) if not value_counts.empty else 0,
+            'missing_count': int(column_data.isna().sum()),
+            'missing_percentage': float(column_data.isna().sum() / len(column_data) * 100)
+        }
+        
+        # Distribution for categorical data
+        value_dict = {}
+        for k, v in value_counts.items():
+            # Convert key to string to ensure JSON serialization
+            key = str(k) if k is not None else 'null'
+            value_dict[key] = int(v)
+            
+        distribution = {
+            'value_counts': value_dict
+        }
+        
+        # Shape stats (minimal for categorical)
+        # Calculate entropy with a limit on number of categories
+        shape_stats = {
+            'entropy': float(stats.entropy(value_counts.values)) if len(value_counts) > 1 else 0
+        }
+        
+        # No outliers for categorical data
+        outlier_stats = {}
+    
+    else:
+        # For other types (datetime, etc.)
+        data_type = 'other'
+        missing_count = column_data.isna().sum()
+        basic_stats = {
+            'missing_count': int(missing_count),
+            'missing_percentage': float(missing_count / len(column_data) * 100)
+        }
+        distribution = {}
+        shape_stats = {}
+        outlier_stats = {}
+    
+    return {
+        'data_type': data_type,
+        'basic_stats': json.dumps(basic_stats),
+        'distribution': json.dumps(distribution),
+        'shape_stats': json.dumps(shape_stats),
+        'outlier_stats': json.dumps(outlier_stats)
+    }
+
+def calculate_dataset_statistics_optimized(df, max_columns=15, sample_size=5000):
+    """Calculate dataset-level statistics with optimizations for large datasets"""
+    # Only include numeric columns for dataset-wide statistics
+    numeric_df = df.select_dtypes(include=['number'])
+    
+    if numeric_df.empty or numeric_df.shape[1] < 2:
+        # Not enough numeric columns for meaningful dataset statistics
+        return {
+            'correlation_matrix': '{}',
+            'parallel_coords': '{}',
+            'violin_data': '{}',
+            'heatmap_data': '{}',
+            'scatter_matrix': '{}'
+        }
+    
+    # Limit the number of columns to analyze
+    if numeric_df.shape[1] > max_columns:
+        # Choose columns with highest variance
+        variances = numeric_df.var().sort_values(ascending=False)
+        selected_columns = variances.head(max_columns).index.tolist()
+        numeric_df = numeric_df[selected_columns]
+    
+    # Sample the data for large datasets
+    if len(df) > sample_size:
+        sampled_df = numeric_df.sample(sample_size)
+    else:
+        sampled_df = numeric_df
+    
+    # Calculate correlation matrix
+    corr_matrix = sampled_df.corr().round(4).fillna(0)
+    corr_dict = {col: corr_matrix[col].to_dict() for col in corr_matrix.columns}
+    
+    # Calculate p-values for correlations - with optimizations
+    p_values = {}
+    for col1 in numeric_df.columns:
+        p_values[col1] = {}
+        for col2 in numeric_df.columns:
+            if col1 != col2:
+                # Use the sampled data for p-value calculations
+                clean_data1 = sampled_df[col1].dropna()
+                clean_data2 = sampled_df[col2].dropna()
+                # Only calculate if there's enough data
+                if len(clean_data1) > 2 and len(clean_data2) > 2:
+                    try:
+                        _, p_value = stats.pearsonr(clean_data1, clean_data2)
+                        p_values[col1][col2] = float(p_value)
+                    except:
+                        p_values[col1][col2] = 1.0
+                else:
+                    p_values[col1][col2] = 1.0
+            else:
+                p_values[col1][col2] = 0.0  # p-value for correlation with self
+    
+    # Prepare parallel coordinates data
+    # Normalize sampled data for visualization
+    parallel_df = sampled_df.copy()
+    for col in parallel_df.columns:
+        min_val = parallel_df[col].min()
+        max_val = parallel_df[col].max()
+        if max_val > min_val:
+            parallel_df[col] = (parallel_df[col] - min_val) / (max_val - min_val)
+    
+    # Limit to 1000 rows for parallel coords
+    viz_sample_size = min(1000, len(parallel_df))
+    viz_df = parallel_df.sample(viz_sample_size) if len(parallel_df) > viz_sample_size else parallel_df
+    
+    parallel_coords = {
+        'columns': numeric_df.columns.tolist(),
+        'data': viz_df.fillna(0).values.tolist(),
+        'ranges': {col: [float(numeric_df[col].min()), float(numeric_df[col].max())] 
+                 for col in numeric_df.columns}
+    }
+    
+    # Prepare violin plot data
+    # Limit data points for each violin
+    max_points_per_violin = 1000
+    violin_data = {
+        'columns': numeric_df.columns.tolist(),
+        'data': {
+            col: numeric_df[col].dropna().sample(
+                min(max_points_per_violin, numeric_df[col].dropna().shape[0])
+            ).tolist() for col in numeric_df.columns
+        },
+        'stats': {
+            col: {
+                'min': float(numeric_df[col].min()),
+                'max': float(numeric_df[col].max()),
+                'mean': float(numeric_df[col].mean()),
+                'median': float(numeric_df[col].median()),
+                'q1': float(numeric_df[col].quantile(0.25)),
+                'q3': float(numeric_df[col].quantile(0.75))
+            } for col in numeric_df.columns
+        }
+    }
+    
+    # Prepare heatmap data
+    heatmap_data = {
+        'z': corr_matrix.values.tolist(),
+        'x': corr_matrix.columns.tolist(),
+        'y': corr_matrix.columns.tolist(),
+        'p_values': p_values
+    }
+    
+    # Prepare scatter matrix data
+    # Limit to 500 points for scatter plots
+    scatter_sample_size = min(500, len(sampled_df))
+    scatter_df = sampled_df.sample(scatter_sample_size) if len(sampled_df) > scatter_sample_size else sampled_df
+    
+    scatter_matrix = {
+        'columns': numeric_df.columns.tolist(),
+        'data': scatter_df.fillna(0).to_dict('records')
+    }
+    
+    return {
+        'correlation_matrix': json.dumps(corr_dict),
+        'parallel_coords': json.dumps(parallel_coords),
+        'violin_data': json.dumps(violin_data),
+        'heatmap_data': json.dumps(heatmap_data),
+        'scatter_matrix': json.dumps(scatter_matrix)
+    }
+# /////////////////////////////////
+def calculate_column_statistics(df, column_name):
+    """Calculate comprehensive statistics for a single column"""
+    column_data = df[column_name]
+    
+    # Determine data type
+    if pd.api.types.is_numeric_dtype(column_data):
+        data_type = 'numeric'
+        # Filter out NaN values for calculations
+        clean_data = column_data.dropna()
+        
+        if len(clean_data) == 0:
+            # Handle empty columns
+            return {
+                'data_type': 'numeric',
+                'basic_stats': json.dumps({'missing_count': len(column_data), 'missing_percentage': 100.0}),
+                'distribution': json.dumps({}),
+                'shape_stats': json.dumps({}),
+                'outlier_stats': json.dumps({})
+            }
+        
+        # Basic stats
+        basic_stats = {
+            'min': float(clean_data.min()),
+            'max': float(clean_data.max()),
+            'mean': float(clean_data.mean()),
+            'median': float(clean_data.median()),
+            'mode': float(clean_data.mode().iloc[0]) if not clean_data.mode().empty else None
+        }
+        
+        # Calculate quartiles for box plot
+        q1 = float(clean_data.quantile(0.25))
+        q3 = float(clean_data.quantile(0.75))
+        iqr = q3 - q1
+        
+        # Distribution data - histogram
+        hist, bin_edges = np.histogram(clean_data, bins='auto')
+        
+        # Generate QQ-plot data
+        sorted_data = clean_data.sort_values().values
+        n = len(sorted_data)
+        theoretical_quantiles = np.array([stats.norm.ppf((i + 0.5) / n) for i in range(n)])
+        valid_mask = ~np.isnan(theoretical_quantiles)
+        
+        distribution = {
+            'histogram': {
+                'counts': hist.tolist(),
+                'bin_edges': bin_edges.tolist()
+            },
+            'boxplot': {
+                'q1': q1,
+                'q3': q3,
+                'median': basic_stats['median'],
+                'whislo': float(max(clean_data.min(), q1 - 1.5 * iqr)),
+                'whishi': float(min(clean_data.max(), q3 + 1.5 * iqr))
+            },
+            'qqplot': {
+                'x': theoretical_quantiles[valid_mask].tolist(),
+                'y': sorted_data[valid_mask].tolist()
+            }
+        }
+        
+        # Shape statistics
+        shape_stats = {
+            'skewness': float(clean_data.skew()),
+            'kurtosis': float(clean_data.kurtosis()),
+            'range': float(basic_stats['max'] - basic_stats['min'])
+        }
+        
+        # Outlier statistics
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        outliers = clean_data[(clean_data < lower_bound) | (clean_data > upper_bound)]
+        outlier_stats = {
+            'count': len(outliers),
+            'percentage': (len(outliers) / len(clean_data)) * 100,
+            'lower_bound': float(lower_bound),
+            'upper_bound': float(upper_bound),
+            'outlier_values': outliers.head(10).tolist()  # First 10 outliers
+        }
+    
+    elif pd.api.types.is_categorical_dtype(column_data) or pd.api.types.is_object_dtype(column_data):
+        data_type = 'categorical'
+        value_counts = column_data.value_counts()
+        
+        basic_stats = {
+            'unique_count': len(value_counts),
+            'top': str(column_data.mode().iloc[0]) if not column_data.mode().empty else None,
+            'top_count': int(value_counts.iloc[0]) if not value_counts.empty else 0
+        }
+        
+        # Distribution for categorical data
+        value_dict = {}
+        for k, v in value_counts.items():
+            key = str(k) if k is not None else 'null'
+            value_dict[key] = int(v)
+            
+        distribution = {
+            'value_counts': value_dict
+        }
+        
+        # Shape stats (minimal for categorical)
+        shape_stats = {
+            'entropy': float(stats.entropy(value_counts)) if len(value_counts) > 1 else 0
+        }
+        
+        # No outliers for categorical data
+        outlier_stats = {}
+    
+    else:
+        # For other types (datetime, etc.)
+        data_type = 'other'
+        basic_stats = {}
+        distribution = {}
+        shape_stats = {}
+        outlier_stats = {}
+    
+    # Calculate missing value statistics for all types
+    missing_count = column_data.isna().sum()
+    missing_percentage = (missing_count / len(column_data)) * 100
+    
+    if isinstance(basic_stats, dict):
+        basic_stats['missing_count'] = int(missing_count)
+        basic_stats['missing_percentage'] = float(missing_percentage)
+    
+    return {
+        'data_type': data_type,
+        'basic_stats': json.dumps(basic_stats),
+        'distribution': json.dumps(distribution),
+        'shape_stats': json.dumps(shape_stats),
+        'outlier_stats': json.dumps(outlier_stats)
+    }
+
+def calculate_dataset_statistics(df):
+    """Calculate dataset-level statistics for visualization"""
+    # Only include numeric columns for dataset-wide statistics
+    numeric_df = df.select_dtypes(include=['number'])
+    
+    if numeric_df.empty or numeric_df.shape[1] < 2:
+        # Not enough numeric columns for meaningful dataset statistics
+        return {
+            'correlation_matrix': '{}',
+            'parallel_coords': '{}',
+            'violin_data': '{}',
+            'heatmap_data': '{}',
+            'scatter_matrix': '{}'
+        }
+    
+    # Calculate correlation matrix
+    corr_matrix = numeric_df.corr().round(4).fillna(0)
+    corr_dict = {col: corr_matrix[col].to_dict() for col in corr_matrix.columns}
+    
+    # Calculate p-values for correlations
+    p_values = {}
+    for col1 in numeric_df.columns:
+        p_values[col1] = {}
+        for col2 in numeric_df.columns:
+            if col1 != col2:
+                clean_data1 = numeric_df[col1].dropna()
+                clean_data2 = numeric_df[col2].dropna()
+                # Only calculate if there's enough data
+                if len(clean_data1) > 2 and len(clean_data2) > 2:
+                    try:
+                        _, p_value = stats.pearsonr(clean_data1, clean_data2)
+                        p_values[col1][col2] = float(p_value)
+                    except:
+                        p_values[col1][col2] = 1.0
+                else:
+                    p_values[col1][col2] = 1.0
+            else:
+                p_values[col1][col2] = 0.0  # p-value for correlation with self
+    
+    # Prepare parallel coordinates data with normalization
+    parallel_df = numeric_df.copy()
+    for col in parallel_df.columns:
+        min_val = parallel_df[col].min()
+        max_val = parallel_df[col].max()
+        if max_val > min_val:
+            parallel_df[col] = (parallel_df[col] - min_val) / (max_val - min_val)
+    
+    # Sample data to keep size reasonable
+    sample_size = min(1000, len(df))
+    sample_df = parallel_df.sample(sample_size) if len(df) > sample_size else parallel_df
+    
+    parallel_coords = {
+        'columns': numeric_df.columns.tolist(),
+        'data': sample_df.fillna(0).values.tolist(),
+        'ranges': {col: [float(numeric_df[col].min()), float(numeric_df[col].max())] 
+                 for col in numeric_df.columns}
+    }
+    
+    # Prepare violin plot data
+    violin_data = {
+        'columns': numeric_df.columns.tolist(),
+        'data': {col: numeric_df[col].dropna().tolist() for col in numeric_df.columns},
+        'stats': {
+            col: {
+                'min': float(numeric_df[col].min()),
+                'max': float(numeric_df[col].max()),
+                'mean': float(numeric_df[col].mean()),
+                'median': float(numeric_df[col].median()),
+                'q1': float(numeric_df[col].quantile(0.25)),
+                'q3': float(numeric_df[col].quantile(0.75))
+            } for col in numeric_df.columns
+        }
+    }
+    
+    # Prepare heatmap data
+    heatmap_data = {
+        'z': corr_matrix.values.tolist(),
+        'x': corr_matrix.columns.tolist(),
+        'y': corr_matrix.columns.tolist(),
+        'p_values': p_values
+    }
+    
+    # Prepare scatter matrix data
+    scatter_matrix = {
+        'columns': numeric_df.columns.tolist(),
+        'data': sample_df.fillna(0).to_dict('records')
+    }
+    
+    return {
+        'correlation_matrix': json.dumps(corr_dict),
+        'parallel_coords': json.dumps(parallel_coords),
+        'violin_data': json.dumps(violin_data),
+        'heatmap_data': json.dumps(heatmap_data),
+        'scatter_matrix': json.dumps(scatter_matrix)
+    }
+
+def store_statistics_for_table(table_id, table_name):
+    """Calculate and store statistics for a table in the stats database"""
+    conn_user = sqlite3.connect('user_files.db')
+    conn_stats = sqlite3.connect('stats.db')
+    
+    try:
+        # Load the data
+        df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn_user)
+        
+        # Calculate statistics for each column
+        for column in df.columns:
+            stats = calculate_column_statistics(df, column)
+            
+            # Check if statistics already exist for this column
+            c_stats = conn_stats.cursor()
+            c_stats.execute("""
+                SELECT stats_id FROM column_stats
+                WHERE table_id = ? AND column_name = ?
+            """, (table_id, column))
+            
+            existing_stats = c_stats.fetchone()
+            
+            if existing_stats:
+                # Update existing statistics
+                c_stats.execute("""
+                    UPDATE column_stats 
+                    SET data_type = ?, basic_stats = ?, distribution = ?, 
+                        shape_stats = ?, outlier_stats = ?
+                    WHERE table_id = ? AND column_name = ?
+                """, (
+                    stats['data_type'],
+                    stats['basic_stats'],
+                    stats['distribution'],
+                    stats['shape_stats'],
+                    stats['outlier_stats'],
+                    table_id, 
+                    column
+                ))
+            else:
+                # Insert new statistics
+                c_stats.execute("""
+                    INSERT INTO column_stats 
+                    (table_id, column_name, data_type, basic_stats, distribution, 
+                     shape_stats, outlier_stats)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    table_id, 
+                    column, 
+                    stats['data_type'],
+                    stats['basic_stats'],
+                    stats['distribution'],
+                    stats['shape_stats'],
+                    stats['outlier_stats']
+                ))
+        
+        # Calculate and store dataset statistics
+        dataset_stats = calculate_dataset_statistics(df)
+        
+        # Check if dataset statistics already exist
+        c_stats.execute("""
+            SELECT stats_id FROM dataset_stats
+            WHERE table_id = ?
+        """, (table_id,))
+        
+        existing_stats = c_stats.fetchone()
+        
+        if existing_stats:
+            # Update existing statistics
+            c_stats.execute("""
+                UPDATE dataset_stats 
+                SET correlation_matrix = ?, parallel_coords = ?, 
+                    violin_data = ?, heatmap_data = ?, scatter_matrix = ?
+                WHERE table_id = ?
+            """, (
+                dataset_stats['correlation_matrix'],
+                dataset_stats['parallel_coords'],
+                dataset_stats['violin_data'],
+                dataset_stats['heatmap_data'],
+                dataset_stats['scatter_matrix'],
+                table_id
+            ))
+        else:
+            # Insert new statistics
+            c_stats.execute("""
+                INSERT INTO dataset_stats 
+                (table_id, correlation_matrix, parallel_coords, 
+                 violin_data, heatmap_data, scatter_matrix)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                table_id,
+                dataset_stats['correlation_matrix'],
+                dataset_stats['parallel_coords'],
+                dataset_stats['violin_data'],
+                dataset_stats['heatmap_data'],
+                dataset_stats['scatter_matrix']
+            ))
+        
+        conn_stats.commit()
+        logging.info(f"Statistics calculated and stored for table {table_name}")
+        
+    except Exception as e:
+        logging.error(f"Error calculating statistics: {str(e)}")
+        traceback.print_exc()
+    finally:
+        conn_user.close()
+        conn_stats.close()
+
+
+def process_table_statistics_background(table_id, table_name):
+    """Run statistics calculation in a background thread"""
+    thread = threading.Thread(
+        target=store_statistics_for_table,
+        args=(table_id, table_name)
+    )
+    thread.daemon = True  # Thread will exit when main thread exits
+    thread.start()
+    return thread
+
 
 @app.route('/upload/<user_id>', methods=['POST'])
 def upload_file(user_id):
@@ -1164,8 +2103,14 @@ def upload_file(user_id):
             # Handle different file types
             if extension in ['xlsx', 'xls']: #2
                 file_id = handle_excel_upload(file, user_id, filename, c, conn)
+                # process_table_statistics_background(sheet_unique_key, table_name)
+                task_id = create_stats_task(sheet_unique_key, new_table_name)
+
             elif extension in ['db', 'sqlite', 'sqlite3']:
                 file_id = handle_sqlite_upload(file, user_id, filename, c, conn)
+                # process_table_statistics_background(table_unique_key, new_table_name)
+                task_id = create_stats_task(table_unique_key, new_table_name)
+
             elif extension in {'csv','tsv'}: #1
                 # Handle CSV files (implement similar parent-child structure if needed)
                 unique_key = str(uuid.uuid4())
@@ -1184,11 +2129,17 @@ def upload_file(user_id):
                     VALUES (?, ?, ?)
                 """, (unique_key, file_id, table_name))
 
+                #backgroud process
+                # process_table_statistics_background(unique_key, table_name)
+                task_id = create_stats_task(unique_key, table_name) # create bg task
+
             conn.commit()
+            
             return jsonify({
                 'success': True,
                 'file_id': file_id,
-                'message': 'File uploaded successfully'
+                'message': 'File uploaded successfully',
+                'status_task_id': task_id
             }), 200
         elif extension in unstructured_extensions:
             if extension =='pdf':
@@ -1240,6 +2191,369 @@ def upload_file(user_id):
 
     finally:
         conn.close()
+
+@app.route('/get-column-statistics/<user_id>/<file_id>/<column_name>', methods=['GET'])
+def get_column_statistics_from_db(user_id, file_id, column_name):
+    """Get pre-computed statistics for a specific column"""
+    try:
+        conn_user = sqlite3.connect('user_files.db')
+        conn_stats = sqlite3.connect('stats.db')
+        c_user = conn_user.cursor()
+        
+        # Get file information to find the table_id
+        c_user.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c_user.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        table_id = result[0]
+        
+        # Get the column statistics
+        c_stats = conn_stats.cursor()
+        c_stats.execute("""
+            SELECT data_type, basic_stats, distribution, shape_stats, outlier_stats
+            FROM column_stats
+            WHERE table_id = ? AND column_name = ?
+        """, (table_id, column_name))
+        
+        stats_result = c_stats.fetchone()
+        
+        if not stats_result:
+            # Statistics not yet calculated, return empty response
+            return jsonify({
+                'message': 'Statistics are being calculated',
+                'ready': False
+            })
+            
+        data_type, basic_stats, distribution, shape_stats, outlier_stats = stats_result
+        
+        response = {
+            'ready': True,
+            'data_type': data_type,
+            'basic_stats': json.loads(basic_stats),
+            'distribution': json.loads(distribution),
+            'shape_stats': json.loads(shape_stats),
+            'outlier_stats': json.loads(outlier_stats)
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        logging.error(f"Error retrieving column statistics: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn_user' in locals():
+            conn_user.close()
+        if 'conn_stats' in locals():
+            conn_stats.close()
+
+@app.route('/get-dataset-statistics/<user_id>/<file_id>', methods=['GET'])
+def get_dataset_statistics(user_id, file_id):
+    """Get pre-computed statistics for an entire dataset"""
+    try:
+        conn_user = sqlite3.connect('user_files.db')
+        conn_stats = sqlite3.connect('stats.db')
+        c_user = conn_user.cursor()
+        
+        # Get file information to find the table_id
+        c_user.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c_user.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        table_id = result[0]
+        
+        # Get the dataset statistics
+        c_stats = conn_stats.cursor()
+        c_stats.execute("""
+            SELECT correlation_matrix, parallel_coords, violin_data, 
+                   heatmap_data, scatter_matrix
+            FROM dataset_stats
+            WHERE table_id = ?
+        """, (table_id,))
+        
+        stats_result = c_stats.fetchone()
+        
+        if not stats_result:
+            # Statistics not yet calculated, return empty response
+            return jsonify({
+                'message': 'Dataset statistics are being calculated',
+                'ready': False
+            })
+            
+        correlation_matrix, parallel_coords, violin_data, heatmap_data, scatter_matrix = stats_result
+        
+        response = {
+            'ready': True,
+            'correlation_matrix': json.loads(correlation_matrix),
+            'parallel_coords': json.loads(parallel_coords),
+            'violin_data': json.loads(violin_data),
+            'heatmap_data': json.loads(heatmap_data),
+            'scatter_matrix': json.loads(scatter_matrix)
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        logging.error(f"Error retrieving dataset statistics: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn_user' in locals():
+            conn_user.close()
+        if 'conn_stats' in locals():
+            conn_stats.close()
+
+@app.route('/get-stats-status/<user_id>/<file_id>', methods=['GET'])
+def get_stats_status(user_id, file_id):
+    """Check if statistics have been calculated for a file"""
+    try:
+        conn_user = sqlite3.connect('user_files.db')
+        conn_stats = sqlite3.connect('stats.db')
+        c_user = conn_user.cursor()
+        
+        # Get file information and table ID
+        c_user.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c_user.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        table_id = result[0]
+        
+        # Check if column statistics exist
+        c_stats = conn_stats.cursor()
+        c_stats.execute("""
+            SELECT COUNT(*) 
+            FROM column_stats
+            WHERE table_id = ?
+        """, (table_id,))
+        
+        column_stats_count = c_stats.fetchone()[0]
+        
+        # Check if dataset statistics exist
+        c_stats.execute("""
+            SELECT COUNT(*) 
+            FROM dataset_stats
+            WHERE table_id = ?
+        """, (table_id,))
+        
+        dataset_stats_exist = c_stats.fetchone()[0] > 0
+        
+        return jsonify({
+            'column_stats_count': column_stats_count,
+            'dataset_stats_exist': dataset_stats_exist,
+            'stats_complete': column_stats_count > 0 and dataset_stats_exist
+        })
+        
+    except Exception as e:
+        logging.error(f"Error checking statistics status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn_user' in locals():
+            conn_user.close()
+        if 'conn_stats' in locals():
+            conn_stats.close()
+
+# Task status starts
+def create_stats_task(table_id, table_name):
+    """Create a new statistics calculation task"""
+    task_id = f"stats_{table_id}_{int(time.time())}"
+    
+    conn = sqlite3.connect('stats.db')
+    c = conn.cursor()
+    
+    try:
+        c.execute("""
+            INSERT INTO stats_tasks (task_id, table_id, status, message)
+            VALUES (?, ?, ?, ?)
+        """, (task_id, table_id, 'pending', 'Task created'))
+        
+        conn.commit()
+        
+        # Queue the task for background processing
+        stats_task_queue.put({
+            'task_id': task_id,
+            'table_id': table_id,
+            'table_name': table_name
+        })
+        
+        return task_id
+    except Exception as e:
+        logging.error(f"Error creating stats task: {str(e)}")
+        return None
+    finally:
+        conn.close()
+
+def update_task_status(task_id, status, progress=None, message=None):
+    """Update the status of a statistics calculation task"""
+    conn = sqlite3.connect('stats.db')
+    c = conn.cursor()
+    
+    try:
+        # Update task status
+        if progress is not None and message is not None:
+            c.execute("""
+                UPDATE stats_tasks 
+                SET status = ?, progress = ?, message = ?
+                WHERE task_id = ?
+            """, (status, progress, message, task_id))
+        elif progress is not None:
+            c.execute("""
+                UPDATE stats_tasks 
+                SET status = ?, progress = ?
+                WHERE task_id = ?
+            """, (status, progress, task_id))
+        elif message is not None:
+            c.execute("""
+                UPDATE stats_tasks 
+                SET status = ?, message = ?
+                WHERE task_id = ?
+            """, (status, message, task_id))
+        else:
+            c.execute("""
+                UPDATE stats_tasks 
+                SET status = ?
+                WHERE task_id = ?
+            """, (status, task_id))
+        
+        # If task is completed, update the completed_at timestamp
+        if status == 'completed':
+            c.execute("""
+                UPDATE stats_tasks 
+                SET completed_at = CURRENT_TIMESTAMP
+                WHERE task_id = ?
+            """, (task_id,))
+        
+        conn.commit()
+        
+        # Update global status dictionary for quicker access
+        TASK_STATUS[task_id] = {
+            'status': status,
+            'progress': progress if progress is not None else 0.0,
+            'message': message
+        }
+        
+        return True
+    except Exception as e:
+        logging.error(f"Error updating task status: {str(e)}")
+        return False
+    finally:
+        conn.close()
+
+def get_task_status(task_id):
+    """Get the current status of a task"""
+    # Check the in-memory cache first
+    if task_id in TASK_STATUS:
+        return TASK_STATUS[task_id]
+    
+    # If not in cache, check the database
+    conn = sqlite3.connect('stats.db')
+    c = conn.cursor()
+    
+    try:
+        c.execute("""
+            SELECT status, progress, message, created_at, completed_at
+            FROM stats_tasks
+            WHERE task_id = ?
+        """, (task_id,))
+        
+        result = c.fetchone()
+        if not result:
+            return None
+            
+        status, progress, message, created_at, completed_at = result
+        
+        # Cache the result
+        TASK_STATUS[task_id] = {
+            'status': status,
+            'progress': progress,
+            'message': message,
+            'created_at': created_at,
+            'completed_at': completed_at
+        }
+        
+        return TASK_STATUS[task_id]
+    except Exception as e:
+        logging.error(f"Error getting task status: {str(e)}")
+        return None
+    finally:
+        conn.close()
+#Task status ends
+
+
+## status updates API ENDPOINTS start
+@app.route('/start-stats-calculation/<user_id>/<file_id>', methods=['POST'])
+def start_stats_calculation(user_id, file_id):
+    """Start a new statistics calculation task for a file"""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get file information
+        c.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        table_id = result[0]
+        table_name = f"table_{table_id}"
+        
+        # Create a new task
+        task_id = create_stats_task(table_id, table_name)
+        
+        if not task_id:
+            return jsonify({'error': 'Failed to create task'}), 500
+            
+        return jsonify({
+            'task_id': task_id,
+            'status': 'pending',
+            'message': 'Statistics calculation has been queued'
+        })
+        
+    except Exception as e:
+        logging.error(f"Error starting statistics calculation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+@app.route('/check-stats-task/<task_id>', methods=['GET'])
+def check_stats_task(task_id):
+    """Check the status of a statistics calculation task"""
+    try:
+        status = get_task_status(task_id)
+        
+        if not status:
+            return jsonify({'error': 'Task not found'}), 404
+            
+        return jsonify(status)
+        
+    except Exception as e:
+        logging.error(f"Error checking task status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+## status updates API ENDPOINTS end
+
 
 @app.route('/update-row/<user_id>/<file_id>', methods=['POST'])
 def update_row(user_id, file_id):

@@ -14,7 +14,7 @@ import ChartModal from './chartmodal';
 import FlowBoard from './flow-board';
 import { ThemeProvider, ThemeSelector } from './theme-provider';
 import FileSelectionPopover from './FileSelectionPopover';
-import { useNodesState, useEdgesState, Node } from 'reactflow';
+import { useNodesState, useEdgesState, Node } from '@xyflow/react';
 import { Table, Database, PieChart } from 'lucide-react';
 import StatCardModal from './stat-Card-Modal';
 import DataTableModal from './dataTableSelection';
@@ -23,6 +23,8 @@ import DataTableModal from './dataTableSelection';
 interface Position {
   x: number;
   y: number;
+  width?: number;
+  height?: number;
 }
 
 interface Chart {
@@ -95,13 +97,6 @@ interface StatCard {
 }
 
 // Custom Node Component for Charts
-const ChartNode = ({ data }: { data: any }) => {
-  return (
-    <div className="bg-white rounded-lg shadow-lg">
-      <DraggableChart {...data} />
-    </div>
-  );
-};
 
 const BoardMain: React.FC = () => {
   const { user, isLoaded: userLoaded } = useUser();
@@ -187,6 +182,13 @@ type ContentMode = 'none' | 'chart' | 'textbox' | 'datatable' | 'statcard';
     return () => clearTimeout(timeoutId);
   }, [charts, selectedDashboard]);
 
+  const handleChartTitleChange = useCallback((chartId: string, title: string) => {
+    setCharts(prev => prev.map(chart => 
+      chart.id === chartId ? { ...chart, title } : chart
+    ));
+  }, []);
+
+  
  const handleDataTableCreate = useCallback((config: {
   columns: string[];
   title: string;
@@ -257,10 +259,17 @@ type ContentMode = 'none' | 'chart' | 'textbox' | 'datatable' | 'statcard';
   // Handle chart position change
   const handleChartPosition = useCallback((chartId: string, newPosition: Position) => {
     setCharts(prev => prev.map(chart => 
-      chart.id === chartId ? { ...chart, position: newPosition } : chart
+      chart.id === chartId ? { 
+        ...chart, 
+        position: {
+          x: newPosition.x,
+          y: newPosition.y,
+          width: newPosition.width || chart.position.width,
+          height: newPosition.height || chart.position.height
+        } 
+      } : chart
     ));
   }, []);
-
   // Handle chart remove
   const handleRemoveChart = useCallback((chartId: string) => {
     setCharts(prev => prev.filter(chart => chart.id !== chartId));
@@ -749,8 +758,8 @@ const handleChartCreate = useCallback(async (chartData: ChartCreationData & { po
     />
   )}
 <div className="flex-1 relative bg-gray-100 overflow-hidden">
-  <FlowBoard
-charts={charts}
+<FlowBoard
+  charts={charts}
   textBoxes={textBoxes}
   dataTables={dataTables}
   statCards={statCards}
@@ -758,6 +767,7 @@ charts={charts}
   onChartRemove={handleRemoveChart}
   onChartMaximize={handleMaximizeToggle}
   onChartDescriptionChange={handleDescriptionChange}
+  onChartTitleChange={handleChartTitleChange}
   onTextBoxPositionChange={handleTextBoxPositionChange}
   onTextBoxContentChange={handleTextBoxContentChange}
   onTextBoxRemove={handleTextBoxRemove}

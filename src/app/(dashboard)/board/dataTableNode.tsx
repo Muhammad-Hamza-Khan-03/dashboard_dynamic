@@ -16,7 +16,7 @@ interface DataTableNodeData {
 }
 
 const DataTableNode: React.FC<NodeProps<DataTableNodeData>> = ({ data }) => {
-  const { theme } = useTheme();
+  const { boardTheme:theme } = useTheme();
   const [currentPage, setCurrentPage] = useState(0);
   const rowsPerPage = data.rowsPerPage || 10;
   const totalPages = Math.ceil(data.data.length / rowsPerPage);
