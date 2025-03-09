@@ -1,3 +1,4 @@
+import nest_asyncio
 from scipy import stats
 import numpy as np
 from typing import Dict, Any
@@ -48,6 +49,7 @@ import traceback
 import queue
 from background_worker_implementation import *
 import threading
+import asyncio
 
 app = Flask(__name__)
 cache = Cache(app, config={'CACHE_TYPE': 'simple'})
@@ -325,7 +327,7 @@ def init_db():
         file_id INTEGER REFERENCES user_files(file_id),
         dashboard_data BLOB,
               user_id TEXT REFERENCES users(user_id),
-        dashboard_name TEXT,
+        dashboardname TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     ''')
@@ -334,6 +336,47 @@ def init_db():
         html_content TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
+    
+    # Check if the column 'dashboard_name' exists before adding it
+    c.execute("PRAGMA table_info(graph_cache)")
+    columns = [row[1] for row in c.fetchall()]
+    
+    if 'dashboard_name' not in columns:
+        c.execute('''ALTER TABLE graph_cache ADD COLUMN dashboard_name TEXT''')
+    
+    if 'image_blob' not in columns:
+        c.execute('''ALTER TABLE graph_cache ADD COLUMN image_blob BLOB''')
+    
+    if 'isImageSuccess' not in columns:
+        c.execute('''ALTER TABLE graph_cache ADD COLUMN isImageSuccess INTEGER DEFAULT 0''')
+    
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_graph_cache_dashboard 
+        ON graph_cache(dashboard_name, isImageSuccess);
+     ''')
+    c.execute("""
+            CREATE TABLE IF NOT EXISTS dashboard_exports (
+                export_id TEXT PRIMARY KEY,
+                user_id TEXT,
+                dashboard_ids TEXT,
+                export_name TEXT,
+                export_path TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+    c.execute("""
+            CREATE TABLE IF NOT EXISTS dashboards (
+                id TEXT PRIMARY KEY,
+                user_id TEXT,
+                name TEXT,
+                charts TEXT,
+                textboxes TEXT,
+                datatables TEXT,
+                statcards TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
+        """)
     conn.commit()
     conn.close()
 
@@ -4112,6 +4155,1059 @@ def serve_graph(graph_id):
     finally:
         if 'conn' in locals():
             conn.close()
+
+# Export here
+
+@app.route('/check-dashboard-images/<user_id>/<dashboard_id>', methods=['GET'])
+def check_dashboard_images(user_id, dashboard_id):
+    """
+    Check if a dashboard has pre-rendered images available.
+    """
+    try:
+        # Get dashboard name
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # First, get the dashboard name
+        dashboard_name = None
+        
+        try:
+            # Try to get from dashboard table first
+            c.execute("""
+                SELECT name FROM dashboards
+                WHERE id = ? AND user_id = ?
+            """, (dashboard_id, user_id))
+            
+            result = c.fetchone()
+            if result:
+                dashboard_name = result[0]
+        except Exception as e:
+            app.logger.warning(f"Error getting dashboard name from dashboards table: {str(e)}")
+            # This is just a fallback - no need to re-raise
+        
+        if not dashboard_name:
+            # Try to use dashboard_id as name (fallback)
+            dashboard_name = f"Dashboard-{dashboard_id}"
+        
+        # Count charts with pre-rendered images for this dashboard
+        c.execute("""
+            SELECT COUNT(*) FROM graph_cache
+            WHERE dashboard_name = ? AND isImageSuccess = 1
+        """, (dashboard_name,))
+        
+        count = c.fetchone()[0]
+        
+        # Also count total charts for this dashboard
+        c.execute("""
+            SELECT COUNT(*) FROM graph_cache
+            WHERE dashboard_name = ?
+        """, (dashboard_name,))
+        
+        total = c.fetchone()[0]
+        
+        return jsonify({
+            'hasSavedImages': count > 0,
+            'savedImageCount': count,
+            'totalCharts': total
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error checking dashboard images: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+@app.route('/export-dashboard-images/<user_id>', methods=['POST'])
+def export_dashboard_images(user_id):
+    """Generate a PDF export of dashboard using pre-captured images."""
+    try:
+        data = request.json
+        dashboard_ids = data.get('dashboard_ids', [])
+        export_name = data.get('export_name', 'Dashboard Export')
+        use_relative_positioning = data.get('use_relative_positioning', True)
+        
+        # Get node images
+        node_images = data.get('node_images', {})
+        
+        # Get positions data
+        node_positions = data.get('node_positions', {})
+        
+        app.logger.info(f"Exporting dashboard with {len(node_images)} images")
+        
+        # Ensure we have at least one dashboard ID
+        if not dashboard_ids or not isinstance(dashboard_ids, list):
+            return jsonify({'error': 'No dashboards selected for export'}), 400
+        
+        # Create directories for exports
+        export_id = str(uuid.uuid4())
+        export_dir = os.path.join('static', 'exports')
+        os.makedirs(export_dir, exist_ok=True)
+        
+        # Create temporary directory for storing individual images
+        temp_dir = os.path.join(export_dir, f"temp_{export_id}")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        export_path = os.path.join(export_dir, f"{export_name.replace(' ', '_')}_{export_id}.pdf")
+        
+        # Import required libraries
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.units import mm, inch
+        from reportlab.lib.utils import ImageReader
+        import base64
+        from io import BytesIO
+        from PIL import Image
+        
+        # Create PDF canvas
+        c = canvas.Canvas(export_path, pagesize=landscape(A4))
+        page_width, page_height = landscape(A4)
+        
+        # Dashboard info
+        dashboards_info = data.get('dashboards', [])
+        
+        # Save images from base64 to files
+        image_files = {}
+        
+        # Map node types to their positions array
+        node_type_map = {
+            'chart': node_positions.get('charts', []),
+            'textbox': node_positions.get('textBoxes', []),
+            'datatable': node_positions.get('dataTables', []),
+            'statcard': node_positions.get('statCards', [])
+        }
+        
+        # Process and save all images
+        for image_key, image_data in node_images.items():
+            try:
+                # Parse the node type and ID
+                parts = image_key.split('_', 1)
+                if len(parts) != 2:
+                    continue
+                    
+                node_type, node_id = parts
+                
+                # Skip if invalid node type
+                if node_type not in node_type_map:
+                    continue
+                
+                # Remove data:image/png;base64, prefix
+                if image_data.startswith('data:image/png;base64,'):
+                    image_data = image_data[len('data:image/png;base64,'):]
+                
+                # Decode base64 to bytes
+                try:
+                    img_bytes = base64.b64decode(image_data)
+                except Exception as e:
+                    app.logger.error(f"Error decoding base64 for {image_key}: {str(e)}")
+                    continue
+                
+                # Save to temporary file
+                image_file_path = os.path.join(temp_dir, f"{image_key}.png")
+                with open(image_file_path, 'wb') as f:
+                    f.write(img_bytes)
+                
+                # Store the file path
+                image_files[image_key] = image_file_path
+                
+            except Exception as e:
+                app.logger.error(f"Error processing image {image_key}: {str(e)}")
+                app.logger.error(traceback.format_exc())
+        
+        app.logger.info(f"Processed {len(image_files)} images for PDF export")
+        
+        # Process each dashboard
+        for dashboard_index, dashboard_id in enumerate(dashboard_ids):
+            # Start a new page for each dashboard except the first one
+            if dashboard_index > 0:
+                c.showPage()
+            
+            # Find the dashboard name
+            dashboard_name = f"Dashboard Export - {export_name}"
+            for dash in dashboards_info:
+                if dash.get('id') == dashboard_id:
+                    dashboard_name = dash.get('name', dashboard_name)
+            
+            # Add a colored header background
+            c.setFillColorRGB(0.9, 0.9, 1.0)  # Light blue background
+            c.rect(0, page_height-35*mm, page_width, 35*mm, fill=1)
+            
+            # Add dashboard title with more prominence
+            c.setFillColorRGB(0.1, 0.1, 0.5)  # Dark blue text
+            c.setFont("Helvetica-Bold", 18)
+            c.drawString(15*mm, page_height-20*mm, dashboard_name)
+            
+            # Add timestamp
+            c.setFillColorRGB(0.3, 0.3, 0.3)  # Dark gray text
+            c.setFont("Helvetica", 10)
+            c.drawString(15*mm, page_height-30*mm, f"Exported: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            
+            # For relative positioning, calculate the bounding box
+            all_node_positions = []
+            
+            # Build a list of all node positions from the different node types
+            for node_type, positions in node_type_map.items():
+                for pos in positions:
+                    # Only include nodes that have corresponding images
+                    node_id = pos.get('id')
+                    image_key = f"{node_type}_{node_id}"
+                    if image_key in image_files and node_id and 'position' in pos:
+                        all_node_positions.append({
+                            'type': node_type,
+                            'id': node_id,
+                            'position': pos.get('position', {}),
+                            'title': pos.get('title', '')
+                        })
+            
+            # Skip empty dashboards
+            if not all_node_positions:
+                app.logger.warning(f"No valid nodes found for dashboard {dashboard_id}")
+                continue
+            
+            # Set up coordinate transformation based on positioning method
+            if use_relative_positioning:
+                # Find min and max positions with null safety
+                min_x = min((node.get('position', {}).get('x', 0) or 0) for node in all_node_positions)
+                min_y = min((node.get('position', {}).get('y', 0) or 0) for node in all_node_positions)
+                max_x = max((node.get('position', {}).get('x', 0) or 0) + 
+                          (node.get('position', {}).get('width', 400) or 400) for node in all_node_positions)
+                max_y = max((node.get('position', {}).get('y', 0) or 0) + 
+                          (node.get('position', {}).get('height', 300) or 300) for node in all_node_positions)
+                
+                # Calculate scale factors to fit everything on the page with margins
+                margin_mm = 20
+                available_width = page_width - 2 * margin_mm
+                available_height = page_height - 40*mm  # Account for header
+                
+                width_scale = available_width / (max_x - min_x) if max_x > min_x else 1
+                height_scale = available_height / (max_y - min_y) if max_y > min_y else 1
+                
+                # Use the smaller scale to ensure everything fits
+                scale = min(width_scale, height_scale) * 0.9  # Add some extra margin
+                
+                # Function to transform coordinates
+                def transform_coords(pos):
+                    x = ((pos.get('x', 0) or 0) - min_x) * scale + margin_mm
+                    y = page_height - (((pos.get('y', 0) or 0) - min_y) * scale + 40*mm)  # Flip Y and account for header
+                    width = (pos.get('width', 400) or 400) * scale
+                    height = (pos.get('height', 300) or 300) * scale
+                    return x, y - height, width, height  # Adjust y for PDF coordinates
+            else:
+                # For absolute positioning, use a simple scale factor
+                scale_factor = 0.15
+                
+                # Function to transform coordinates with absolute positioning
+                def transform_coords(pos):
+                    x = (pos.get('x', 0) or 0) * scale_factor
+                    y = page_height - (pos.get('y', 0) or 0) * scale_factor - (pos.get('height', 300) or 300) * scale_factor
+                    width = (pos.get('width', 400) or 400) * scale_factor
+                    height = (pos.get('height', 300) or 300) * scale_factor
+                    return x, y, width, height
+                    
+            # Process all nodes
+            for node in all_node_positions:
+                node_type = node.get('type')
+                node_id = node.get('id')
+                image_key = f"{node_type}_{node_id}"
+                
+                if image_key in image_files:
+                    try:
+                        image_path = image_files[image_key]
+                        
+                        # Get node position
+                        pos = node.get('position', {})
+                        x, y, width, height = transform_coords(pos)
+                        
+                        # Ensure dimensions are positive
+                        if width <= 0 or height <= 0:
+                            app.logger.warning(f"Invalid dimensions for {image_key}: {width}x{height}")
+                            continue
+                        
+                        # Draw the image
+                        c.drawImage(image_path, x, y, width, height)
+                        
+                        # Add a border around each element
+                        c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                        c.rect(x, y, width, height, fill=0)
+                        
+                    except Exception as e:
+                        app.logger.error(f"Error adding {image_key} to PDF: {str(e)}")
+                        app.logger.error(traceback.format_exc())
+        
+        # Add page numbers if multiple pages
+        if len(dashboard_ids) > 1:
+            for i in range(c.getPageNumber()):
+                c.showPage()
+                c.setFont("Helvetica", 8)
+                c.drawRightString(
+                    page_width - 10*mm, 
+                    10*mm, 
+                    f"Page {i+1} of {len(dashboard_ids)}"
+                )
+        
+        # Save PDF
+        c.save()
+        
+        # Clean up temporary images
+        for image_path in image_files.values():
+            try:
+                os.remove(image_path)
+            except:
+                pass
+        
+        try:
+            os.rmdir(temp_dir)
+        except:
+            pass
+        
+        # Record the export in the database
+        conn = sqlite3.connect('user_files.db')
+        cursor = conn.cursor()
+        
+        # Create table if needed
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dashboard_exports (
+                export_id TEXT PRIMARY KEY,
+                user_id TEXT,
+                dashboard_ids TEXT,
+                export_name TEXT,
+                export_path TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Save export record
+        cursor.execute("""
+            INSERT INTO dashboard_exports (
+                export_id, user_id, dashboard_ids, export_name, export_path, created_at
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (export_id, user_id, json.dumps(dashboard_ids), export_name, export_path))
+        
+        conn.commit()
+        conn.close()
+        
+        # Return download URL
+        return jsonify({
+            'success': True,
+            'export_id': export_id,
+            'export_name': export_name,
+            'download_url': f'/download-export/{export_id}'
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error exporting dashboard images: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/export-dashboard-pre-rendered/<user_id>', methods=['POST'])
+def export_dashboard_pre_rendered(user_id):
+    """
+    Generate a PDF export of dashboard using pre-rendered images from the database.
+    This is like creating a photo album from previously captured photographs.
+    """
+    try:
+        data = request.json
+        dashboard_ids = data.get('dashboard_ids', [])
+        export_name = data.get('export_name', 'Dashboard Export')
+        use_relative_positioning = data.get('use_relative_positioning', True)
+        
+        # Get node positions
+        node_positions = data.get('node_positions', {})
+        
+        app.logger.info(f"Exporting dashboard with pre-rendered images")
+        
+        # Ensure we have at least one dashboard ID
+        if not dashboard_ids or not isinstance(dashboard_ids, list):
+            return jsonify({'error': 'No dashboards selected for export'}), 400
+        
+        # Create directories for exports
+        export_id = str(uuid.uuid4())
+        export_dir = os.path.join('static', 'exports')
+        os.makedirs(export_dir, exist_ok=True)
+        
+        # Create temporary directory for storing individual images
+        temp_dir = os.path.join(export_dir, f"temp_{export_id}")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        export_path = os.path.join(export_dir, f"{export_name.replace(' ', '_')}_{export_id}.pdf")
+        
+        # Import required libraries
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.units import mm, inch
+        from reportlab.lib.utils import ImageReader
+        from io import BytesIO
+        from PIL import Image
+        
+        # Create PDF canvas
+        c = canvas.Canvas(export_path, pagesize=landscape(A4))
+        page_width, page_height = landscape(A4)
+        
+        # Dashboard info
+        dashboards_info = data.get('dashboards', [])
+        
+        # Connect to database to retrieve saved images
+        conn = sqlite3.connect('user_files.db')
+        db_cursor = conn.cursor()
+        
+        # Save images from database to files
+        image_files = {}
+        
+        # Map node types to their positions array
+        node_type_map = {
+            'chart': node_positions.get('charts', []),
+            'textbox': node_positions.get('textBoxes', []),
+            'datatable': node_positions.get('dataTables', []),
+            'statcard': node_positions.get('statCards', [])
+        }
+        
+        # For each dashboard, get pre-rendered images
+        for dashboard_index, dashboard_id in enumerate(dashboard_ids):
+            # Find the dashboard name
+            dashboard_name = None
+            for dash in dashboards_info:
+                if dash.get('id') == dashboard_id:
+                    dashboard_name = dash.get('name')
+                    break
+            
+            if not dashboard_name:
+                app.logger.warning(f"Dashboard name not found for {dashboard_id}")
+                dashboard_name = f"Dashboard-{dashboard_id}"
+            
+            # Get all chart IDs for this dashboard that have pre-rendered images
+            chart_nodes = [n for n in node_type_map.get('chart', []) if n.get('id')]
+            
+            # Get pre-rendered images from database
+            for chart_node in chart_nodes:
+                chart_id = chart_node.get('id')
+                if not chart_id:
+                    continue
+                
+                db_cursor.execute("""
+                    SELECT image_blob 
+                    FROM graph_cache 
+                    WHERE graph_id = ? AND dashboard_name = ? AND isImageSuccess = 1
+                """, (chart_id, dashboard_name))
+                
+                result = db_cursor.fetchone()
+                if not result or not result[0]:
+                    app.logger.warning(f"No pre-rendered image found for chart {chart_id}")
+                    continue
+                
+                image_blob = result[0]
+                
+                # Save to temporary file
+                image_key = f"chart_{chart_id}"
+                image_file_path = os.path.join(temp_dir, f"{image_key}.png")
+                with open(image_file_path, 'wb') as f:
+                    f.write(image_blob)
+                
+                # Store the file path
+                image_files[image_key] = image_file_path
+        
+        # Fetch non-chart elements (which would use captureElementAsImage on frontend)
+        non_chart_images = data.get('node_images', {})
+        for image_key, image_data in non_chart_images.items():
+            if image_key.startswith('chart_'):
+                # Skip chart images as we already processed them from database
+                continue
+                
+            try:
+                # Parse the node type and ID
+                parts = image_key.split('_', 1)
+                if len(parts) != 2:
+                    continue
+                    
+                node_type, node_id = parts
+                
+                # Skip if invalid node type
+                if node_type not in node_type_map:
+                    continue
+                
+                # Remove data:image/png;base64, prefix
+                if image_data.startswith('data:image/png;base64,'):
+                    image_data = image_data[len('data:image/png;base64,'):]
+                
+                # Decode base64 to bytes
+                img_bytes = base64.b64decode(image_data)
+                
+                # Save to temporary file
+                image_file_path = os.path.join(temp_dir, f"{image_key}.png")
+                with open(image_file_path, 'wb') as f:
+                    f.write(img_bytes)
+                
+                # Store the file path
+                image_files[image_key] = image_file_path
+                
+            except Exception as e:
+                app.logger.error(f"Error processing image {image_key}: {str(e)}")
+        
+        app.logger.info(f"Processed {len(image_files)} images for PDF export")
+        
+        # Process each dashboard - This part is the same as the original export function
+        for dashboard_index, dashboard_id in enumerate(dashboard_ids):
+            # Start a new page for each dashboard except the first one
+            if dashboard_index > 0:
+                c.showPage()
+            
+            # Find the dashboard name
+            dashboard_name = f"Dashboard Export - {export_name}"
+            for dash in dashboards_info:
+                if dash.get('id') == dashboard_id:
+                    dashboard_name = dash.get('name', dashboard_name)
+            
+            # Add a colored header background
+            c.setFillColorRGB(0.9, 0.9, 1.0)  # Light blue background
+            c.rect(0, page_height-35*mm, page_width, 35*mm, fill=1)
+            
+            # Add dashboard title with more prominence
+            c.setFillColorRGB(0.1, 0.1, 0.5)  # Dark blue text
+            c.setFont("Helvetica-Bold", 18)
+            c.drawString(15*mm, page_height-20*mm, dashboard_name)
+            
+            # Add timestamp
+            c.setFillColorRGB(0.3, 0.3, 0.3)  # Dark gray text
+            c.setFont("Helvetica", 10)
+            c.drawString(15*mm, page_height-30*mm, f"Exported: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            
+            # For relative positioning, calculate the bounding box
+            all_node_positions = []
+            
+            # Build a list of all node positions from the different node types
+            for node_type, positions in node_type_map.items():
+                for pos in positions:
+                    # Only include nodes that have corresponding images
+                    node_id = pos.get('id')
+                    image_key = f"{node_type}_{node_id}"
+                    if image_key in image_files and node_id and 'position' in pos:
+                        all_node_positions.append({
+                            'type': node_type,
+                            'id': node_id,
+                            'position': pos.get('position', {}),
+                            'title': pos.get('title', '')
+                        })
+            
+            # Skip empty dashboards
+            if not all_node_positions:
+                app.logger.warning(f"No valid nodes found for dashboard {dashboard_id}")
+                continue
+            
+            # Set up coordinate transformation based on positioning method
+            if use_relative_positioning:
+                # Find min and max positions with null safety
+                min_x = min((node.get('position', {}).get('x', 0) or 0) for node in all_node_positions)
+                min_y = min((node.get('position', {}).get('y', 0) or 0) for node in all_node_positions)
+                max_x = max((node.get('position', {}).get('x', 0) or 0) + 
+                          (node.get('position', {}).get('width', 400) or 400) for node in all_node_positions)
+                max_y = max((node.get('position', {}).get('y', 0) or 0) + 
+                          (node.get('position', {}).get('height', 300) or 300) for node in all_node_positions)
+                
+                # Calculate scale factors to fit everything on the page with margins
+                margin_mm = 20
+                available_width = page_width - 2 * margin_mm
+                available_height = page_height - 40*mm  # Account for header
+                
+                width_scale = available_width / (max_x - min_x) if max_x > min_x else 1
+                height_scale = available_height / (max_y - min_y) if max_y > min_y else 1
+                
+                # Use the smaller scale to ensure everything fits
+                scale = min(width_scale, height_scale) * 0.9  # Add some extra margin
+                
+                # Function to transform coordinates
+                def transform_coords(pos):
+                    x = ((pos.get('x', 0) or 0) - min_x) * scale + margin_mm
+                    y = page_height - (((pos.get('y', 0) or 0) - min_y) * scale + 40*mm)  # Flip Y and account for header
+                    width = (pos.get('width', 400) or 400) * scale
+                    height = (pos.get('height', 300) or 300) * scale
+                    return x, y - height, width, height  # Adjust y for PDF coordinates
+            else:
+                # For absolute positioning, use a simple scale factor
+                scale_factor = 0.15
+                
+                # Function to transform coordinates with absolute positioning
+                def transform_coords(pos):
+                    x = (pos.get('x', 0) or 0) * scale_factor
+                    y = page_height - (pos.get('y', 0) or 0) * scale_factor - (pos.get('height', 300) or 300) * scale_factor
+                    width = (pos.get('width', 400) or 400) * scale_factor
+                    height = (pos.get('height', 300) or 300) * scale_factor
+                    return x, y, width, height
+                    
+            # Process all nodes
+            for node in all_node_positions:
+                node_type = node.get('type')
+                node_id = node.get('id')
+                image_key = f"{node_type}_{node_id}"
+                
+                if image_key in image_files:
+                    try:
+                        image_path = image_files[image_key]
+                        
+                        # Get node position
+                        pos = node.get('position', {})
+                        x, y, width, height = transform_coords(pos)
+                        
+                        # Ensure dimensions are positive
+                        if width <= 0 or height <= 0:
+                            app.logger.warning(f"Invalid dimensions for {image_key}: {width}x{height}")
+                            continue
+                        
+                        # Draw the image
+                        c.drawImage(image_path, x, y, width, height)
+                        
+                        # Add a border around each element
+                        c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                        c.rect(x, y, width, height, fill=0)
+                        
+                    except Exception as e:
+                        app.logger.error(f"Error adding {image_key} to PDF: {str(e)}")
+                        app.logger.error(traceback.format_exc())
+        
+        # Add page numbers if multiple pages
+        if len(dashboard_ids) > 1:
+            for i in range(c.getPageNumber()):
+                c.showPage()
+                c.setFont("Helvetica", 8)
+                c.drawRightString(
+                    page_width - 10*mm, 
+                    10*mm, 
+                    f"Page {i+1} of {len(dashboard_ids)}"
+                )
+        
+        # Save PDF
+        c.save()
+        
+        # Clean up temporary images
+        for image_path in image_files.values():
+            try:
+                os.remove(image_path)
+            except:
+                pass
+        
+        try:
+            os.rmdir(temp_dir)
+        except:
+            pass
+        
+        # Record the export in the database
+        db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dashboard_exports (
+                export_id TEXT PRIMARY KEY,
+                user_id TEXT,
+                dashboard_ids TEXT,
+                export_name TEXT,
+                export_path TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Save export record
+        db_cursor.execute("""
+            INSERT INTO dashboard_exports (
+                export_id, user_id, dashboard_ids, export_name, export_path, created_at
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (export_id, user_id, json.dumps(dashboard_ids), export_name, export_path))
+        
+        conn.commit()
+        
+        # Return download URL
+        return jsonify({
+            'success': True,
+            'export_id': export_id,
+            'export_name': export_name,
+            'download_url': f'/download-export/{export_id}'
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error exporting dashboard with pre-rendered images: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+@app.route('/download-export/<export_id>', methods=['GET'])
+def download_export(export_id):
+    """Serve the exported PDF for download."""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT export_path, export_name FROM dashboard_exports WHERE export_id = ?", (export_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return "Export not found", 404
+            
+        export_path, export_name = result
+        
+        if not os.path.exists(export_path):
+            return "Export file not found", 404
+            
+        # Make sure filename is safe
+        download_name = secure_filename(export_name)
+        if not download_name:
+            download_name = f"dashboard_export_{export_id}.pdf"
+        else:
+            if not download_name.lower().endswith('.pdf'):
+                download_name += '.pdf'
+            
+        # Serve file for download
+        from flask import send_file
+        return send_file(
+            export_path,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=download_name
+        )
+        
+    except Exception as e:
+        app.logger.error(f"Error downloading export: {str(e)}")
+        return str(e), 500
+
+# New endpoint to get a list of dashboards for export selection
+@app.route('/get-dashboards/<user_id>', methods=['GET'])
+def get_dashboards(user_id):
+    """Get a list of dashboards for the user."""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        cursor = conn.cursor()
+        
+        # Create dashboards table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dashboards (
+                id TEXT PRIMARY KEY,
+                user_id TEXT,
+                name TEXT,
+                charts TEXT,
+                textboxes TEXT,
+                datatables TEXT,
+                statcards TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
+        """)
+        
+        # Get dashboards for the user
+        cursor.execute("""
+            SELECT id, name, created_at
+            FROM dashboards
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        """, (user_id,))
+        
+        dashboard_rows = cursor.fetchall()
+        dashboards = [{
+            'id': row[0],
+            'name': row[1],
+            'created_at': row[2]
+        } for row in dashboard_rows]
+        
+        conn.close()
+        
+        return jsonify({'dashboards': dashboards})
+        
+    except Exception as e:
+        app.logger.error(f"Error getting dashboards: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/save-dashboard/<user_id>/<dashboard_id>', methods=['POST'])
+def save_dashboard(user_id, dashboard_id):
+    """
+    Endpoint to capture and save the current dashboard state as images.
+    
+    This creates "photographs" of all charts in the dashboard and stores them
+    in the database for later export.
+    """
+    try:
+        data = request.json
+        dashboard_name = data.get('dashboard_name', 'Unnamed Dashboard')
+        charts = data.get('charts', [])
+        
+        app.logger.info(f"Saving dashboard {dashboard_id} with {len(charts)} charts")
+        
+        # Connect to database
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Results tracking
+        results = {
+            'success': 0,
+            'failed': 0,
+            'chart_ids': []
+        }
+        
+        # Process each chart
+        for chart in charts:
+            chart_id = chart.get('id')
+            
+            if not chart_id:
+                app.logger.warning(f"Chart missing ID, skipping")
+                results['failed'] += 1
+                continue
+                
+            # Check if the chart exists in graph_cache
+            c.execute("""
+                SELECT graph_id, html_content 
+                FROM graph_cache 
+                WHERE graph_id = ?
+            """, (chart_id,))
+            
+            result = c.fetchone()
+            if not result:
+                app.logger.warning(f"Chart {chart_id} not found in cache")
+                results['failed'] += 1
+                continue
+                
+            html_content = result[1]
+            
+            try:
+                # Generate image from HTML content using pyppeteer
+                # This has to be done asynchronously
+                image_data = asyncio.run(generate_chart_image(html_content))
+                
+                # Save the image to database
+                c.execute("""
+                    UPDATE graph_cache 
+                    SET dashboard_name = ?, image_blob = ?, isImageSuccess = 1
+                    WHERE graph_id = ?
+                """, (dashboard_name, image_data, chart_id))
+                
+                results['success'] += 1
+                results['chart_ids'].append(chart_id)
+                
+            except Exception as e:
+                app.logger.error(f"Error capturing chart {chart_id}: {str(e)}")
+                app.logger.error(traceback.format_exc())
+                results['failed'] += 1
+                
+                # Mark as failed in database
+                c.execute("""
+                    UPDATE graph_cache 
+                    SET dashboard_name = ?, isImageSuccess = 0
+                    WHERE graph_id = ?
+                """, (dashboard_name, chart_id))
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f"Dashboard saved: {results['success']} charts captured successfully, {results['failed']} failed",
+            'results': results
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error saving dashboard: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+            
+# nest_asyncio.apply()
+# async def generate_chart_image(html_content):
+
+#     """
+#     Generate an image from HTML content using pyppeteer without using signal handlers.
+    
+#     Args:
+#         html_content: The HTML content of the chart
+        
+#     Returns:
+#         Binary image data (PNG)
+#     """
+#     # Import here to avoid blocking the main thread
+#     import pyppeteer
+    
+#     # Full HTML template with necessary scripts
+#     full_html = f"""
+#     <!DOCTYPE html>
+#     <html>
+#     <head>
+#         <meta charset="utf-8">
+#         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+#         <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+#         <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2/dist/echarts-gl.min.js"></script>
+#         <style>
+#             body, html {{
+#                 margin: 0;
+#                 padding: 0;
+#                 overflow: hidden;
+#                 width: 1000px;
+#                 height: 600px;
+#             }}
+#             #chart-container {{
+#                 width: 100%;
+#                 height: 100%;
+#             }}
+#         </style>
+#     </head>
+#     <body>
+#         <div id="chart-container">
+#             {html_content}
+#         </div>
+#     </body>
+#     </html>
+#     """
+    
+#     # Launch browser with args that avoid signal handling issues
+#     browser = await pyppeteer.launch({
+#         'headless': True,
+#         'handleSIGINT': False,
+#         'handleSIGTERM': False,
+#         'handleSIGHUP': False,
+#         'args': ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+#     })
+    
+#     try:
+#         page = await browser.newPage()
+#         await page.setViewport({'width': 1000, 'height': 600})
+        
+#         # Set content and wait for chart to render
+#         await page.setContent(full_html)
+#         await page.waitForSelector('#chart-container')
+        
+#         # Wait for charts to render
+#         # await page.waitForFunction("""
+#         #     () => {
+#         #         const charts = document.querySelectorAll('.echarts-container');
+#         #         return charts.length > 0 && 
+#         #                Array.from(charts).every(chart => chart.__echarts__ && 
+#         #                !chart.__echarts__.isLoading());
+#         #     }
+#         # """, {'timeout': 5000})
+#         await page.waitForSelector('#chart-container div', {'timeout': 10000})
+#         # Additional wait to ensure animations complete
+#         await page.waitForTimeout(2000)
+        
+#         # Take screenshot
+#         screenshot = await page.screenshot({
+#             'type': 'png',
+#             'fullPage': False,
+#             'clip': {
+#                 'x': 0,
+#                 'y': 0,
+#                 'width': 1000,
+#                 'height': 600
+#             }
+#         })
+        
+#         return screenshot
+        
+#     finally:
+#         await browser.close()
+
+# async def generate_chart_image(html_content):
+#     """
+#     Generate an image from HTML content using pyppeteer with simplified approach.
+    
+#     Args:
+#         html_content: The HTML content of the chart
+        
+#     Returns:
+#         Binary image data (PNG)
+#     """
+#     # Import here to avoid blocking the main thread
+#     import pyppeteer
+    
+#     # Full HTML template with necessary scripts
+#     full_html = f"""
+#     <!DOCTYPE html>
+#     <html>
+#     <head>
+#         <meta charset="utf-8">
+#         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+#         <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+#         <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2/dist/echarts-gl.min.js"></script>
+#         <style>
+#             body, html {{
+#                 margin: 0;
+#                 padding: 0;
+#                 overflow: hidden;
+#                 width: 1000px;
+#                 height: 600px;
+#                 background-color: white;
+#             }}
+#             #chart-container {{
+#                 width: 100%;
+#                 height: 100%;
+#                 display: flex;
+#                 align-items: center;
+#                 justify-content: center;
+#                 background-color: white;
+#             }}
+#         </style>
+#     </head>
+#     <body>
+#         <div id="chart-container">
+#             {html_content}
+#         </div>
+#     </body>
+#     </html>
+#     """
+    
+#     # Launch browser with args that avoid signal handling issues
+#     browser = await pyppeteer.launch({
+#         'headless': True,
+#         'handleSIGINT': False,
+#         'handleSIGTERM': False,
+#         'handleSIGHUP': False,
+#         'args': [
+#             '--no-sandbox', 
+#             '--disable-setuid-sandbox', 
+#             '--disable-dev-shm-usage',
+#             '--disable-web-security',
+#             '--disable-features=IsolateOrigins,site-per-process'
+#         ]
+#     })
+    
+#     try:
+#         page = await browser.newPage()
+        
+#         # Increase default navigation timeout
+#         page.setDefaultNavigationTimeout(30000)
+        
+#         # Set viewport
+#         await page.setViewport({'width': 1000, 'height': 600})
+        
+#         # Load content
+#         await page.setContent(full_html)
+        
+#         # Use the correct method name for waiting in pyppeteer
+#         await page.waitFor(5000)  # waitFor is the correct method in pyppeteer
+        
+#         # Take screenshot
+#         screenshot = await page.screenshot({
+#             'type': 'png',
+#             'fullPage': False,
+#             'omitBackground': False
+#         })
+        
+#         return screenshot
+        
+#     except Exception as e:
+#         # Log the error but don't raise it
+#         import logging
+#         logging.error(f"Error during screenshot capture: {str(e)}")
+        
+#         # Return a basic fallback image
+#         from PIL import Image, ImageDraw, ImageFont
+#         import io
+        
+#         # Create a blank white image with error text
+#         img = Image.new('RGB', (1000, 600), color='white')
+#         d = ImageDraw.Draw(img)
+#         d.text((20, 20), f"Chart rendering failed: {str(e)}", fill=(255, 0, 0))
+        
+#         # Convert to bytes
+#         buffer = io.BytesIO()
+#         img.save(buffer, format='PNG')
+#         return buffer.getvalue()
+        
+#     finally:
+#         await browser.close()
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

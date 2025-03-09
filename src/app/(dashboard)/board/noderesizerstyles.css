@@ -103,3 +103,135 @@
     50% { opacity: 0.9; }
     100% { opacity: 0.7; }
   }
+
+/* Custom CSS for enhancing the resize handles with arrow indicators */
+
+/* Basic resize handle enhancements */
+.react-flow__resize-control.handle {
+  position: absolute;
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 7px !important;
+  background-color: var(--primary-color, #3b82f6) !important;
+  border: 2px solid white !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  opacity: 0.8;
+  z-index: 10;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+/* Hover state for handles */
+.react-flow__resize-control.handle:hover {
+  transform: scale(1.2);
+  opacity: 1;
+}
+
+/* Add arrow indicators to each handle direction */
+.react-flow__resize-control.handle::before,
+.react-flow__resize-control.handle::after {
+  content: '';
+  position: absolute;
+  background-color: white;
+  width: 6px;
+  height: 2px;
+  top: 50%;
+  left: 50%;
+}
+
+/* Arrow indicators for each direction */
+/* Top handle */
+.react-flow__resize-control.handle-top::before {
+  transform: translate(-50%, -50%) rotate(-45deg) translate(-2px, 0);
+}
+.react-flow__resize-control.handle-top::after {
+  transform: translate(-50%, -50%) rotate(45deg) translate(2px, 0);
+}
+
+/* Right handle */
+.react-flow__resize-control.handle-right::before {
+  transform: translate(-50%, -50%) rotate(-45deg) translate(0, -2px);
+}
+.react-flow__resize-control.handle-right::after {
+  transform: translate(-50%, -50%) rotate(45deg) translate(0, 2px);
+}
+
+/* Bottom handle */
+.react-flow__resize-control.handle-bottom::before {
+  transform: translate(-50%, -50%) rotate(45deg) translate(-2px, 0);
+}
+.react-flow__resize-control.handle-bottom::after {
+  transform: translate(-50%, -50%) rotate(-45deg) translate(2px, 0);
+}
+
+/* Left handle */
+.react-flow__resize-control.handle-left::before {
+  transform: translate(-50%, -50%) rotate(45deg) translate(0, -2px);
+}
+.react-flow__resize-control.handle-left::after {
+  transform: translate(-50%, -50%) rotate(-45deg) translate(0, 2px);
+}
+
+/* Corner handles get diagonal arrows */
+/* Top-right handle */
+.react-flow__resize-control.handle-top.handle-right::before {
+  transform: translate(-50%, -50%) rotate(-67.5deg) translate(-1px, -1px);
+}
+.react-flow__resize-control.handle-top.handle-right::after {
+  transform: translate(-50%, -50%) rotate(22.5deg) translate(1px, 1px);
+}
+
+/* Bottom-right handle */
+.react-flow__resize-control.handle-bottom.handle-right::before {
+  transform: translate(-50%, -50%) rotate(-22.5deg) translate(-1px, 1px);
+}
+.react-flow__resize-control.handle-bottom.handle-right::after {
+  transform: translate(-50%, -50%) rotate(67.5deg) translate(1px, -1px);
+}
+
+/* Bottom-left handle */
+.react-flow__resize-control.handle-bottom.handle-left::before {
+  transform: translate(-50%, -50%) rotate(22.5deg) translate(-1px, 1px);
+}
+.react-flow__resize-control.handle-bottom.handle-left::after {
+  transform: translate(-50%, -50%) rotate(112.5deg) translate(1px, 1px);
+}
+
+/* Top-left handle */
+.react-flow__resize-control.handle-top.handle-left::before {
+  transform: translate(-50%, -50%) rotate(67.5deg) translate(-1px, -1px);
+}
+.react-flow__resize-control.handle-top.handle-left::after {
+  transform: translate(-50%, -50%) rotate(157.5deg) translate(1px, -1px);
+}
+
+/* Selection outline enhancement */
+.react-flow__node.selected {
+  outline: 3px solid var(--primary-color, #3b82f6) !important;
+  outline-offset: 2px !important;
+  z-index: 10 !important;
+}
+
+/* Add animation to handles */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.node-first-selected .react-flow__resize-control.handle {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Add resize outline during resizing */
+.node-resizing {
+  outline: 3px dashed var(--primary-color, #3b82f6) !important;
+  outline-offset: 2px !important;
+  z-index: 10 !important;
+}
+
+.node-dragging {
+  outline: 3px dashed var(--primary-color, #3b82f6) !important;
+  outline-offset: 2px !important;
+  opacity: 0.8;
+  z-index: 10 !important;
+}

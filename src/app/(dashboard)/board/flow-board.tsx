@@ -10,10 +10,9 @@ import {
   NodeTypes,
   ReactFlowProvider,
   Panel,
-NodeMouseHandler,
-NodeProps as XYNodeProps,
-OnNodeDrag,
-
+  NodeMouseHandler,
+  NodeProps as XYNodeProps,
+  OnNodeDrag,
 } from '@xyflow/react';
 
 import '@xyflow/react/dist/style.css';
@@ -23,10 +22,10 @@ import { useTheme } from './theme-provider';
 import TextBoxNode from './TextBoxNode';
 import DataTableNode from './dataTableNode';
 import StatCardNode from './statCardNode';
+import ChartNode from './chartNode'; // We'll create this component
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import './noderesizerstyles.css';
-type NodeDragHandler = (event: React.MouseEvent<Element, MouseEvent>, node: Node) => void;
 
 // CSS for enhanced drag and resize feedback
 const additionalStyles = `
@@ -62,21 +61,6 @@ const additionalStyles = `
   pointer-events: none;
 }
 `;
-
-interface ChartNodeData {
-  id: string;
-  type: string;
-  title: string;
-  description?: string;
-  graphUrl: string;
-  position: { x: number; y: number; width?: number; height?: number; };
-  onRemove: (id: string) => void;
-  isMaximized: boolean;
-  onMaximizeToggle: (id: string) => void;
-  onDescriptionChange: (id: string, description: string) => void;
-  onTitleChange: (id: string, title: string) => void;
-  onPositionChange: (id: string, position: { x: number; y: number; width?: number; height?: number; }) => void;
-}
 
 interface Position {
   x: number;
@@ -130,240 +114,6 @@ interface FlowBoardProps {
   maximizedChart: string | null;
   onAreaClick: (event: React.MouseEvent<HTMLDivElement>) => void;
 }
-
-
-interface ChartNodeProps {
-  data: ChartNodeData;
-  id: string;
-  selected: boolean;
-}
-
-// Custom node component for charts with optimized rendering
-const ChartNode: React.FC<ChartNodeProps> = ({ data, selected, id }) => {
-  const { boardTheme } = useTheme();
-  const width = data.position?.width || 800;
-  const height = data.position?.height || 600;
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [title, setTitle] = useState(data.title);
-  const titleInputRef = useRef<HTMLInputElement>(null);
-  const [isMoving, setIsMoving] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
-  const [shouldRenderContent, setShouldRenderContent] = useState(true);
-  const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Clear timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (renderTimeoutRef.current) {
-        clearTimeout(renderTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Update based on movement state
-  useEffect(() => {
-    if (isMoving || isResizing) {
-      setShouldRenderContent(false);
-    } else {
-      renderTimeoutRef.current = setTimeout(() => {
-        setShouldRenderContent(true);
-      }, 100);
-    }
-  }, [isMoving, isResizing]);
-
-  
-  useEffect(() => {
-    if (isEditingTitle && titleInputRef.current) {
-      titleInputRef.current.focus();
-    }
-  }, [isEditingTitle]);
-
-  useEffect(() => {
-    setTitle(data.title);
-  }, [data.title]);
-
-  const handleTitleSave = () => {
-    setIsEditingTitle(false);
-    data.onTitleChange(data.id, title);
-  };
-
-  // Detect movement and resizing
-  useEffect(() => {
-    const node = document.querySelector(`[data-id="${id}"]`);
-    
-    if (node) {
-      // Create mutation observer to watch for style changes
-      const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-          if (mutation.attributeName === 'style') {
-            const style = (mutation.target as HTMLElement).getAttribute('style') || '';
-            
-            // Check if the change is a movement
-            if (style.includes('transform') && !isMoving) {
-              setIsMoving(true);
-              setShouldRenderContent(false);
-              node.classList.add('node-dragging');
-            }
-            
-            // Check if the change is a resize
-            if ((style.includes('width') || style.includes('height')) && !isResizing) {
-              setIsResizing(true);
-              setShouldRenderContent(false);
-              node.classList.add('node-resizing');
-            }
-          }
-        });
-      });
-      
-      // Start observing
-      observer.observe(node, { attributes: true, attributeFilter: ['style'] });
-      
-      // Detect when movement and resizing stop
-      const handleMouseUp = () => {
-        if (isMoving) {
-          setIsMoving(false);
-          node.classList.remove('node-dragging');
-          renderTimeoutRef.current = setTimeout(() => {
-            setShouldRenderContent(true);
-          }, 100);
-        }
-        
-        if (isResizing) {
-          setIsResizing(false);
-          node.classList.remove('node-resizing');
-          renderTimeoutRef.current = setTimeout(() => {
-            setShouldRenderContent(true);
-          }, 100);
-        }
-      };
-      
-      document.addEventListener('mouseup', handleMouseUp);
-      
-      return () => {
-        observer.disconnect();
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [id, isMoving, isResizing]);
-
-  return (
-    <Card 
-      className={`shadow-lg transition-colors duration-200 overflow-hidden resize ${selected ? 'selected' : ''} ${isMoving ? 'node-dragging' : ''} ${isResizing ? 'node-resizing' : ''}`}
-      style={{ 
-        width: `${width}px`, 
-        height: `${height}px`,
-        backgroundColor: boardTheme.nodeBackground,
-        color: boardTheme.text,
-        boxShadow: `0 4px 20px rgba(0, 0, 0, 0.1)`,
-        borderColor: boardTheme.primary,
-        borderWidth: '2px',
-        borderRadius: '12px'
-      }}
-    >
-      <CardHeader className="cursor-move p-3 flex flex-col space-y-1 bg-gradient-to-r from-transparent to-blue-50/30 dark:to-blue-900/10">
-        <div className="flex items-center justify-between">
-          {isEditingTitle ? (
-            <Input
-              ref={titleInputRef}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleTitleSave()}
-              className="font-semibold text-lg flex-grow mr-2"
-            />
-          ) : (
-            <CardTitle className="text-lg font-semibold truncate mr-2">{data.title}</CardTitle>
-          )}
-          <div className="flex items-center space-x-1">
-            {isEditingTitle ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-full hover:bg-blue-50/80 dark:hover:bg-blue-900/20"
-                style={{ color: boardTheme.text }}
-                onClick={handleTitleSave}
-              >
-                <Check className="h-3.5 w-3.5" />
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-full hover:bg-blue-50/80 dark:hover:bg-blue-900/20"
-                style={{ color: boardTheme.text }}
-                onClick={() => setIsEditingTitle(true)}
-              >
-                <PenSquare className="h-3.5 w-3.5" />
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 rounded-full hover:bg-blue-50/80 dark:hover:bg-blue-900/20"
-              style={{ color: boardTheme.text }}
-              onClick={() => data.onDescriptionChange(data.id, data.description || '')}
-            >
-              <Edit2 className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 rounded-full hover:bg-blue-50/80 dark:hover:bg-blue-900/20"
-              style={{ color: boardTheme.text }}
-              onClick={() => data.onMaximizeToggle(data.id)}
-            >
-              {data.isMaximized ? 
-                <Minimize2 className="h-3.5 w-3.5" /> : 
-                <Maximize2 className="h-3.5 w-3.5" />
-              }
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
-              style={{ color: boardTheme.text }}
-              onClick={() => data.onRemove(data.id)}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-        {data.description && (
-          <p className="text-xs opacity-70 truncate" style={{ color: boardTheme.secondary }}>{data.description}</p>
-        )}
-      </CardHeader>
-      <CardContent className="p-0 h-[calc(100%-60px)] relative">
-        {/* Overlay during movement/resizing to provide visual feedback */}
-        {(isMoving || isResizing) && (
-          <div className="absolute inset-0 bg-white/50 dark:bg-black/30 flex items-center justify-center z-10 transition-opacity duration-150">
-            <div className="px-4 py-2 bg-blue-100 dark:bg-blue-900 rounded-md text-blue-700 dark:text-blue-100 font-medium animate-pulse">
-              {isMoving ? 'Moving...' : 'Resizing...'}
-            </div>
-          </div>
-        )}
-        
-        {/* Only render the iframe when not moving/resizing for better performance */}
-        {shouldRenderContent ? (
-          <iframe
-            src={`${data.graphUrl}?hideTitle=true`}
-            className="w-full h-full"
-            style={{ 
-              backgroundColor: boardTheme.background,
-              border: 'none'
-            }}
-            title={data.title}
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center opacity-30">
-            <div className="text-sm text-center p-4 select-none">
-              Chart content will appear when movement stops
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
 
 const FlowBoard: React.FC<FlowBoardProps> = ({
   charts,
@@ -441,6 +191,7 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
         content: textBox.content,
         onRemove: onTextBoxRemove,
         onContentChange: onTextBoxContentChange,
+        onPositionChange: onTextBoxPositionChange,
       },
       draggable: true,
       selectable: true,
@@ -463,6 +214,7 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
         data: table.data,
         title: table.title,
         onRemove: onDataTableRemove,
+        onPositionChange: onDataTablePositionChange,
       },
       draggable: true,
       selectable: true,
@@ -486,6 +238,7 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
         title: card.title,
         data: card.data,
         onRemove: onStatCardRemove,
+        onPositionChange: onStatCardPositionChange,
       },
       draggable: true,
       selectable: true,
@@ -505,8 +258,11 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
     onChartPositionChange,
     onTextBoxRemove,
     onTextBoxContentChange,
+    onTextBoxPositionChange,
     onDataTableRemove,
+    onDataTablePositionChange,
     onStatCardRemove,
+    onStatCardPositionChange,
   ]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(createNodes());
@@ -523,8 +279,7 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
     document.body.classList.add('node-drag-active');
   }, []);
   
-
-  const onNodeDragStop: NodeDragHandler = useCallback((event, node) => {
+  const onNodeDragStop: NodeMouseHandler = useCallback((event, node) => {
     // Remove global drag class
     document.body.classList.remove('node-drag-active');
   
@@ -594,6 +349,22 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
       onAreaClick(event as React.MouseEvent<HTMLDivElement>);
     }
   }, [onAreaClick]);
+
+  // Add a style element to inject our additional styles
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.innerHTML = additionalStyles;
+    document.head.appendChild(styleElement);
+    
+    // Set CSS variables for theming the resize handles
+    document.documentElement.style.setProperty('--primary-color', theme.primary);
+    document.documentElement.style.setProperty('--background-color', theme.background);
+    document.documentElement.style.setProperty('--text-color', theme.text);
+
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
 
   return (
     <ReactFlowProvider>

@@ -48,16 +48,16 @@ const createBasicChartOptions = (type: string, data: any[], columns: string[]) =
       }
     };
   };
-  const createTextBox = (options: any = {}) => {
-    return {
-      type: 'custom',
-      componentType: 'TextBox',
-      data: {
-        text: options.text || '',
-        position: options.position || { x: 0, y: 0 }
-      }
-    };
-  };
+  // const createTextBox = (options: any = {}) => {
+  //   return {
+  //     type: 'custom',
+  //     componentType: 'TextBox',
+  //     data: {
+  //       text: options.text || '',
+  //       position: options.position || { x: 0, y: 0 }
+  //     }
+  //   };
+  // };
   // Line Chart
   const createLineChart = (data: any[], columns: string[]) => {
     return createBasicChartOptions('line', data, columns);
@@ -956,10 +956,10 @@ const createBasicChartOptions = (type: string, data: any[], columns: string[]) =
   createKLine,
   createRadar,
   createTreeMap,
-  create3DSurfaceChart,     // Fixed: Export with correct name
-  create3DBarChart,         // Fixed: Export with correct name
-  create3DLineChart,        // Fixed: Export with correct name
-  create3DScatterChart,     // Fixed: Export with correct name
+  create3DSurfaceChart,     
+  create3DBarChart,         
+  create3DLineChart,        
+  create3DScatterChart,     
   createMapChart,
   createGraph,
   createLiquid,

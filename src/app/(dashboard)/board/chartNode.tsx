@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { NodeProps, NodeResizeControl, NodeResizer } from '@xyflow/react';
+import { NodeProps, NodeResizer } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { X, Maximize2, Minimize2, Edit2, PenSquare, Check } from 'lucide-react';
@@ -30,13 +30,32 @@ interface ChartNodeData extends Record<string, unknown> {
 
 // Define your full node type with the required properties
 interface ChartNodeFull {
-id: string;
+  id: string;
   position: Position;
   data: ChartNodeData;
   selected?: boolean;
 }
 
 const ChartNode = ({ id, data, selected }: NodeProps<ChartNodeFull>) => {
+
+  // Track first selection for handle animations
+  const firstSelectedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    // Add animation class on first selection
+    if (selected && !firstSelectedRef.current) {
+      firstSelectedRef.current = true;
+      const nodeElement = document.querySelector(`[data-id="${id}"]`);
+      if (nodeElement) {
+        nodeElement.classList.add('node-first-selected');
+        // Remove class after animation completes
+        setTimeout(() => {
+          nodeElement?.classList.remove('node-first-selected');
+        }, 1500);
+      }
+    }
+  }, [selected, id]);
+  
   const { boardTheme } = useTheme();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(data.title);
@@ -132,13 +151,12 @@ const ChartNode = ({ id, data, selected }: NodeProps<ChartNodeFull>) => {
     }, 100);
   }, [data, id]);
 
-
   // Disable resizing when maximized
   const isResizable = !data.isMaximized;
 
   return (
     <>
-      {/* Standard NodeResizer that appears only when selected */}
+      {/* Enhanced NodeResizer with larger outline and handles */}
       {isResizable && selected && (
         <NodeResizer
           minWidth={400}
@@ -149,8 +167,20 @@ const ChartNode = ({ id, data, selected }: NodeProps<ChartNodeFull>) => {
           onResizeStart={onResizeStart}
           onResizeEnd={onResizeEnd}
           color={boardTheme.primary}
-          handleStyle={{ width: 8, height: 8, borderRadius: 4 }}
-          lineStyle={{ borderWidth: 1 }}
+          handleStyle={{ 
+            width: 14, 
+            height: 14, 
+            borderRadius: 7,
+            backgroundColor: boardTheme.primary,
+            borderColor: '#ffffff',
+            borderWidth: 2,
+            opacity: 0.8
+          }}
+          lineStyle={{ 
+            borderWidth: 3, 
+            borderColor: boardTheme.primary, 
+            opacity: 0.5 
+          }}
         />
       )}
 

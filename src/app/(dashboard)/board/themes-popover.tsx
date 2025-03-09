@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Check } from 'lucide-react';
 
 export const ThemeSelector: React.FC = () => {
-  const { themeName, setThemeName } = useTheme();
+  const { boardThemeName:themeName, setBoardThemeName:setThemeName } = useTheme();
 
   return (
     <Popover>
