@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect } from 'react';
-import ReactFlow, {
+import React, { useCallback, useEffect, useState, useRef } from 'react';
+import {
+  ReactFlow,
   Background,
   Controls,
   MiniMap,
@@ -8,73 +9,65 @@ import ReactFlow, {
   Node,
   NodeTypes,
   ReactFlowProvider,
-  NodeProps
-} from 'reactflow';
-import 'reactflow/dist/style.css';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+  Panel,
+  NodeMouseHandler,
+  NodeProps as XYNodeProps,
+  OnNodeDrag,
+} from '@xyflow/react';
+
+import '@xyflow/react/dist/style.css';
 import { Button } from "@/components/ui/button";
-import { X, Maximize2, Minimize2, Edit2 } from 'lucide-react';
+import { X, Maximize2, Minimize2, Edit2, PenSquare, Check } from 'lucide-react';
 import { useTheme } from './theme-provider';
 import TextBoxNode from './TextBoxNode';
 import DataTableNode from './dataTableNode';
 import StatCardNode from './statCardNode';
+import ChartNode from './chartNode'; // We'll create this component
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import './noderesizerstyles.css';
 
-interface ChartNodeData {
-  id: string;
-  type: string;
-  title: string;
-  description?: string;
-  graphUrl: string;
-  position: { x: number; y: number; width?: number; height?: number; };
-  onRemove: (id: string) => void;
-  isMaximized: boolean;
-  onMaximizeToggle: (id: string) => void;
-  onDescriptionChange: (id: string, description: string) => void;
+// CSS for enhanced drag and resize feedback
+const additionalStyles = `
+.node-dragging {
+  opacity: 0.8;
+  cursor: grabbing !important;
 }
 
-interface BaseNodeData {
-  id: string;
-  nodeType: 'chart' | 'textbox';  // This discriminator helps TypeScript know which type we're dealing with
-  position: { x: number; y: number };
-  onRemove: (id: string) => void;
+.react-flow__node {
+  transition: transform 0.1s ease, width 0.1s ease, height 0.1s ease;
 }
 
-// Chart-specific properties
-interface ChartSpecificData extends BaseNodeData {
-  nodeType: 'chart';
-  title: string;
-  description?: string;
-  graphUrl: string;
+.react-flow__node.selected {
+  outline: 2px solid #3b82f6 !important;
+  z-index: 10 !important;
+}
+
+.node-dragging iframe {
+  pointer-events: none !important;
+}
+
+.chart-moving-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: none;
+}
+`;
+
+interface Position {
+  x: number;
+  y: number;
   width?: number;
   height?: number;
-  isMaximized: boolean;
-  onMaximizeToggle: (id: string) => void;
-  onDescriptionChange: (id: string, description: string) => void;
 }
-
-// Textbox-specific properties
-interface TextBoxSpecificData extends BaseNodeData {
-  nodeType: 'textbox';
-  content: string;
-  onContentChange: (id: string, content: string) => void;
-}
-
-// This union type represents all possible node data types
-type FlowNodeData = ChartSpecificData | TextBoxSpecificData;
-
-// Type for a node in our flow
-type FlowNode = Node<FlowNodeData>;
-
-interface TextBoxNodeData {
-  id: string;
-  type: 'textbox';
-  content: string;
-  position: { x: number; y: number };
-  onContentChange: (id: string, content: string) => void;
-  onRemove: (id: string) => void;
-}
-
-type CustomNode = Node<ChartNodeData> | Node<TextBoxNodeData>;
 
 interface FlowBoardProps {
   charts: Array<{
@@ -83,122 +76,44 @@ interface FlowBoardProps {
     title: string;
     description?: string;
     graphUrl: string;
-    position: { x: number; y: number; width?: number; height?: number; };
+    position: Position;
   }>;
   textBoxes: Array<{
     id: string;
     type: 'textbox';
     content: string;
-    position: { x: number; y: number };
+    position: Position;
   }>;
   dataTables: Array<{
     id: string;
     columns: string[];
     data: any[];
     title: string;
-    position: { x: number; y: number };
+    position: Position;
   }>;
   statCards: Array<{
     id: string;
     column: string;
     statType: string;
     title: string;
-    position: { x: number; y: number };
+    position: Position;
     data: any[];
   }>;
-  onChartPositionChange: (id: string, position: { x: number; y: number }) => void;
+  onChartPositionChange: (id: string, position: Position) => void;
   onChartRemove: (id: string) => void;
   onChartMaximize: (id: string) => void;
   onChartDescriptionChange: (id: string, description: string) => void;
-  onTextBoxPositionChange: (id: string, position: { x: number; y: number }) => void;
+  onChartTitleChange: (id: string, title: string) => void;
+  onTextBoxPositionChange: (id: string, position: Position) => void;
   onTextBoxContentChange: (id: string, content: string) => void;
   onTextBoxRemove: (id: string) => void;
-  onDataTablePositionChange: (id: string, position: { x: number; y: number }) => void;
+  onDataTablePositionChange: (id: string, position: Position) => void;
   onDataTableRemove: (id: string) => void;
-  onStatCardPositionChange: (id: string, position: { x: number; y: number }) => void;
+  onStatCardPositionChange: (id: string, position: Position) => void;
   onStatCardRemove: (id: string) => void;
   maximizedChart: string | null;
   onAreaClick: (event: React.MouseEvent<HTMLDivElement>) => void;
 }
-
-
-// Custom node component that directly renders the chart content
-// Update the ChartNode component with proper typing
-const ChartNode: React.FC<NodeProps<ChartNodeData>> = ({ data }) => {
-  const { theme } = useTheme();
-  const width = data.position?.width || 800;
-  const height = data.position?.height || 600;
-
-  return (
-    <Card 
-      className="shadow-lg transition-colors duration-200"
-      style={{ 
-        width: `${width}px`, 
-        height: `${height}px`,
-        backgroundColor: theme.nodeBackground,
-        color: theme.text,
-        boxShadow: theme.nodeShadow,
-        borderColor: theme.border
-      }}
-    >
-      <CardHeader className="cursor-move p-3 flex flex-col space-y-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold">{data.title}</CardTitle>
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 hover:bg-opacity-10"
-              style={{ color: theme.text, backgroundColor: 'transparent' }}
-              onClick={() => data.onDescriptionChange(data.id, data.description || '')}
-            >
-              <Edit2 className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 hover:bg-opacity-10"
-              style={{ color: theme.text, backgroundColor: 'transparent' }}
-              onClick={() => data.onMaximizeToggle(data.id)}
-            >
-              {data.isMaximized ? 
-                <Minimize2 className="h-4 w-4" /> : 
-                <Maximize2 className="h-4 w-4" />
-              }
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 hover:bg-opacity-10"
-              style={{ color: theme.text, backgroundColor: 'transparent' }}
-              onClick={() => data.onRemove(data.id)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        {data.description && (
-          <p className="text-sm" style={{ color: theme.secondary }}>{data.description}</p>
-        )}
-      </CardHeader>
-      <CardContent className="p-0 h-[calc(100%-90px)]">
-        <iframe
-          src={data.graphUrl}
-          className="w-full h-full rounded-b-lg"
-          style={{ backgroundColor: theme.background }}
-          title={data.title}
-        />
-      </CardContent>
-    </Card>
-  );
-};
-
-const nodeTypes: NodeTypes = {
-  chartNode: ChartNode,
-  textBoxNode: TextBoxNode,
-  dataTableNode: DataTableNode,
-  statCardNode: StatCardNode,
-};
 
 const FlowBoard: React.FC<FlowBoardProps> = ({
   charts,
@@ -209,6 +124,7 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
   onChartRemove,
   onChartMaximize,
   onChartDescriptionChange,
+  onChartTitleChange,
   onTextBoxPositionChange,
   onTextBoxContentChange,
   onTextBoxRemove,
@@ -219,129 +135,236 @@ const FlowBoard: React.FC<FlowBoardProps> = ({
   maximizedChart,
   onAreaClick,
 }) => {
-    const {theme} = useTheme();
-  // Convert charts to React Flow nodes
-// Update the createNodes function with better typing
-const createNodes = useCallback((): Node[] => {
-  // Create chart nodes
-  const chartNodes: Node[] = charts.map((chart) => ({
-    id: chart.id,
-    type: 'chartNode',
-    position: chart.position,
-    data: {
+  const { boardTheme: theme } = useTheme();
+  
+  // Define node types with our resizable chart node
+  const nodeTypes = {
+    chartNode: ChartNode as unknown as React.ComponentType<XYNodeProps>,
+    textBoxNode: TextBoxNode as unknown as React.ComponentType<XYNodeProps>,
+    dataTableNode: DataTableNode as unknown as React.ComponentType<XYNodeProps>,
+    statCardNode: StatCardNode as unknown as React.ComponentType<XYNodeProps>
+  } as NodeTypes;
+  
+  // Create nodes from the props with optimized approach
+  const createNodes = useCallback((): Node[] => {
+    // Chart nodes with added position change handler
+    const chartNodes: Node[] = charts.map((chart) => ({
       id: chart.id,
-      nodeType: 'chart',
-      position: chart.position,
-      title: chart.title,
-      description: chart.description,
-      graphUrl: chart.graphUrl,
-      width: chart.position.width,
-      height: chart.position.height,
-      onRemove: onChartRemove,
-      isMaximized: maximizedChart === chart.id,
-      onMaximizeToggle: onChartMaximize,
-      onDescriptionChange: onChartDescriptionChange,
-    },
-    draggable: maximizedChart !== chart.id,
-  }));
+      type: 'chartNode',
+      position: { x: chart.position.x, y: chart.position.y },
+      style: { 
+        width: chart.position.width || 800, 
+        height: chart.position.height || 600 
+      },
+      data: {
+        id: chart.id,
+        nodeType: 'chart',
+        position: chart.position,
+        title: chart.title,
+        description: chart.description,
+        graphUrl: chart.graphUrl,
+        width: chart.position.width,
+        height: chart.position.height,
+        onRemove: onChartRemove,
+        isMaximized: maximizedChart === chart.id,
+        onMaximizeToggle: onChartMaximize,
+        onDescriptionChange: onChartDescriptionChange,
+        onTitleChange: onChartTitleChange,
+        onPositionChange: onChartPositionChange, // Add the position change handler
+      },
+      draggable: maximizedChart !== chart.id,
+      selectable: maximizedChart !== chart.id,
+    }));
 
-
-  // Create textbox nodes with the new typing
-  const textBoxNodes: Node[] = textBoxes.map((textBox) => ({
-    id: textBox.id,
-    type: 'textBoxNode',
-    position: textBox.position,
-    data: {
+    const textBoxNodes: Node[] = textBoxes.map((textBox) => ({
       id: textBox.id,
-      nodeType: 'textbox',
-      position: textBox.position,
-      content: textBox.content,
-      onRemove: onTextBoxRemove,
-      onContentChange: onTextBoxContentChange,
-    },
-    draggable: true,
-  }));
-  const dataTableNodes: Node[] = dataTables.map((table) => ({
-    id: table.id,
-    type: 'dataTableNode',
-    position: table.position,
-    data: {
+      type: 'textBoxNode',
+      position: { x: textBox.position.x, y: textBox.position.y },
+      style: textBox.position.width ? { 
+        width: textBox.position.width, 
+        height: textBox.position.height || 150 
+      } : undefined,
+      data: {
+        id: textBox.id,
+        nodeType: 'textbox',
+        position: textBox.position,
+        content: textBox.content,
+        onRemove: onTextBoxRemove,
+        onContentChange: onTextBoxContentChange,
+        onPositionChange: onTextBoxPositionChange,
+      },
+      draggable: true,
+      selectable: true,
+    }));
+    
+    // DataTable nodes
+    const dataTableNodes: Node[] = dataTables.map((table) => ({
       id: table.id,
-      nodeType: 'datatable',
-      position: table.position,
-      columns: table.columns,
-      data: table.data,
-      title: table.title,
-      onRemove: onDataTableRemove,
-    },
-    draggable: true,
-  }));
-  // Create stat card nodes
-  const statCardNodes: Node[] = statCards.map((card) => ({
-    id: card.id,
-    type: 'statCardNode',
-    position: card.position,
-    data: {
+      type: 'dataTableNode',
+      position: { x: table.position.x, y: table.position.y },
+      style: table.position.width ? { 
+        width: table.position.width, 
+        height: table.position.height || 400 
+      } : undefined,
+      data: {
+        id: table.id,
+        nodeType: 'datatable',
+        position: table.position,
+        columns: table.columns,
+        data: table.data,
+        title: table.title,
+        onRemove: onDataTableRemove,
+        onPositionChange: onDataTablePositionChange,
+      },
+      draggable: true,
+      selectable: true,
+    }));
+    
+    // StatCard nodes
+    const statCardNodes: Node[] = statCards.map((card) => ({
       id: card.id,
-      nodeType: 'statcard',
-      position: card.position,
-      column: card.column,
-      statType: card.statType,
-      title: card.title,
-      data: card.data,
-      onRemove: onStatCardRemove,
-    },
-    draggable: true,
-  }));
+      type: 'statCardNode',
+      position: { x: card.position.x, y: card.position.y },
+      style: card.position.width ? { 
+        width: card.position.width, 
+        height: card.position.height || 180 
+      } : undefined,
+      data: {
+        id: card.id,
+        nodeType: 'statcard',
+        position: card.position,
+        column: card.column,
+        statType: card.statType,
+        title: card.title,
+        data: card.data,
+        onRemove: onStatCardRemove,
+        onPositionChange: onStatCardPositionChange,
+      },
+      draggable: true,
+      selectable: true,
+    }));
 
+    return [...chartNodes, ...textBoxNodes, ...dataTableNodes, ...statCardNodes];
+  }, [
+    charts,
+    textBoxes,
+    dataTables,
+    statCards,
+    maximizedChart,
+    onChartRemove,
+    onChartMaximize,
+    onChartDescriptionChange,
+    onChartTitleChange,
+    onChartPositionChange,
+    onTextBoxRemove,
+    onTextBoxContentChange,
+    onTextBoxPositionChange,
+    onDataTableRemove,
+    onDataTablePositionChange,
+    onStatCardRemove,
+    onStatCardPositionChange,
+  ]);
 
-  return [...chartNodes, ...textBoxNodes, ...dataTableNodes, ...statCardNodes];
-},  [
-  charts,
-  textBoxes,
-  dataTables,
-  statCards,
-  maximizedChart,
-  onChartRemove,
-  onChartMaximize,
-  onChartDescriptionChange,
-  onTextBoxRemove,
-  onTextBoxContentChange,
-  onDataTableRemove,
-  onStatCardRemove,
-]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(createNodes());
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-const [nodes, setNodes, onNodesChange] = useNodesState(createNodes());
-const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  // Update nodes when props change
+  useEffect(() => {
+    setNodes(createNodes());
+  }, [charts, textBoxes, dataTables, statCards, createNodes, setNodes]);
 
-useEffect(() => {
-  setNodes(createNodes());
-}, [charts, textBoxes, dataTables, statCards, createNodes, setNodes]);
-
+  // Handle node dragging
+  const onNodeDragStart: OnNodeDrag = useCallback(() => {
+    // Use a class-based approach for better performance
+    document.body.classList.add('node-drag-active');
+  }, []);
   
-const onNodeDragStop = useCallback((event: React.MouseEvent, node: Node) => {
-  const position = { x: node.position.x, y: node.position.y };
+  const onNodeDragStop: NodeMouseHandler = useCallback((event, node) => {
+    // Remove global drag class
+    document.body.classList.remove('node-drag-active');
   
-  switch (node.data.nodeType) {
-    case 'chart':
-      onChartPositionChange(node.id, position);
-      break;
-    case 'textbox':
-      onTextBoxPositionChange(node.id, position);
-      break;
-    case 'datatable':
-      onDataTablePositionChange(node.id, position);
-      break;
-    case 'statcard':
-      onStatCardPositionChange(node.id, position);
-      break;
-  }
-}, [
-  onChartPositionChange,
-  onTextBoxPositionChange,
-  onDataTablePositionChange,
-  onStatCardPositionChange,
-]);
+    // Get computed style for dimensions
+    let width: number | undefined = undefined;
+    let height: number | undefined = undefined;
+  
+    const nodeElement = document.querySelector(`[data-id="${node.id}"]`);
+  
+    if (nodeElement) {
+      const computedStyle = window.getComputedStyle(nodeElement);
+      width = parseInt(computedStyle.width);
+      height = parseInt(computedStyle.height);
+  
+      if (isNaN(width)) width = undefined;
+      if (isNaN(height)) height = undefined;
+    } else if (node.style) {
+      if (typeof node.style.width === 'number') {
+        width = node.style.width;
+      } else if (typeof node.style.width === 'string') {
+        width = parseInt(node.style.width);
+        if (isNaN(width)) width = undefined;
+      }
+  
+      if (typeof node.style.height === 'number') {
+        height = node.style.height;
+      } else if (typeof node.style.height === 'string') {
+        height = parseInt(node.style.height);
+        if (isNaN(height)) height = undefined;
+      }
+    }
+  
+    // Update position data
+    const position = {
+      x: node.position.x,
+      y: node.position.y,
+      width,
+      height,
+    };
+  
+    // Call appropriate handler based on node type
+    switch (node.data.nodeType) {
+      case 'chart':
+        onChartPositionChange(node.id, position);
+        break;
+      case 'textbox':
+        onTextBoxPositionChange(node.id, position);
+        break;
+      case 'datatable':
+        onDataTablePositionChange(node.id, position);
+        break;
+      case 'statcard':
+        onStatCardPositionChange(node.id, position);
+        break;
+      default:
+        break;
+    }
+  }, [
+    onChartPositionChange,
+    onTextBoxPositionChange,
+    onDataTablePositionChange,
+    onStatCardPositionChange,
+  ]);
+
+  const handlePaneClick = useCallback((event: React.MouseEvent) => {
+    if (!(event.target as HTMLElement).closest('.react-flow__node')) {
+      onAreaClick(event as React.MouseEvent<HTMLDivElement>);
+    }
+  }, [onAreaClick]);
+
+  // Add a style element to inject our additional styles
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.innerHTML = additionalStyles;
+    document.head.appendChild(styleElement);
+    
+    // Set CSS variables for theming the resize handles
+    document.documentElement.style.setProperty('--primary-color', theme.primary);
+    document.documentElement.style.setProperty('--background-color', theme.background);
+    document.documentElement.style.setProperty('--text-color', theme.text);
+
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
 
   return (
     <ReactFlowProvider>
@@ -352,25 +375,24 @@ const onNodeDragStop = useCallback((event: React.MouseEvent, node: Node) => {
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
-          onClick={(event: React.MouseEvent) => {
-            if (!(event.target as HTMLElement).closest('.react-flow__node')) {
-              onAreaClick(event as unknown as React.MouseEvent<HTMLDivElement>);
-            }
-          }}
+          onClick={handlePaneClick}
           fitView
           minZoom={0.1}
           maxZoom={5}
           snapToGrid
           snapGrid={[16, 16]}
           style={{ backgroundColor: theme.background }}
+          nodesDraggable={!maximizedChart}
+          proOptions={{ hideAttribution: true }}
+          deleteKeyCode={null} // Disable default delete key handling
         >
           <Background 
             color={theme.backgroundDots}
             gap={16} 
             size={1}
-            // variant="dots"
           />
           <Controls 
             style={{ 
@@ -385,6 +407,13 @@ const onNodeDragStop = useCallback((event: React.MouseEvent, node: Node) => {
             className="bg-white rounded-lg shadow-lg"
             style={{ backgroundColor: theme.controlsBackground }}
           />
+          <Panel position="top-right">
+            <div className="bg-white dark:bg-slate-800 p-2 rounded-lg shadow-md border border-gray-200 dark:border-slate-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Select and resize nodes by dragging the handles
+              </p>
+            </div>
+          </Panel>
         </ReactFlow>
       </div>
     </ReactFlowProvider>

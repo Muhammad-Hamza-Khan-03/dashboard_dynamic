@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback,useState, useEffect, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -14,6 +14,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Plot from 'react-plotly.js';
 import axios from 'axios';
+import { useInterval } from './use-interval';
+import { useToast } from '@/components/ui/use-toast';
+import { Progress } from '@/components/ui/progress';
 
 // Type definitions for better type safety
 interface AnalysisModalProps {
@@ -21,6 +24,7 @@ interface AnalysisModalProps {
   userId: string;
   isOpen: boolean;
   onClose: () => void;
+  fileChanged?: boolean;
 }
 
 interface TableInfo {
@@ -52,7 +56,99 @@ type DataStats = {
   [key: string]: ColumnStats;
 };
 
-const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) => {
+interface ColumnStatistics {
+  ready: boolean;
+  data_type: string;
+  basic_stats: {
+    min?: number;
+    max?: number;
+    mean?: number;
+    median?: number;
+    mode?: number;
+    missing_count: number;
+    missing_percentage: number;
+    unique_count?: number;
+    top?: string;
+    top_count?: number;
+  };
+  distribution: {
+    histogram?: {
+      counts: number[];
+      bin_edges: number[];
+    };
+    boxplot?: {
+      q1: number;
+      q3: number;
+      median: number;
+      whislo: number;
+      whishi: number;
+    };
+    qqplot?: {
+      x: number[];
+      y: number[];
+    };
+    value_counts?: {
+      [key: string]: number;
+    };
+  };
+  shape_stats: {
+    skewness?: number;
+    kurtosis?: number;
+    range?: number;
+    entropy?: number;
+  };
+  outlier_stats: {
+    count?: number;
+    percentage?: number;
+    lower_bound?: number;
+    upper_bound?: number;
+    outlier_values?: number[];
+  };
+}
+
+interface DatasetStatistics {
+  ready: boolean;
+  correlation_matrix: { [key: string]: { [key: string]: number } };
+  parallel_coords: {
+    columns: string[];
+    data: number[][];
+    ranges: { [key: string]: [number, number] };
+  };
+  violin_data: {
+    columns: string[];
+    data: { [key: string]: number[] };
+    stats: {
+      [key: string]: {
+        min: number;
+        max: number;
+        mean: number;
+        median: number;
+        q1: number;
+        q3: number;
+      };
+    };
+  };
+  heatmap_data: {
+    z: number[][];
+    x: string[];
+    y: string[];
+    p_values: { [key: string]: { [key: string]: number } };
+  };
+  scatter_matrix: {
+    columns: string[];
+    data: { [key: string]: number }[];
+  };
+}
+
+interface StatsStatus {
+  column_stats_count: number;
+  dataset_stats_exist: boolean;
+  stats_complete: boolean;
+}
+
+// Modify the AnalysisModal component to use the pre-computed statistics
+const AnalysisModal = ({ fileId, userId, isOpen, onClose ,fileChanged=false}: AnalysisModalProps) => {
+  // Keep existing state variables
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<any[]>([]);
@@ -60,7 +156,239 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
   const [fileType, setFileType] = useState<string>('');
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [selectedTableId, setSelectedTableId] = useState<string>('');
+  
+  // Add new state variables for statistics
+  const [statsStatus, setStatsStatus] = useState<StatsStatus | null>(null);
+  const [columnStats, setColumnStats] = useState<{ [key: string]: ColumnStatistics }>({});
+  const [datasetStats, setDatasetStats] = useState<DatasetStatistics | null>(null);
+  const [pollingInterval, setPollingInterval] = useState<number | null>(null);
+  const [statsReady, setStatsReady] = useState(false);
 
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [taskStatus, setTaskStatus] = useState<string | null>(null);
+  const [taskProgress, setTaskProgress] = useState<number>(0);
+  const [taskMessage, setTaskMessage] = useState<string>('');
+  const [isPolling, setIsPolling] = useState<boolean>(false);
+  const { toast } = useToast();
+  
+  // Check if statistics are ready when the modal opens
+  useEffect(() => {
+    if (isOpen && fileId && userId) {
+      checkStatisticsStatus();
+    }
+    
+    return () => {
+      // Clean up polling when component unmounts or modal closes
+      setIsPolling(false);
+    };
+  }, [isOpen, fileId, userId]);
+
+  // Add a useEffect to reset state when file changes
+  useEffect(() => {
+    if (fileChanged) {
+      // Reset all statistics state
+      setColumnStats({});
+      setDatasetStats(null);
+      setStatsReady(false);
+      setTaskId(null);
+      setTaskStatus(null);
+      setTaskProgress(0);
+      setTaskMessage('');
+    }
+  }, [fileChanged]);
+
+// Function to check statistics status
+const checkStatisticsStatus = async () => {
+  if (!fileId || !userId) return;
+  
+  try {
+    const response = await axios.get(`http://localhost:5000/get-stats-status/${userId}/${fileId}`);
+    
+    if (response.data.stats_complete) {
+      // Statistics are ready, load them
+      setStatsReady(true);
+      setIsPolling(false);
+      toast({
+        title:"Statistics Ready",
+        description:"Statistics are already calculated and ready to view",
+      })
+    } else {
+      // Start calculation if not already in progress
+      startStatisticsCalculation();
+    }
+  } catch (error) {
+    console.error('Error checking statistics status:', error);
+    setError('Failed to check statistics status');
+  }
+};
+
+ // Function to start statistics calculation
+ const startStatisticsCalculation = async () => {
+  if (!fileId || !userId) return;
+  
+  try {
+    const response = await axios.post(`http://localhost:5000/start-stats-calculation/${userId}/${fileId}`);
+    
+    if (response.data.task_id) {
+      setTaskId(response.data.task_id);
+      setTaskStatus('pending');
+      setTaskMessage(response.data.message);
+      setIsPolling(true);
+      
+      toast({
+        title: "Statistics Calculation",
+        description: "Statistics calculation has started in the background",
+      });
+    }
+  } catch (error) {
+    console.error('Error starting statistics calculation:', error);
+    setError('Failed to start statistics calculation');
+  }
+};
+
+
+ // Polling function to check task status
+ useInterval(
+  async () => {
+    if (!taskId) return;
+    
+    try {
+      const response = await axios.get(`http://localhost:5000/check-stats-task/${taskId}`);
+      const { status, progress, message } = response.data;
+      
+      setTaskStatus(status);
+      if (progress !== undefined) setTaskProgress(progress);
+      if (message) setTaskMessage(message);
+      
+      if (status === 'completed') {
+        setIsPolling(false);
+        setStatsReady(true);
+        
+        // Show success toast
+        toast({
+          title: "Statistics Ready",
+          description: "Statistics calculation completed successfully",
+          variant: "default",
+        });
+        
+        // Load statistics data
+        fetchDatasetStatistics();
+        if (columns.length > 0) {
+          fetchColumnStatistics(columns);
+        }
+      } else if (status === 'failed') {
+        setIsPolling(false);
+        
+        // Show error toast
+        toast({
+          title: "Calculation Failed",
+          description: message || "Statistics calculation failed",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error checking task status:', error);
+    }
+  },
+  isPolling ? 2000 : null  // Poll every 2 seconds if polling is enabled
+);
+
+
+// Render progress indicator
+const renderProgress = () => {
+  if (!taskId || taskStatus === 'completed') return null;
+  
+  return (
+    <div className="space-y-2 mb-4">
+      <div className="flex justify-between items-center">
+        <span className="text-sm font-medium">
+          {taskStatus === 'processing' ? 'Processing statistics...' : 'Waiting to start...'}
+        </span>
+        <span className="text-sm text-gray-500">{Math.round(taskProgress * 100)}%</span>
+      </div>
+      <Progress value={taskProgress * 100} className="h-2" />
+      <p className="text-xs text-gray-500">{taskMessage}</p>
+    </div>
+  );
+};
+
+  // Fetch file metadata and columns
+  useEffect(() => {
+    const fetchFileMetadata = async () => {
+      if (!isOpen || !fileId || !userId) return;
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await axios.get(`http://localhost:5000/get-file/${userId}/${fileId}`);
+
+        if (response.data.type === 'structured') {
+          setFileType(response.data.file_type);
+
+          if (response.data.tables) {
+            setTables(response.data.tables);
+            if (response.data.tables.length > 0) {
+              setSelectedTableId(response.data.tables[0].id);
+              await fetchTableData(response.data.tables[0].id);
+            }
+          } else if (response.data.data) {
+            setData(response.data.data);
+            setColumns(response.data.columns || []);
+            
+            // Fetch statistics if they're ready
+            if (statsReady) {
+              fetchDatasetStatistics();
+              fetchColumnStatistics(response.data.columns);
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error('Error fetching file metadata:', err);
+        setError(err.response?.data?.error || 'Failed to fetch file data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFileMetadata();
+  }, [isOpen, fileId, userId, statsReady]);
+
+  // Fetch dataset statistics
+  const fetchDatasetStatistics = async () => {
+    try {
+      const response = await axios.get(`http://localhost:5000/get-dataset-statistics/${userId}/${fileId}`);
+      
+      if (response.data.ready) {
+        setDatasetStats(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching dataset statistics:', error);
+    }
+  };
+
+  // Fetch column statistics
+  const fetchColumnStatistics = async (columnList: string[]) => {
+    try {
+      const statsPromises = columnList.map(column => 
+        axios.get(`http://localhost:5000/get-column-statistics/${userId}/${fileId}/${column}`)
+      );
+      
+      const responses = await Promise.all(statsPromises);
+      
+      const newColumnStats: { [key: string]: ColumnStatistics } = {};
+      responses.forEach((response, index) => {
+        if (response.data.ready) {
+          newColumnStats[columnList[index]] = response.data;
+        }
+      });
+      
+      setColumnStats(newColumnStats);
+    } catch (error) {
+      console.error('Error fetching column statistics:', error);
+    }
+  };
+  
   // Helper function to determine data type of a column
   const determineDataType = (values: any[]): string => {
     const cleanValues = values.filter(v => v !== null && v !== undefined && v !== '');
@@ -249,36 +577,50 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
 
   // Render distribution analysis
   const renderDistributionAnalysis = () => {
-    if (!calculateStats) return null;
+    if (Object.keys(columnStats).length === 0) {
+      return (
+        <div className="flex justify-center items-center h-40">
+          <Loader2 className="h-8 w-8 animate-spin mr-2" />
+          <p>Loading statistics...</p>
+        </div>
+      );
+    }
 
-    return Object.entries(calculateStats).map(([column, stats]) => {
-      if (stats.dataType !== 'number') return null;
+    return Object.entries(columnStats).map(([column, stats]) => {
+      if (stats.data_type !== 'numeric') return null;
 
-      // Box plot trace
+      const distribution = stats.distribution;
+      
+      // Box plot trace using pre-computed stats
       const boxTrace: Partial<Plotly.BoxPlotData> = {
-        y: stats.values,
         type: 'box',
         name: 'Box Plot',
+        y: [
+          distribution.boxplot?.q1,
+          distribution.boxplot?.median,
+          distribution.boxplot?.q3,
+          distribution.boxplot?.whislo,
+          distribution.boxplot?.whishi
+        ].filter(val => val !== undefined),
         boxpoints: 'outliers',
         marker: { color: 'rgb(107, 107, 255)' }
       };
 
-      // Histogram trace
+      // Histogram trace using pre-computed stats
       const histTrace = {
-        x: stats.values,
-        type: 'histogram',
+        x: distribution.histogram?.bin_edges.slice(0, -1).map((edge, i) => 
+          (edge + (distribution.histogram?.bin_edges?.[i + 1] ?? 0)) / 2
+        ),
+        y: distribution.histogram?.counts,
+        type: 'bar' as const,
         name: 'Distribution',
         opacity: 0.75
       };
 
-      // QQ plot trace
-      const sortedValues = [...stats.values].sort((a, b) => a - b);
-      const n = sortedValues.length;
+      // QQ plot trace using pre-computed stats
       const qqTrace = {
-        x: sortedValues,
-        y: Array.from({ length: n }, (_, i) =>
-          stats.mean + stats.std * Math.sqrt(2) *
-          Math.log((i + 0.5) / (n + 0.5))),
+        x: distribution.qqplot?.x,
+        y: distribution.qqplot?.y,
         mode: 'markers' as const,
         type: 'scatter' as const,
         name: 'Q-Q Plot'
@@ -338,15 +680,15 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
                 <dl className="space-y-1 text-sm">
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">Mean:</dt>
-                    <dd className="font-mono">{stats.mean.toFixed(3)}</dd>
+                    <dd className="font-mono">{stats.basic_stats.mean?.toFixed(3) || 'N/A'}</dd>
                   </div>
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">Median:</dt>
-                    <dd className="font-mono">{stats.median.toFixed(3)}</dd>
+                    <dd className="font-mono">{stats.basic_stats.median?.toFixed(3) || 'N/A'}</dd>
                   </div>
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">Mode:</dt>
-                    <dd className="font-mono">{stats.mode.toFixed(3)}</dd>
+                    <dd className="font-mono">{stats.basic_stats.mode?.toFixed(3) || 'N/A'}</dd>
                   </div>
                 </dl>
               </div>
@@ -356,15 +698,15 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
                 <dl className="space-y-1 text-sm">
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">Std Dev:</dt>
-                    <dd className="font-mono">{stats.std.toFixed(3)}</dd>
+                    <dd className="font-mono">{Math.sqrt(stats.shape_stats.skewness || 0).toFixed(3)}</dd>
                   </div>
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">IQR:</dt>
-                    <dd className="font-mono">{stats.iqr.toFixed(3)}</dd>
+                    <dd className="font-mono">{((distribution.boxplot?.q3 || 0) - (distribution.boxplot?.q1 || 0)).toFixed(3)}</dd>
                   </div>
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">Range:</dt>
-                    <dd className="font-mono">{(stats.max - stats.min).toFixed(3)}</dd>
+                    <dd className="font-mono">{stats.shape_stats.range?.toFixed(3) || 'N/A'}</dd>
                   </div>
                 </dl>
               </div>
@@ -374,15 +716,15 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
                 <dl className="space-y-1 text-sm">
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">Skewness:</dt>
-                    <dd className="font-mono">{stats.skewness.toFixed(3)}</dd>
+                    <dd className="font-mono">{stats.shape_stats.skewness?.toFixed(3) || 'N/A'}</dd>
                   </div>
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">Kurtosis:</dt>
-                    <dd className="font-mono">{stats.kurtosis.toFixed(3)}</dd>
+                    <dd className="font-mono">{stats.shape_stats.kurtosis?.toFixed(3) || 'N/A'}</dd>
                   </div>
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">Missing:</dt>
-                    <dd className="font-mono">{stats.missing} ({((stats.missing / stats.total) * 100).toFixed(1)}%)</dd>
+                    <dd className="font-mono">{stats.basic_stats.missing_count} ({stats.basic_stats.missing_percentage.toFixed(1)}%)</dd>
                   </div>
                 </dl>
               </div>
@@ -392,15 +734,15 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
                 <dl className="space-y-1 text-sm">
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">Count:</dt>
-                    <dd className="font-mono">{stats.outliers.length}</dd>
+                    <dd className="font-mono">{stats.outlier_stats.count || 0}</dd>
                   </div>
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">Lower:</dt>
-                    <dd className="font-mono">{(stats.quartiles[0] - 1.5 * stats.iqr).toFixed(3)}</dd>
+                    <dd className="font-mono">{stats.outlier_stats.lower_bound?.toFixed(3) || 'N/A'}</dd>
                   </div>
                   <div className="grid grid-cols-2">
                     <dt className="text-gray-600">Upper:</dt>
-                    <dd className="font-mono">{(stats.quartiles[1] + 1.5 * stats.iqr).toFixed(3)}</dd>
+                    <dd className="font-mono">{stats.outlier_stats.upper_bound?.toFixed(3) || 'N/A'}</dd>
                   </div>
                 </dl>
               </div>
@@ -413,27 +755,32 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
 
   // Render advanced analysis
   const renderAdvancedAnalysis = () => {
-    if (!calculateStats) return null;
+    if (!datasetStats) {
+      return (
+        <div className="flex justify-center items-center h-40">
+          <Loader2 className="h-8 w-8 animate-spin mr-2" />
+          <p>Loading advanced statistics...</p>
+        </div>
+      );
+    }
 
-    const numericColumns = Object.entries(calculateStats)
-      .filter(([_, stats]) => stats.dataType === 'number');
-
-    // Prepare data for parallel coordinates plot
+    // Prepare data for parallel coordinates plot using pre-computed stats
     const parallelData = {
       type: 'parcoords' as const,
       line: {
         color: 'blue'
       },
-      dimensions: numericColumns.map(([column, stats]) => ({
+      dimensions: datasetStats.parallel_coords.columns.map(column => ({
         label: column,
-        values: stats.values,
-        range: [stats.min, stats.max]
+        values: datasetStats.parallel_coords.data.map(row => row[datasetStats.parallel_coords.columns.indexOf(column)]),
+        range: datasetStats.parallel_coords.ranges[column]
       }))
     };
 
-    const violinData = numericColumns.map(([column, stats]) => ({
+    // Prepare data for violin plot using pre-computed stats
+    const violinData = datasetStats.violin_data.columns.map(column => ({
       type: 'violin' as const,
-      y: stats.values,
+      y: datasetStats.violin_data.data[column],
       name: column,
       box: {
         visible: true
@@ -487,33 +834,40 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {numericColumns.map(([column, stats]) => (
-                <div key={column} className="p-4 border rounded-lg">
-                  <h4 className="font-medium mb-3">{column}</h4>
-                  <div className="grid grid-cols-2 gap-y-2 text-sm">
-                    <div className="space-y-1">
-                      <p><span className="text-gray-600">Type:</span> {stats.dataType}</p>
-                      <p><span className="text-gray-600">Count:</span> {stats.total - stats.missing}</p>
-                      <p><span className="text-gray-600">Missing:</span> {stats.missing}</p>
-                      <p><span className="text-gray-600">Unique:</span> {new Set(stats.values).size}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p><span className="text-gray-600">Distribution:</span> {
-                        Math.abs(stats.skewness) < 0.5 ? 'Symmetric' :
-                          stats.skewness > 0 ? 'Right-skewed' : 'Left-skewed'
-                      }</p>
-                      <p><span className="text-gray-600">Peaked:</span> {
-                        Math.abs(stats.kurtosis) < 0.5 ? 'Normal' :
-                          stats.kurtosis > 0 ? 'Yes' : 'No'
-                      }</p>
-                      <p><span className="text-gray-600">Outliers:</span> {
-                        stats.outliers.length === 0 ? 'None' :
-                          stats.outliers.length <= 5 ? 'Few' : 'Many'
-                      }</p>
+              {datasetStats.violin_data.columns.map(column => {
+                const stats = datasetStats.violin_data.stats[column];
+                const colStats = columnStats[column];
+                
+                if (!colStats || colStats.data_type !== 'numeric') return null;
+                
+                return (
+                  <div key={column} className="p-4 border rounded-lg">
+                    <h4 className="font-medium mb-3">{column}</h4>
+                    <div className="grid grid-cols-2 gap-y-2 text-sm">
+                      <div className="space-y-1">
+                        <p><span className="text-gray-600">Type:</span> {colStats.data_type}</p>
+                        <p><span className="text-gray-600">Count:</span> {colStats.basic_stats.missing_count}</p>
+                        <p><span className="text-gray-600">Missing:</span> {colStats.basic_stats.missing_count}</p>
+                        <p><span className="text-gray-600">Unique:</span> {colStats.basic_stats.unique_count || 'N/A'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p><span className="text-gray-600">Distribution:</span> {
+                          Math.abs(colStats.shape_stats.skewness || 0) < 0.5 ? 'Symmetric' :
+                            (colStats.shape_stats.skewness || 0) > 0 ? 'Right-skewed' : 'Left-skewed'
+                        }</p>
+                        <p><span className="text-gray-600">Peaked:</span> {
+                          Math.abs(colStats.shape_stats.kurtosis || 0) < 0.5 ? 'Normal' :
+                            (colStats.shape_stats.kurtosis || 0) > 0 ? 'Yes' : 'No'
+                        }</p>
+                        <p><span className="text-gray-600">Outliers:</span> {
+                          (colStats.outlier_stats.count || 0) === 0 ? 'None' :
+                            (colStats.outlier_stats.count || 0) <= 5 ? 'Few' : 'Many'
+                        }</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -523,41 +877,17 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
 
   // Render correlation analysis
   const renderCorrelationAnalysis = () => {
-    if (!calculateStats) return null;
+    if (!datasetStats) {
+      return (
+        <div className="flex justify-center items-center h-40">
+          <Loader2 className="h-8 w-8 animate-spin mr-2" />
+          <p>Loading correlation statistics...</p>
+        </div>
+      );
+    }
 
-    const numericColumns = Object.entries(calculateStats)
-      .filter(([_, stats]) => stats.dataType === 'number')
-      .map(([column]) => column);
-
-    // Calculate correlation matrix
-    const correlationMatrix: number[][] = [];
-    const significanceMatrix: number[][] = [];
-
-    numericColumns.forEach((col1, i) => {
-      correlationMatrix[i] = [];
-      significanceMatrix[i] = [];
-      const values1 = calculateStats[col1].values;
-
-      numericColumns.forEach((col2, j) => {
-        const values2 = calculateStats[col2].values;
-
-        // Calculate Pearson correlation
-        const mean1 = calculateStats[col1].mean;
-        const mean2 = calculateStats[col2].mean;
-        const std1 = calculateStats[col1].std;
-        const std2 = calculateStats[col2].std;
-
-        const correlation = values1.reduce((sum, x, idx) =>
-          sum + ((x - mean1) / std1) * ((values2[idx] - mean2) / std2), 0) / (values1.length - 1);
-
-        correlationMatrix[i][j] = correlation;
-
-        // Calculate significance (t-test)
-        const t = correlation * Math.sqrt((values1.length - 2) / (1 - correlation * correlation));
-        const pValue = 2 * (1 - Math.abs(t) / Math.sqrt(values1.length));
-        significanceMatrix[i][j] = pValue;
-      });
-    });
+    const heatmapData = datasetStats.heatmap_data;
+    const columns = heatmapData.x;
 
     return (
       <div className="space-y-6">
@@ -568,22 +898,22 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
           <CardContent>
             <Plot
               data={[{
-                z: correlationMatrix,
-                x: numericColumns,
-                y: numericColumns,
+                z: heatmapData.z,
+                x: heatmapData.x,
+                y: heatmapData.y,
                 type: 'heatmap',
                 colorscale: 'RdBu',
                 zmin: -1,
                 zmax: 1,
-                text: correlationMatrix.flatMap((row, i) =>
-                  row.map((val, j) => `r = ${val.toFixed(3)}<br>p = ${significanceMatrix[i][j].toFixed(3)}`)
+                text: heatmapData.z.flatMap((row, i) =>
+                  row.map((val, j) => `r = ${val.toFixed(3)}<br>p = ${heatmapData.p_values[heatmapData.x[i]][heatmapData.y[j]].toFixed(3)}`)
                 ),
                 hoverongaps: false
               }]}
               layout={{
                 height: 600,
                 margin: { t: 30, r: 20, l: 100, b: 100 },
-                annotations: correlationMatrix.map((row, i) =>
+                annotations: heatmapData.z.map((row, i) =>
                   row.map((val, j) => ({
                     x: j,
                     y: i,
@@ -605,9 +935,11 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
           </CardHeader>
           <CardContent>
             <Plot
-              data={numericColumns.map((column, index) => ({
-                x: calculateStats[column].values,
-                y: calculateStats[numericColumns[(index + 1) % numericColumns.length]].values,
+              data={datasetStats.scatter_matrix.columns.map((column, index) => ({
+                x: datasetStats.scatter_matrix.data.map(row => row[column]),
+                y: datasetStats.scatter_matrix.data.map(row => 
+                  row[datasetStats.scatter_matrix.columns[(index + 1) % datasetStats.scatter_matrix.columns.length]]
+                ),
                 type: 'scatter',
                 mode: 'markers',
                 name: column,
@@ -625,16 +957,15 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
       </div>
     );
   };
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>Data Analysis Dashboard</DialogTitle>
-          <DialogDescription>
-            Comprehensive statistical analysis and visualization
-          </DialogDescription>
-        </DialogHeader>
+    <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden">
+      <DialogHeader>
+        <DialogTitle>Data Analysis Dashboard</DialogTitle>
+        <DialogDescription>
+          Comprehensive statistical analysis and visualization
+        </DialogDescription>
+      </DialogHeader>
 
         {/* Table/Sheet Selector */}
         {tables.length > 0 && (
@@ -660,12 +991,14 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose }: AnalysisModalProps) 
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+ {/* Render progress indicator for statistics calculation */}
+ {renderProgress()}
 
-        {loading ? (
-          <div className="flex justify-center items-center h-40">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
-        ) : (
+{loading ? (
+  <div className="flex justify-center items-center h-40">
+    <Loader2 className="h-8 w-8 animate-spin" />
+  </div>
+) : (
           <Tabs defaultValue="distribution" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="distribution">Distribution Analysis</TabsTrigger>

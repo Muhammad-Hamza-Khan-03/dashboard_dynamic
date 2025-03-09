@@ -138,7 +138,7 @@ const DataTablePage: React.FC = () => {
   const { fileList, error: fileListError, loading: fileListLoading, refetch: refetchFileList } = useFilesList(user?.id);
   const [filterkey, setFilterkey] = useState<string>(Date.now().toString());
   const [editItem, setEditItem] = useState<Partial<DataItem> | null>(null);
- 
+
   const [selectedRows, setSelectedRows] = useState<Row<DataItem>[]>([]);
 
   const [tableKey, setTableKey] = useState(0);
@@ -151,10 +151,13 @@ const DataTablePage: React.FC = () => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [currentTable, setCurrentTable] = useState<string | null>(null);
   const [tablesList, setTablesList] = useState<TableInfo[]>([]);
-  
+
   const [columnOrder, setColumnOrder] = useState<ColumnOrder>({});
   const [focusedField, setFocusedField] = useState<string>('');
   const [editSheetOpen, setEditSheetOpen] = useState(false);
+
+  const [fileChanged, setFileChanged] = useState<boolean>(false);
+
   const [activeRow, setActiveRow] = useState<{
     data: any;
     index: number;
@@ -168,12 +171,26 @@ const DataTablePage: React.FC = () => {
     }
   }, [isUserLoaded, user, fileList, selectedFile]);
 
+  // Clear analysis modal state when file changes
+  useEffect(() => {
+    setIsAnalysisModalOpen(false);
+    setFileChanged(true);
+  }, [selectedFile]);
+
+
   /////////////////////////////////////////////////////
 
-// Reset state helper function
-const resetState = () => {
-  setData([]);
-  setColumns([]);
+  // Reset state helper function
+
+  const handleOpenAnalysisModal = () => {
+    setFileChanged(false);
+    setIsAnalysisModalOpen(true);
+  };
+
+
+  const resetState = () => {
+    setData([]);
+    setColumns([]);
     setUnstructuredContent('');
     setIsEditing(false);
     setPaginationInfo(null);
@@ -582,7 +599,7 @@ const resetState = () => {
       });
       return;
     }
-  
+
     if (!selectedFile?.file_id) {
       toast({
         title: "Error",
@@ -591,7 +608,7 @@ const resetState = () => {
       });
       return;
     }
-  
+
     if (!activeRow) {
       toast({
         title: "Error",
@@ -600,7 +617,7 @@ const resetState = () => {
       });
       return;
     }
-  
+
     setLoading(true);
     try {
       // Process the row data before sending
@@ -623,22 +640,22 @@ const resetState = () => {
         }
         return acc;
       }, {} as Record<string, any>);
-  
+
       // Prepare the request payload
       const payload = {
         editItem: processedData,
         editIndex: activeRow.index
       };
-  
+
       console.log("Sending payload to backend:", payload);
-  
+
       const response = await axios.post(
         `http://localhost:5000/update-row/${user.id}/${selectedFile.file_id}`,
         payload
       );
-  
+
       console.log("Save response:", response.data);
-  
+
       if (response.data.success) {
         // Update the data in both state and ref
         const updatedData = [...dataRef.current];
@@ -650,12 +667,12 @@ const resetState = () => {
           updatedData.push(response.data.data);
         }
         updateData(updatedData);
-  
+
         toast({
           title: "Success",
           description: activeRow.index >= 0 ? "Item updated successfully" : "Item created successfully",
         });
-  
+
         // Close the sheet and reset edit states
         setEditSheetOpen(false);
         setActiveRow(null);
@@ -672,68 +689,68 @@ const resetState = () => {
       setLoading(false);
     }
   };
-  
-const handleDelete = async () => {
-  if (!user?.id || !selectedFile?.file_id || !selectedRows.length) {
-    toast({
-      title: "Error",
-      description: "No rows selected for deletion",
-      variant: "destructive",
-    });
-    return;
-  }
 
-  setLoading(true);
-  try {
-    // Log selected rows for debugging
-    console.log("Selected rows:", selectedRows);
+  const handleDelete = async () => {
+    if (!user?.id || !selectedFile?.file_id || !selectedRows.length) {
+      toast({
+        title: "Error",
+        description: "No rows selected for deletion",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    // Extract indices from selectedRows
-    const indices = selectedRows.map(row => row.index);
-    console.log("Indices to delete:", indices);
+    setLoading(true);
+    try {
+      // Log selected rows for debugging
+      console.log("Selected rows:", selectedRows);
 
-    // Make the API call with the indices in the correct format
-    const response = await axios.post(
-      `http://localhost:5000/delete-rows/${user.id}/${selectedFile.file_id}`,
-      { indices: indices }  // Make sure to send as an object with 'indices' key
-    );
+      // Extract indices from selectedRows
+      const indices = selectedRows.map(row => row.index);
+      console.log("Indices to delete:", indices);
 
-    if (response.data.success) {
-      // Remove the deleted rows from the local data
-      const updatedData = data.filter((_, index) => 
-        !indices.includes(index)
+      // Make the API call with the indices in the correct format
+      const response = await axios.post(
+        `http://localhost:5000/delete-rows/${user.id}/${selectedFile.file_id}`,
+        { indices: indices }  // Make sure to send as an object with 'indices' key
       );
-      setData(updatedData);
-      dataRef.current = updatedData;
-      setSelectedRows([]);
+
+      if (response.data.success) {
+        // Remove the deleted rows from the local data
+        const updatedData = data.filter((_, index) =>
+          !indices.includes(index)
+        );
+        setData(updatedData);
+        dataRef.current = updatedData;
+        setSelectedRows([]);
+
+        toast({
+          title: "Success",
+          description: `Successfully deleted ${indices.length} row(s)`,
+        });
+
+        // Refresh the data to ensure synchronization
+        await fetchFileData(selectedFile.file_id, selectedFile.filename, currentPage);
+      }
+    } catch (error: any) {
+      console.error("Failed to delete rows:", error);
+      const errorMessage = error.response?.data?.error || "Failed to delete rows. Please try again.";
+
+      // Log detailed error information
+      if (error.response) {
+        console.log("Error response:", error.response);
+        console.log("Request payload:", { indices: selectedRows.map(row => row.index) });
+      }
 
       toast({
-        title: "Success",
-        description: `Successfully deleted ${indices.length} row(s)`,
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
       });
-
-      // Refresh the data to ensure synchronization
-      await fetchFileData(selectedFile.file_id, selectedFile.filename, currentPage);
+    } finally {
+      setLoading(false);
     }
-  } catch (error: any) {
-    console.error("Failed to delete rows:", error);
-    const errorMessage = error.response?.data?.error || "Failed to delete rows. Please try again.";
-    
-    // Log detailed error information
-    if (error.response) {
-      console.log("Error response:", error.response);
-      console.log("Request payload:", { indices: selectedRows.map(row => row.index) });
-    }
-
-    toast({
-      title: "Error",
-      description: errorMessage,
-      variant: "destructive",
-    });
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // Add this utility function to help with data validation
 
@@ -741,9 +758,8 @@ const handleDelete = async () => {
   const handleReset = () => {
     setTableKey(prevKey => prevKey + 1);
     setFilterkey(Date.now().toString())
-    if(selectedFile)
-    {
-      fetchFileData(selectedFile.file_id,selectedFile.filename);
+    if (selectedFile) {
+      fetchFileData(selectedFile.file_id, selectedFile.filename);
     }
     toast({
       title: "Reset",
@@ -816,9 +832,8 @@ const handleDelete = async () => {
                   };
                 });
               }}
-              className={`col-span-3 border-gray-300 focus:border-gray-500 focus:ring-gray-500 ${
-                key === focusedField ? 'ring-2 ring-gray-500' : ''
-              }`}
+              className={`col-span-3 border-gray-300 focus:border-gray-500 focus:ring-gray-500 ${key === focusedField ? 'ring-2 ring-gray-500' : ''
+                }`}
               autoFocus={key === focusedField}
               disabled={loading}
             />
@@ -835,7 +850,7 @@ const handleDelete = async () => {
       <div className="mb-8 flex justify-between items-center bg-white p-6 rounded-lg shadow-sm">
         <h1 className="text-3xl font-bold text-gray-900">Data Hub</h1>
       </div>
-  
+
       {/* File Selection Card - Refined shadows and borders */}
       <Card className="mb-6 border border-gray-200 shadow-md rounded-lg overflow-hidden bg-white">
         <CardHeader className="flex flex-row items-center justify-between border-b border-gray-200 bg-white p-6">
@@ -868,7 +883,7 @@ const handleDelete = async () => {
             />
           </div>
         </CardHeader>
-  
+
         <CardContent className="p-6 bg-white">
           {fileListLoading ? (
             <div className="flex items-center justify-center py-8 text-gray-700">
@@ -917,7 +932,7 @@ const handleDelete = async () => {
                   </SelectContent>
                 </Select>
               </div>
-  
+
               {selectedFile && (
                 <div className="pt-2 flex items-center justify-between text-sm text-gray-600">
                   <span>Selected: {selectedFile.filename}</span>
@@ -943,7 +958,7 @@ const handleDelete = async () => {
           )}
         </CardContent>
       </Card>
-  
+
       {/* File Content Card - Enhanced visual hierarchy */}
       <Card className="border border-gray-200 shadow-md rounded-lg overflow-hidden bg-white">
         <CardHeader className="flex flex-row items-center justify-between bg-gray-50 border-b border-gray-200 p-6">
@@ -953,7 +968,7 @@ const handleDelete = async () => {
               <PlusCircle className="mr-2 h-4 w-4" />
               Create New
             </Button>
-            
+
             {/* Action Buttons - Consistent black theme */}
             {/* {columns.length > 0 && (
               <SplitDialog
@@ -970,7 +985,7 @@ const handleDelete = async () => {
                 }}
               />
             )} */}
-            
+
             {selectedRows.length > 0 && (
               <Button
                 variant="destructive"
@@ -981,7 +996,7 @@ const handleDelete = async () => {
                 Delete Selected ({selectedRows.length})
               </Button>
             )}
-            
+
             {/* <Button
               onClick={handleSave}
               className="bg-black text-white hover:bg-gray-800"
@@ -990,7 +1005,7 @@ const handleDelete = async () => {
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Data
             </Button> */}
-            
+
             <Button
               onClick={handleReset}
               className="bg-gray-700 text-white hover:bg-gray-600"
@@ -998,10 +1013,9 @@ const handleDelete = async () => {
               <RefreshCw className="mr-2 h-4 w-4" />
               Reset All
             </Button>
-  
-            <Button 
-              className="bg-black text-white hover:bg-gray-800" 
-              onClick={() => setIsAnalysisModalOpen(true)}
+            <Button
+              className="bg-black text-white hover:bg-gray-800"
+              onClick={handleOpenAnalysisModal}
             >
               <BarChart className="mr-2 h-4 w-4" />
               Analyze Data
@@ -1011,10 +1025,11 @@ const handleDelete = async () => {
               userId={user?.id || ''}
               isOpen={isAnalysisModalOpen}
               onClose={() => setIsAnalysisModalOpen(false)}
+              fileChanged={fileChanged}
             />
           </div>
         </CardHeader>
-  
+
         {/* Content Area - Better spacing and loading states */}
         <CardContent className="p-6">
           {loading ? (
@@ -1034,16 +1049,16 @@ const handleDelete = async () => {
                 // onRowSelectionChange={setSelectedRows}
                 // onReset={handleReset}
                 // filterkey=""
-                
+
                 key={tableKey}
-    columns={columns}
-    data={data}
-    userId={user?.id || ''}
-    fileId={selectedFile?.file_id || ''}
-    onRowSelectionChange={setSelectedRows}
-    filterkey={filterkey}
-    onReset={handleReset}
-              
+                columns={columns}
+                data={data}
+                userId={user?.id || ''}
+                fileId={selectedFile?.file_id || ''}
+                onRowSelectionChange={setSelectedRows}
+                filterkey={filterkey}
+                onReset={handleReset}
+
               />
               {renderPagination()}
             </>
@@ -1054,7 +1069,7 @@ const handleDelete = async () => {
           )}
         </CardContent>
       </Card>
-  
+
       {/* Edit Sheet - Refined styling */}
       <Sheet
         open={editSheetOpen}
@@ -1079,18 +1094,18 @@ const handleDelete = async () => {
             <SheetTitle className="text-gray-900">
               {activeRow ? "Edit Item" : "Create New Item"}
             </SheetTitle>
-          
+
             <SheetDescription className="text-gray-600">
               {activeRow ? "Make changes to the item below." : "Fill in the details for the new item."}
             </SheetDescription>
           </SheetHeader>
           <EnhancedEditForm
-    data={data}
-    activeRow={activeRow}
-    setActiveRow={setActiveRow}
-    columnOrder={columnOrder}
-    loading={loading}
-  />
+            data={data}
+            activeRow={activeRow}
+            setActiveRow={setActiveRow}
+            columnOrder={columnOrder}
+            loading={loading}
+          />
           {/* {activeRow ? (
             <div className="grid gap-4 py-4">
               {Object.entries(activeRow.data)
@@ -1126,7 +1141,7 @@ const handleDelete = async () => {
               Loading row data...
             </div>
           )} */}
-  
+
           <div className="mt-4 flex justify-end space-x-2">
             <Button
               variant="outline"
