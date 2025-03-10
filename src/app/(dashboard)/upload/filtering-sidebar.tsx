@@ -231,7 +231,7 @@ export default function FilterSidebar({
             <>
               {renderFilterControls()}
 
-              <div>
+              {/* <div>
                 <Label>Sort Direction</Label>
                 <Select
                   value={sortDirection}
@@ -246,7 +246,7 @@ export default function FilterSidebar({
                     <SelectItem value="none">No Sorting</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </div> */}
 
               <div className="flex justify-end gap-2 pt-4">
                 <Button variant="outline" onClick={onClose}>

@@ -50,6 +50,7 @@ import queue
 from background_worker_implementation import *
 import threading
 import asyncio
+from EnhancedGenerator import *
 
 app = Flask(__name__)
 cache = Cache(app, config={'CACHE_TYPE': 'simple'})
@@ -432,883 +433,6 @@ def init_stats_db():
 init_db()
 init_stats_db()   
 
-class EnhancedChartGenerator:
-    @staticmethod
-    def _initialize_chart(chart_type: str):
-        """Initialize the appropriate chart type with proper error handling."""
-        chart_types = {
-            'line': Line,
-            'bar': Bar,
-            'pie': Pie,
-            'scatter': Scatter,
-            'box': Boxplot,
-            'histogram': Bar,
-            'segmented-bar': Bar,
-            'effect-scatter': EffectScatter,
-            'funnel': Funnel,
-            'gauge': Gauge,
-            'heatmap': HeatMap,
-            'kline': Kline,
-            'radar': Radar,
-            'treemap': TreeMap,
-            'surface3d': Surface3D,
-            'bar3d': Bar3D,
-            'line3d': Line3D,
-            'scatter3d': Scatter3D,
-            'map': Map,
-            'graph': Graph,
-            'liquid': Liquid,
-            'parallel': Parallel,
-            'sankey': Sankey,
-            'sunburst': Sunburst,
-            
-        }
-        
-        if chart_type not in chart_types:
-            raise ValueError(f'Unsupported chart type: {chart_type}')
-            
-        ChartClass = chart_types[chart_type]
-        return ChartClass()
-
-
-    @staticmethod
-    def create_chart(
-        chart_type: str,
-        df: pd.DataFrame,
-        selected_columns: list,
-        options: Optional[Dict[str, Any]] = None
-    ):
-        """Creates a responsive chart with the specified type and data."""
-        try:
-            chart = EnhancedChartGenerator._initialize_chart(chart_type)
-            options = options or {}
-            
-            if chart_type in ['line', 'bar', 'segmented-bar']:
-                x_data = df[selected_columns[0]].tolist()
-                chart.add_xaxis(x_data)
-                for col in selected_columns[1:]:
-                    y_data = df[col].tolist()
-                    chart.add_yaxis(
-                        col,
-                        y_data,
-                        label_opts=opts.LabelOpts(is_show=False),
-                        stack="total" if chart_type == 'segmented-bar' else None
-                    )
-            elif chart_type == 'histogram':
-                values = df[selected_columns[0]].dropna()
-                bin_count = options.get('binSize', 10)
-                hist, bins = np.histogram(values, bins=bin_count)
-                bin_labels = [f"{bins[i]:.2f}-{bins[i+1]:.2f}" for i in range(len(bins)-1)]
-                
-                chart.add_xaxis(bin_labels)
-                chart.add_yaxis(
-                    "Frequency",
-                    hist.tolist(),
-                    label_opts=opts.LabelOpts(is_show=False)
-                )
-                
-            elif chart_type == 'pie':
-                data_pairs = list(zip(
-                    df[selected_columns[0]].tolist(),
-                    df[selected_columns[1]].tolist()
-                ))
-                chart.add(
-                    series_name="",
-                    data_pair=data_pairs,
-                    label_opts=opts.LabelOpts(
-                        formatter="{b}: {c}",
-                        position="outside"
-                    )
-                )
-                
-            elif chart_type == 'box':
-                data = [df[col].dropna().tolist() for col in selected_columns]
-                chart.add_xaxis(selected_columns)
-                chart.add_yaxis("Boxplot", chart.prepare_data(data))
-
-            # Process data based on chart type
-            elif chart_type in ['effect-scatter']:
-                return EnhancedChartGenerator._create_effect_scatter(df, selected_columns, options)
-            elif chart_type == 'funnel':
-                return EnhancedChartGenerator._create_funnel(df, selected_columns, options)
-            elif chart_type == 'gauge':
-                return EnhancedChartGenerator._create_gauge(df, selected_columns, options)
-            elif chart_type == 'heatmap':
-                return EnhancedChartGenerator._create_heatmap(df, selected_columns, options)
-            elif chart_type == 'kline':
-                return EnhancedChartGenerator._create_kline(df, selected_columns, options)
-            elif chart_type == 'radar':
-                return EnhancedChartGenerator._create_radar(df, selected_columns, options)
-            elif chart_type == 'treemap':
-                return EnhancedChartGenerator._create_treemap(df, selected_columns, options)
-            elif chart_type == 'surface3d':
-                return EnhancedChartGenerator._create_surface3d(df, selected_columns, options)
-            elif chart_type in ['bar3d', 'line3d', 'scatter3d']:
-                return EnhancedChartGenerator._create_3d_chart(chart_type, df, selected_columns, options)
-            elif chart_type == 'map':
-                return EnhancedChartGenerator._create_map(df, selected_columns, options)
-            elif chart_type == 'graph':
-                return EnhancedChartGenerator._create_graph(df, selected_columns, options)
-            elif chart_type == 'liquid':
-                return EnhancedChartGenerator._create_liquid(df, selected_columns, options)
-            elif chart_type == 'parallel':
-                return EnhancedChartGenerator._create_parallel(df, selected_columns, options)
-            elif chart_type == 'sankey':
-                return EnhancedChartGenerator._create_sankey(df, selected_columns, options)
-            elif chart_type == 'sunburst':
-                return EnhancedChartGenerator._create_sunburst(df, selected_columns, options)
-            
-
-            #title chart
-            title =""
-            if len(selected_columns) > 1:
-                title = selected_columns[0] + " vs " + ", ".join(selected_columns[1:])
-            elif len(selected_columns)==1:
-                title = selected_columns[0]+"Analysis"
-            # Configure common options for all chart types
-
-            tooltip_opts=opts.TooltipOpts(
-                trigger="axis",
-                axis_pointer_type="cross",
-                background_color="rgba(255,255,255,0.9)",
-                border_color="#ccc",
-                border_width=1,
-                textstyle_opts=opts.TextStyleOpts(color="#333")
-                ),
-
-            # Dual zoom functionality
-            datazoom_opts=[
-                opts.DataZoomOpts(
-                    type_="slider",
-                    range_start=0,
-                    range_end=100,
-                    filter_mode="filter"
-                ),
-                opts.DataZoomOpts(
-                    type_="inside",
-                    range_start=0,
-                    range_end=100,
-                    filter_mode="filter"
-                )
-            ],
-
-            # Professional toolbox with extended features
-            toolbox_opts=opts.ToolboxOpts(
-                feature={
-                    "dataZoom": {
-                        "yAxisIndex": "none",
-                        "title": {"zoom": "Area Zoom", "back": "Restore Zoom"}
-                    },
-                    "restore": {"title": "Reset"},
-                    "saveAsImage": {"title": "Save as Image"},
-                    "dataView": {
-                        "title": "Data View",
-                        "lang": ["Data View", "Close", "Refresh"]
-                    },
-                    "magicType": {
-                        "type": ["line", "bar", "stack", "tiled"],
-                        "title": {
-                            "line": "Switch to Line",
-                            "bar": "Switch to Bar",
-                            "stack": "Stack Series",
-                            "tiled": "Unstack Series"
-                        }
-                    }
-                }
-            ),
-
-            # Enhanced legend configuration
-            legend_opts=opts.LegendOpts(
-                type_="scroll",
-                pos_top="5%",
-                pos_left="center",
-                orient="horizontal",
-                textstyle_opts=opts.TextStyleOpts(
-                    font_size=12,
-                    color="#333"
-                ),
-                item_gap=25
-            ),
-
-            # Professional axis styling
-            xaxis_opts=opts.AxisOpts(
-                name=selected_columns[0],
-                name_location="middle",
-                name_gap=35,
-                name_textstyle_opts=opts.TextStyleOpts(font_size=14),
-                axisline_opts=opts.AxisLineOpts(
-                    linestyle_opts=opts.LineStyleOpts(color="#333")
-                ),
-                axislabel_opts=opts.LabelOpts(
-                    font_size=12,
-                    color="#333",
-                    rotate=0
-                )
-
-            ),
-            yaxis_opts=opts.AxisOpts(
-                name=selected_columns[1:] if len(selected_columns) > 1 else "",
-                name_location="middle",
-                name_gap=50,
-                name_rotate=90,
-                name_textstyle_opts=opts.TextStyleOpts(font_size=14),
-                axisline_opts=opts.AxisLineOpts(
-                    linestyle_opts=opts.LineStyleOpts(color="#333")
-                ),
-                axislabel_opts=opts.LabelOpts(
-                    font_size=12,
-                    color="#333"
-                ),
-                splitline_opts=opts.SplitLineOpts(
-                    is_show=True,
-                    linestyle_opts=opts.LineStyleOpts(
-                        type_="dashed",
-                        opacity=0.3
-                    )
-                )
-            )
-
-
-            # Set chart to be responsive
-            chart.width = "100%"
-            chart.height = "100%"
-            chart.renderer = "canvas"
-            # If grid options are provided, add the chart to a Grid instance
-            if 'grid_opts' in options:
-                grid = Grid()
-                grid.add(chart, grid_opts=options['grid_opts'])
-                return grid
-            return chart,title
-
-
-        except Exception as e:
-            logging.error(f"Error creating chart: {str(e)}")
-            raise
-        
-    @staticmethod
-    def _create_effect_scatter(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates an effect scatter plot with animated effects."""
-        chart = EffectScatter()
-        
-        x_data = df[selected_columns[0]].tolist()
-        y_data = df[selected_columns[1]].tolist()
-        
-        chart.add_xaxis(x_data)
-        chart.add_yaxis(
-            "",
-            y_data,
-            symbol_size=options.get('symbol_size', 10),
-            effect_opts=opts.EffectOpts(
-                brushType="stroke",
-            scale=options.get('effect_scale', 2.5),
-            period=4
-            ),
-            itemstyle_opts=opts.ItemStyleOpts(
-            color=options.get('color', '#5470c6'),
-            opacity=0.8
-        )
-        )
-        
-        chart.set_global_opts(
-        title_opts=opts.TitleOpts(
-            title=f"{selected_columns[0]} vs {selected_columns[1]}",
-            subtitle="Effect Scatter Chart"
-        ),
-        xaxis_opts=opts.AxisOpts(
-            type_="value",
-            splitline_opts=opts.SplitLineOpts(is_show=True)
-        ),
-        yaxis_opts=opts.AxisOpts(
-            type_="value",
-            splitline_opts=opts.SplitLineOpts(is_show=True)
-        )
-    )
-        
-        return chart
-
-    @staticmethod
-    def _create_funnel(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a funnel chart showing stages in a process."""
-        chart = Funnel()
-        
-          # Prepare data pairs (category, value)
-        data_pairs = [
-            (str(row[selected_columns[0]]), float(row[selected_columns[1]]))
-            for _, row in df.iterrows()
-        ]
-         # Sort data by value in descending order
-        data_pairs.sort(key=lambda x: x[1], reverse=True)
-        
-        # Add funnel series
-        chart.add(
-            series_name=selected_columns[1],
-            data_pair=data_pairs,
-            gap=options.get('gap', 2),
-            label_opts=opts.LabelOpts(
-                position="inside",
-                formatter="{b}: {c}"
-            ),
-            itemstyle_opts=opts.ItemStyleOpts(opacity=0.8)
-        )
-
-        # Configure chart options
-        chart.set_global_opts(
-            title_opts=opts.TitleOpts(title="Funnel Analysis"),
-            legend_opts=opts.LegendOpts(is_show=False)
-        )
-        chart.set_global_opts(title_opts=opts.TitleOpts(title="Funnel Chart"))
-        return chart
-
-    @staticmethod
-    def _create_gauge(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a gauge chart showing a single value within a range."""
-        chart = Gauge()
-
-        # Get the first value from selected column
-        value = float(df[selected_columns[0]].iloc[0])
-
-        # Calculate min and max values
-        min_val = options.get('min', 0)
-        max_val = options.get('max', 100)
-
-        # Add gauge series
-        chart.add(
-            series_name=selected_columns[0],
-            data_pair=[("", value)],
-            min_=min_val,
-            max_=max_val,
-            split_number=options.get('split_number', 10),
-            axisline_opts=opts.AxisLineOpts(
-                linestyle_opts=opts.LineStyleOpts(
-                    color=[[0.3, "#67e0e3"], [0.7, "#37a2da"], [1, "#fd666d"]], 
-                    width=30
-                )
-            )
-            # detail_label_opts=opts.GaugeTitleOpts(
-            #     formatter="{value}",
-            #     font_size=20
-            # )
-        )
-
-        return chart
-
-    @staticmethod
-    def _create_heatmap(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a heatmap visualization."""
-        chart = HeatMap()
-
-        # Prepare data
-        x_axis = sorted(df[selected_columns[0]].unique().tolist())
-        y_axis = sorted(df[selected_columns[1]].unique().tolist())
-
-        # Create heatmap data matrix
-        data = []
-        for i, x in enumerate(x_axis):
-            for j, y in enumerate(y_axis):
-                value = df[
-                    (df[selected_columns[0]] == x) & 
-                    (df[selected_columns[1]] == y)
-                ][selected_columns[2]].mean()
-
-                if not pd.isna(value):
-                    data.append([i, j, float(value)])
-
-        # Add axes
-        chart.add_xaxis(x_axis)
-        chart.add_yaxis(
-            series_name="",
-            yaxis_data=y_axis,
-            value=data,
-            label_opts=opts.LabelOpts(is_show=True, formatter="{c}"),
-        )
-
-        # Configure visual mapping
-        chart.set_global_opts(
-            title_opts=opts.TitleOpts(title="Heat Map Analysis"),
-            visualmap_opts=opts.VisualMapOpts(
-                min_=min(d[2] for d in data),
-                max_=max(d[2] for d in data),
-                is_calculable=True,
-                orient="horizontal",
-                pos_left="center"
-            ),
-            tooltip_opts=opts.TooltipOpts(
-                formatter="{a}: ({c})"
-            )
-        )
-
-        return chart
-
-    @staticmethod
-    def _create_kline(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a K-line (candlestick) chart for financial data."""
-        chart = Kline()
-    
-        # Prepare K-line data
-        kline_data = [
-        [
-            float(row[selected_columns[1]]),  # open
-            float(row[selected_columns[2]]),  # close
-            float(row[selected_columns[3]]),  # low
-            float(row[selected_columns[4]])   # high
-        ]
-        for _, row in df.iterrows()
-        ]
-
-        # Add X axis (dates)
-        chart.add_xaxis(df[selected_columns[0]].tolist())
-
-        # Add K-line series
-        chart.add_yaxis(
-            series_name="Price",
-            y_axis=kline_data,
-            itemstyle_opts=opts.ItemStyleOpts(
-                color="#ef232a",
-                color0="#14b143",
-                border_color="#ef232a",
-                border_color0="#14b143",
-            ),
-            markpoint_opts=opts.MarkPointOpts(
-                data=[
-                    opts.MarkPointItem(type_="max", name="Maximum"),
-                    opts.MarkPointItem(type_="min", name="Minimum")
-                ]
-            )
-        )
-
-        # Configure chart options
-        chart.set_global_opts(
-            title_opts=opts.TitleOpts(title="K-Line Chart"),
-            xaxis_opts=opts.AxisOpts(
-                type_="category",
-                is_scale=True
-            ),
-            yaxis_opts=opts.AxisOpts(
-                is_scale=True,
-                splitarea_opts=opts.SplitAreaOpts(is_show=True)
-            ),
-            datazoom_opts=[
-                opts.DataZoomOpts(is_show=True, type_="slider"),
-                opts.DataZoomOpts(is_show=False, type_="inside")
-            ]
-        )
-
-        return chart
-
-    @staticmethod
-    def _create_radar(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a radar chart for multi-dimensional data analysis."""
-        chart = Radar()
-
-        # Prepare indicator schema
-        indicators = [
-            opts.RadarIndicatorItem(
-                name=col,
-                max_=df[col].max() * 1.1  # Add 10% padding
-            )
-            for col in selected_columns[1:]
-        ]
-
-        # Prepare data for each category
-        categories = df[selected_columns[0]].unique()
-        data = []
-        for category in categories:
-            category_data = df[df[selected_columns[0]] == category]
-            values = [float(category_data[col].iloc[0]) for col in selected_columns[1:]]
-            data.append({
-                "value": values,
-                "name": str(category)
-            })
-
-        # Add radar schema
-        chart.add_schema(
-            schema=indicators,
-            shape=options.get('shape', 'circle'),
-            center=['50%', '50%'],
-            radius='70%'
-        )
-
-        # Add data series
-        chart.add(
-            series_name="",
-            data=data,
-            areastyle_opts=opts.AreaStyleOpts(opacity=0.3),
-            linestyle_opts=opts.LineStyleOpts(width=2)
-        )
-
-        # Configure chart options
-        chart.set_global_opts(
-            title_opts=opts.TitleOpts(title="Radar Analysis"),
-            legend_opts=opts.LegendOpts(
-                selected_mode='multiple',
-                pos_bottom='5%'
-            )
-        )
-
-        return chart
-
-    @staticmethod
-    def _create_treemap(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a treemap visualization."""
-        chart = TreeMap()
-
-        # Prepare hierarchical data
-        def build_tree(data, columns, level=0):
-            if level >= len(columns):
-                return []
-
-            grouped = data.groupby(columns[level])
-            result = []
-
-            for name, group in grouped:
-                node = {
-                    "name": str(name),
-                    "value": len(group) if level == len(columns) - 1 else None
-                }
-
-                if level < len(columns) - 1:
-                    children = build_tree(group, columns, level + 1)
-                    if children:
-                        node["children"] = children
-
-                result.append(node)
-
-            return result
-
-        # Build tree data
-        tree_data = build_tree(df, selected_columns)
-
-        # Add treemap series
-        chart.add(
-            series_name="",
-            data=tree_data,
-            leaf_depth=options.get('leaf_depth', 2),
-            label_opts=opts.LabelOpts(
-                position="inside",
-                formatter="{b}: {c}"
-            ),
-            upperLabel_opts=opts.LabelOpts(is_show=True)
-        )
-
-        # Configure chart options
-        chart.set_global_opts(
-            title_opts=opts.TitleOpts(title="Tree Map Analysis"),
-            tooltip_opts=opts.TooltipOpts(
-                formatter="{b}: {c}"
-            )
-        )
-
-        return chart
-
-    @staticmethod
-    def _create_surface3d(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a 3D surface chart."""
-        chart = Surface3D()
-        
-        # Create 3D surface data from three columns
-        x_data = df[selected_columns[0]].unique()
-        y_data = df[selected_columns[1]].unique()
-        
-        data = [[
-            x, y, df[
-                (df[selected_columns[0]] == x) & 
-                (df[selected_columns[1]] == y)
-            ][selected_columns[2]].iloc[0]
-        ] for x in x_data for y in y_data]
-        
-        chart.add(
-            series_name="",
-            data=data,
-            shading="realistic",
-            itemstyle_opts=opts.ItemStyleOpts(opacity=0.8)
-        )
-        
-        return chart
-
-    @staticmethod
-    def _create_3d_chart(chart_type: str, df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates various types of 3D charts (bar, line, scatter)."""
-        if chart_type == 'bar3d':
-            chart = Bar3D()
-        elif chart_type == 'line3d':
-            chart = Line3D()
-        else:  # scatter3d
-            chart = Scatter3D()
-        
-        data = [[
-            row[selected_columns[0]],
-            row[selected_columns[1]],
-            row[selected_columns[2]]
-        ] for _, row in df.iterrows()]
-        
-        chart.add(
-            series_name="",
-            data=data,
-            xaxis3d_opts=opts.Axis3DOpts(type_="value"),
-            yaxis3d_opts=opts.Axis3DOpts(type_="value"),
-            zaxis3d_opts=opts.Axis3DOpts(type_="value")
-        )
-        
-        return chart
-
-    @staticmethod
-    def _create_map(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a map visualization."""
-        chart = Map()
-        
-        # Prepare map data
-        data = [
-            (row[selected_columns[0]], row[selected_columns[1]])
-            for _, row in df.iterrows()
-        ]
-        
-        chart.add(
-            series_name="",
-            data_pair=data,
-            maptype=options.get('maptype', 'world')
-        )
-        
-        chart.set_global_opts(
-            title_opts=opts.TitleOpts(title="Map"),
-            visualmap_opts=opts.VisualMapOpts()
-        )
-        
-        return chart
-
-    @staticmethod
-    def _create_graph(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a graph visualization showing relationships."""
-        chart = Graph()
-        
-        # Prepare nodes and links
-        nodes = [{"name": str(name)} for name in df[selected_columns[0]].unique()]
-        links = [
-            {
-                "source": str(row[selected_columns[0]]),
-                "target": str(row[selected_columns[1]]),
-                "value": row[selected_columns[2]] if len(selected_columns) > 2 else 1
-            }
-            for _, row in df.iterrows()
-        ]
-        
-        chart.add(
-            series_name="",
-            nodes=nodes,
-            links=links,
-            layout=options.get('layout', 'circular'),
-            is_roam=True,
-            is_focusnode=True
-        )
-        
-        return chart
-
-    @staticmethod
-    def _create_liquid(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a liquid fill chart showing percentage values."""
-        chart = Liquid()
-
-        # Get the first value and convert to percentage
-        value = float(df[selected_columns[0]].iloc[0])
-        if value > 1:
-            value = value / 100
-
-        # Add liquid fill series
-        chart.add(
-            series_name=selected_columns[0],
-            data=[value],
-            label_opts=opts.LabelOpts(
-                font_size=50,
-                formatter=JsCode(
-                    "function(param){return Math.floor(param.value * 100) + '%';}"
-                ),
-                position="inside"
-            ),
-            is_outline_show=True,
-            outline_border_distance=8,
-            shape=options.get('shape', 'circle')
-        )
-
-        # Configure chart options
-        chart.set_global_opts(
-            title_opts=opts.TitleOpts(title=f"{selected_columns[0]} Progress")
-        )
-
-        return chart
-
-    @staticmethod
-    def _create_parallel(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a parallel coordinates plot for multi-dimensional data analysis."""
-        chart = Parallel()
-        
-        # Create schema for parallel axes
-        schema = [
-            {"dim": i, "name": col, "type": "value"}
-            for i, col in enumerate(selected_columns)
-        ]
-        
-        # Prepare data
-        data = df[selected_columns].values.tolist()
-        
-        chart.add(
-            series_name="",
-            data=data,
-            linestyle_opts=opts.LineStyleOpts(width=1, opacity=0.5),
-            schema=schema
-        )
-        
-        chart.set_global_opts(title_opts=opts.TitleOpts(title="Parallel"))
-        return chart
-
-    @staticmethod
-    def _create_sankey(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a Sankey diagram showing flow between entities."""
-        chart = Sankey()
-        
-        # Prepare nodes and links
-        nodes = []
-        node_map = {}
-        current_node = 0
-        
-        # Create nodes
-        for col in selected_columns[:2]:
-            for value in df[col].unique():
-                if value not in node_map:
-                    node_map[value] = current_node
-                    nodes.append({"name": str(value)})
-                    current_node += 1
-        
-        # Create links
-        links = []
-        for _, row in df.iterrows():
-            source = str(row[selected_columns[0]])
-            target = str(row[selected_columns[1]])
-            value = float(row[selected_columns[2]]) if len(selected_columns) > 2 else 1
-            
-            links.append({
-                "source": node_map[source],
-                "target": node_map[target],
-                "value": value
-            })
-        
-        # Add Sankey series
-        chart.add(
-            series_name="",
-            nodes=nodes,
-            links=links,
-            linestyle_opts=opts.LineStyleOpts(
-                opacity=0.3,
-                curve=0.5
-            ),
-            label_opts=opts.LabelOpts(position="right")
-        )
-        
-        # Configure chart options
-        chart.set_global_opts(
-            title_opts=opts.TitleOpts(title="Flow Analysis"),
-            tooltip_opts=opts.TooltipOpts(
-                trigger="item",
-                formatter="{b}: {c}"
-            )
-        )
-        
-        return chart
-    
-    @staticmethod
-    def _create_sunburst(df: pd.DataFrame, selected_columns: List[str], options: Dict[str, Any]):
-        """Creates a sunburst chart for hierarchical data visualization."""
-        chart = Sunburst()
-        
-        def create_sunburst_data(df, columns, current_level=0):
-            """Recursively create hierarchical data structure for sunburst chart."""
-            if current_level >= len(columns):
-                return []
-            
-            grouped = df.groupby(columns[current_level])
-            data = []
-            
-            for name, group in grouped:
-                children = create_sunburst_data(group, columns, current_level + 1)
-                node = {
-                    "name": str(name),
-                    "value": len(group) if not children else None,
-                }
-                if children:
-                    node["children"] = children
-                data.append(node)
-            
-            return data
-        
-        # Create hierarchical data structure
-        data = create_sunburst_data(df, selected_columns)
-        
-        chart.add(
-            series_name="",
-            data_pair=data,
-            radius=[0, '90%'],
-            label_opts=opts.LabelOpts(
-                position="inside",
-                formatter="{b}"
-            )
-        )
-        
-        chart.set_global_opts(
-            title_opts=opts.TitleOpts(title="Sunburst Chart"),
-            toolbox_opts=opts.ToolboxOpts(
-                feature={
-                    "saveAsImage": {},
-                    "dataView": {},
-                    "restore": {}
-                }
-            )
-        )
-        
-        return chart
-
-    def _configure_common_options(chart, title="", options: Dict[str, Any] = None):
-        """Configure common options for all chart types."""
-        options = options or {}
-        
-        chart.set_global_opts(
-            title_opts=opts.TitleOpts(
-                title=title,
-                subtitle=options.get("subtitle", ""),
-                title_textstyle_opts=opts.TextStyleOpts(
-                    font_size=16,
-                    font_weight="bold"
-                )
-            ),
-            tooltip_opts=opts.TooltipOpts(
-                trigger="axis",
-                axis_pointer_type="cross"
-            ),
-            toolbox_opts=opts.ToolboxOpts(
-                feature={
-                    "dataZoom": {"yAxisIndex": "none"},
-                    "restore": {},
-                    "saveAsImage": {},
-                    "dataView": {}
-                }
-            ),
-            datazoom_opts=[
-                opts.DataZoomOpts(
-                    range_start=0,
-                    range_end=100
-                ),
-                opts.DataZoomOpts(
-                    type_="inside",
-                    range_start=0,
-                    range_end=100
-                )
-            ],
-            legend_opts=opts.LegendOpts(
-                type_="scroll",
-                pos_top="top",
-                orient="horizontal"
-            )
-        )
-        
-        return chart
-   
 
 @cache.memoize(timeout=CACHE_TIMEOUT)
 def get_table_data(table_name, selected_columns):
@@ -2597,7 +1721,373 @@ def check_stats_task(task_id):
         return jsonify({'error': str(e)}), 500
 ## status updates API ENDPOINTS end
 
+# Columns rotes updates here
+@app.route('/delete-column/<user_id>/<file_id>', methods=['POST'])
+def delete_column(user_id, file_id):
+    """Delete a column from a table"""
+    try:
+        data = request.json
+        column_name = data.get('column')
+        
+        if not column_name:
+            return jsonify({'error': 'Column name is required'}), 400
+        
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get file information
+        c.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
+        
+        # Verify table exists
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not c.fetchone():
+            return jsonify({'error': f'Table {table_name} not found'}), 404
+        
+        # Get current columns
+        c.execute(f'PRAGMA table_info("{table_name}")')
+        columns = [col[1] for col in c.fetchall()]
+        
+        if column_name not in columns:
+            return jsonify({'error': f'Column {column_name} not found in table'}), 404
+        
+        # Create a new table without the specified column
+        columns_to_keep = [col for col in columns if col != column_name]
+        columns_str = ', '.join([f'"{col}"' for col in columns_to_keep])
+        
+        # Create new table without the column - use a safe name without hyphens
+        temp_table_name = f"temp_{uuid.uuid4().hex}"  # Use hex UUID to avoid special characters
+        c.execute(f'CREATE TABLE "{temp_table_name}" AS SELECT {columns_str} FROM "{table_name}"')
+        
+        # Drop old table and rename new one
+        c.execute(f'DROP TABLE "{table_name}"')
+        c.execute(f'ALTER TABLE "{temp_table_name}" RENAME TO "{table_name}"')
+        
+        conn.commit()
+        
+        # Return updated columns
+        return jsonify({
+            'success': True,
+            'message': f'Column {column_name} deleted successfully',
+            'columns': columns_to_keep
+        })
+        
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+        app.logger.error(f"Error deleting column: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
+@app.route('/rename-column/<user_id>/<file_id>', methods=['POST'])
+def rename_column(user_id, file_id):
+    """Rename a column in a table"""
+    try:
+        data = request.json
+        old_name = data.get('oldName')
+        new_name = data.get('newName')
+        
+        if not old_name or not new_name:
+            return jsonify({'error': 'Both old and new column names are required'}), 400
+        
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get file information
+        c.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
+        
+        # Verify table exists
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not c.fetchone():
+            return jsonify({'error': f'Table {table_name} not found'}), 404
+        
+        # Get current columns to verify old name exists
+        c.execute(f'PRAGMA table_info("{table_name}")')
+        columns = [col[1] for col in c.fetchall()]
+        
+        if old_name not in columns:
+            return jsonify({'error': f'Column {old_name} not found in table'}), 404
+        
+        if new_name in columns:
+            return jsonify({'error': f'Column {new_name} already exists in table'}), 400
+        
+        # Rename column by creating a new table with the renamed column
+        columns_select = []
+        columns_create = []
+        
+        for col in columns:
+            if col == old_name:
+                columns_select.append(f'"{old_name}" AS "{new_name}"')
+                columns_create.append(f'"{new_name}"')
+            else:
+                columns_select.append(f'"{col}"')
+                columns_create.append(f'"{col}"')
+        
+        select_str = ', '.join(columns_select)
+        
+        # Use hex UUID for temporary table name to avoid hyphens
+        temp_table_name = f"temp_{uuid.uuid4().hex}"
+        
+        # Create new table with renamed column
+        c.execute(f'CREATE TABLE "{temp_table_name}" AS SELECT {select_str} FROM "{table_name}"')
+        
+        # Drop old table and rename new one
+        c.execute(f'DROP TABLE "{table_name}"')
+        c.execute(f'ALTER TABLE "{temp_table_name}" RENAME TO "{table_name}"')
+        
+        conn.commit()
+        
+        # Return updated columns
+        updated_columns = [new_name if col == old_name else col for col in columns]
+        return jsonify({
+            'success': True,
+            'message': f'Column renamed from {old_name} to {new_name} successfully',
+            'columns': updated_columns
+        })
+        
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Error renaming column: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+# @app.route('/add-column/<user_id>/<file_id>', methods=['POST'])
+# def add_column(user_id, file_id):
+#     """Add a new column by splitting an existing one"""
+#     try:
+#         data = request.json
+#         source_column = data.get('sourceColumn')
+#         new_column_name = data.get('newColumnName')
+#         delimiter = data.get('delimiter')
+#         split_index = data.get('splitIndex', 0)
+        
+#         if not source_column or not new_column_name or not delimiter:
+#             return jsonify({'error': 'Source column, new column name, and delimiter are required'}), 400
+        
+#         conn = sqlite3.connect('user_files.db')
+#         c = conn.cursor()
+        
+#         # Get file information
+#         c.execute("""
+#             SELECT unique_key
+#             FROM user_files
+#             WHERE file_id = ? AND user_id = ?
+#         """, (file_id, user_id))
+        
+#         result = c.fetchone()
+#         if not result:
+#             return jsonify({'error': 'File not found'}), 404
+            
+#         unique_key = result[0]
+#         table_name = f"table_{unique_key}"
+        
+#         # Verify table exists
+#         c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+#         if not c.fetchone():
+#             return jsonify({'error': f'Table {table_name} not found'}), 404
+        
+#         # Get current columns to verify source column exists
+#         c.execute(f"PRAGMA table_info('{table_name}')")
+#         columns = [col[1] for col in c.fetchall()]
+        
+#         if source_column not in columns:
+#             return jsonify({'error': f'Column {source_column} not found in table'}), 404
+        
+#         if new_column_name in columns:
+#             return jsonify({'error': f'Column {new_column_name} already exists in table'}), 400
+        
+#         # Add new column
+#         try:
+#             c.execute(f'ALTER TABLE "{table_name}" ADD COLUMN "{new_column_name}" TEXT')
+#         except sqlite3.OperationalError as e:
+#             # If it fails with older SQLite versions, use a workaround with temp table
+#             if "duplicate column name" in str(e):
+#                 return jsonify({'error': f'Column {new_column_name} already exists'}), 400
+#             raise
+        
+#         # Update the new column with split values
+#         # For SQLite we use instr and substr functions for string manipulation
+#         if split_index == 0:
+#             # Get first part before delimiter
+#             c.execute(f"""
+#                 UPDATE "{table_name}" 
+#                 SET "{new_column_name}" = 
+#                     CASE 
+#                         WHEN instr("{source_column}", ?) > 0 THEN substr("{source_column}", 1, instr("{source_column}", ?) - 1)
+#                         ELSE "{source_column}"
+#                     END
+#             """, (delimiter, delimiter))
+#         else:
+#             # Get part after delimiter at specific position
+#             # This is a bit complex in SQLite, we'll implement a simplified version
+#             c.execute(f"""
+#                 UPDATE "{table_name}" 
+#                 SET "{new_column_name}" = 
+#                     CASE 
+#                         WHEN instr("{source_column}", ?) > 0 THEN 
+#                             substr(
+#                                 "{source_column}", 
+#                                 instr("{source_column}", ?) + 1
+#                             )
+#                         ELSE NULL
+#                     END
+#             """, (delimiter, delimiter))
+        
+#         conn.commit()
+        
+#         # Return updated columns
+#         updated_columns = columns + [new_column_name]
+#         return jsonify({
+#             'success': True,
+#             'message': f'New column {new_column_name} added successfully',
+#             'columns': updated_columns
+#         })
+        
+#     except Exception as e:
+#         conn.rollback()
+#         app.logger.error(f"Error adding column: {str(e)}")
+#         app.logger.error(traceback.format_exc())
+#         return jsonify({'error': str(e)}), 500
+#     finally:
+#         if 'conn' in locals():
+#             conn.close()
+
+@app.route('/rename-file/<user_id>/<file_id>', methods=['POST'])
+def rename_file(user_id, file_id):
+    """Rename a file and update all related references"""
+    try:
+        data = request.json
+        new_filename = data.get('newFilename')
+        
+        if not new_filename:
+            return jsonify({'error': 'New filename is required'}), 400
+        
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get file information
+        c.execute("""
+            SELECT filename, file_type, parent_file_id, unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        old_filename, file_type, parent_file_id, unique_key = result
+        
+        # Check if this is a parent file with children
+        if parent_file_id is None:  # This is a parent file
+            c.execute("""
+                SELECT file_id, filename, sheet_table
+                FROM user_files
+                WHERE parent_file_id = ?
+            """, (file_id,))
+            
+            child_files = c.fetchall()
+            
+            # Update parent file
+            c.execute("""
+                UPDATE user_files
+                SET filename = ?
+                WHERE file_id = ?
+            """, (new_filename, file_id))
+            
+            # Update child files
+            for child_id, child_filename, sheet_table in child_files:
+                # For child files, format is typically "parentname:sheetname"
+                # So we replace the parent part
+                if ':' in child_filename:
+                    _, sheet_name = child_filename.split(':', 1)
+                    new_child_filename = f"{new_filename}:{sheet_name}"
+                else:
+                    new_child_filename = f"{new_filename}:{sheet_table}"
+                
+                c.execute("""
+                    UPDATE user_files
+                    SET filename = ?
+                    WHERE file_id = ?
+                """, (new_child_filename, child_id))
+        else:
+            # This is a child file, we need to update just this file
+            # but keep the parent prefix
+            c.execute("""
+                SELECT filename
+                FROM user_files
+                WHERE file_id = ?
+            """, (parent_file_id,))
+            
+            parent_result = c.fetchone()
+            if not parent_result:
+                # Parent not found, just update this file
+                c.execute("""
+                    UPDATE user_files
+                    SET filename = ?
+                    WHERE file_id = ?
+                """, (new_filename, file_id))
+            else:
+                parent_filename = parent_result[0]
+                # For child files, keep "parentname:sheetname" format
+                # But update the sheet part
+                if ':' in old_filename:
+                    sheet_table = old_filename.split(':', 1)[1]
+                    new_child_filename = f"{parent_filename}:{new_filename}"
+                else:
+                    new_child_filename = f"{parent_filename}:{new_filename}"
+                
+                c.execute("""
+                    UPDATE user_files
+                    SET filename = ?, sheet_table = ?
+                    WHERE file_id = ?
+                """, (new_child_filename, new_filename, file_id))
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'File renamed successfully',
+            'newFilename': new_filename
+        })
+        
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Error renaming file: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+# Columns rotes updates end
 @app.route('/update-row/<user_id>/<file_id>', methods=['POST'])
 def update_row(user_id, file_id):
     conn = sqlite3.connect('user_files.db')
@@ -3365,64 +2855,144 @@ def delete_file(user_id, file_id):
     finally:
         conn.close()
     
-@app.route('/split-column/<user_id>/<file_id>', methods=['POST'])
-def split_column(user_id, file_id):
-    try:
-        data = request.json
-        column_name = data.get('column')
-        delimiter = data.get('delimiter')
-        new_column_prefix = data.get('newColumnPrefix', 'split')
+# @app.route('/split-column/<user_id>/<file_id>', methods=['POST'])
+# def split_column(user_id, file_id):
+#     try:
+#         data = request.json
+#         column_name = data.get('column')
+#         delimiter = data.get('delimiter')
+#         new_column_prefix = data.get('newColumnPrefix', 'split')
         
-        conn = sqlite3.connect('user_files.db')
-        c = conn.cursor()
+#         conn = sqlite3.connect('user_files.db')
+#         c = conn.cursor()
         
-        # Get table info
-        c.execute("""
-            SELECT f.unique_key, s.table_name
-            FROM user_files f
-            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
-            WHERE f.file_id = ? AND f.user_id = ?
-        """, (file_id, user_id))
+#         # Get table info
+#         c.execute("""
+#             SELECT f.unique_key, s.table_name
+#             FROM user_files f
+#             LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
+#             WHERE f.file_id = ? AND f.user_id = ?
+#         """, (file_id, user_id))
         
-        result = c.fetchone()
-        if not result:
-            return jsonify({'error': 'File not found'}), 404
+#         result = c.fetchone()
+#         if not result:
+#             return jsonify({'error': 'File not found'}), 404
             
-        unique_key, table_name = result
+#         unique_key, table_name = result
         
-        # Read data into pandas
-        df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+#         # Read data into pandas
+#         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
         
-        # Perform split operation efficiently
-        split_df = df[column_name].str.split(delimiter, expand=True)
+#         # Perform split operation efficiently
+#         split_df = df[column_name].str.split(delimiter, expand=True)
         
-        # Name new columns
-        num_cols = len(split_df.columns)
-        new_columns = [f"{new_column_prefix}_{i+1}" for i in range(num_cols)]
-        split_df.columns = new_columns
+#         # Name new columns
+#         num_cols = len(split_df.columns)
+#         new_columns = [f"{new_column_prefix}_{i+1}" for i in range(num_cols)]
+#         split_df.columns = new_columns
         
-        # Add new columns to original dataframe
-        for col in new_columns:
-            df[col] = split_df[col]
+#         # Add new columns to original dataframe
+#         for col in new_columns:
+#             df[col] = split_df[col]
         
-        # Update database
-        df.to_sql(table_name, conn, if_exists='replace', index=False)
+#         # Update database
+#         df.to_sql(table_name, conn, if_exists='replace', index=False)
         
-        conn.commit()
+#         conn.commit()
         
-        return jsonify({
-            'success': True,
-            'newColumns': new_columns,
-            'data': df.to_dict('records')
-        })
+#         return jsonify({
+#             'success': True,
+#             'newColumns': new_columns,
+#             'data': df.to_dict('records')
+#         })
         
-    except Exception as e:
-        app.logger.error(f"Error in split_column: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        conn.close()
+#     except Exception as e:
+#         app.logger.error(f"Error in split_column: {str(e)}")
+#         return jsonify({'error': str(e)}), 500
+#     finally:
+#         conn.close()
 
-
+# @app.route('/add-column/<user_id>/<file_id>', methods=['POST'])
+# def add_column(user_id, file_id):
+#     """Add a new column by splitting an existing one"""
+#     try:
+#         data = request.json
+#         app.logger.info(f"Received add column request: {data}")
+        
+#         source_column = data.get('sourceColumn')
+#         new_column_name = data.get('newColumnName')
+#         delimiter = data.get('delimiter')
+#         split_index = data.get('splitIndex', 0)
+        
+#         if not source_column or not new_column_name or delimiter is None:
+#             return jsonify({'error': 'Source column, new column name, and delimiter are required'}), 400
+        
+#         conn = sqlite3.connect('user_files.db')
+#         c = conn.cursor()
+        
+#         # Get file information
+#         c.execute("""
+#             SELECT unique_key
+#             FROM user_files
+#             WHERE file_id = ? AND user_id = ?
+#         """, (file_id, user_id))
+        
+#         result = c.fetchone()
+#         if not result:
+#             return jsonify({'error': 'File not found'}), 404
+            
+#         unique_key = result[0]
+#         table_name = f"table_{unique_key}"
+        
+#         # Get current columns
+#         c.execute(f'PRAGMA table_info("{table_name}")')
+#         columns = [col[1] for col in c.fetchall()]
+        
+#         if source_column not in columns:
+#             return jsonify({'error': f'Column {source_column} not found in table'}), 404
+        
+#         if new_column_name in columns:
+#             return jsonify({'error': f'Column {new_column_name} already exists in table'}), 400
+        
+#         # Read data into pandas for processing
+#         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+        
+#         # Create new column
+#         df[new_column_name] = ""
+        
+#         # Update with split values
+#         for idx, row in df.iterrows():
+#             value = row[source_column]
+#             if value and isinstance(value, str):
+#                 parts = value.split(delimiter)
+#                 if parts and len(parts) > split_index:
+#                     df.at[idx, new_column_name] = parts[split_index].strip()
+        
+#         # Create temporary table, then swap
+#         temp_table = f"temp_{uuid.uuid4().hex}"
+#         df.to_sql(temp_table, conn, if_exists='replace', index=False)
+        
+#         # Drop original and rename temp
+#         c.execute(f'DROP TABLE "{table_name}"')
+#         c.execute(f'ALTER TABLE "{temp_table}" RENAME TO "{table_name}"')
+        
+#         conn.commit()
+        
+#         return jsonify({
+#             'success': True,
+#             'message': f'New column {new_column_name} added successfully',
+#             'columns': list(df.columns)
+#         })
+        
+#     except Exception as e:
+#         if 'conn' in locals():
+#             conn.rollback()
+#         app.logger.error(f"Error adding column: {str(e)}")
+#         app.logger.error(traceback.format_exc())
+#         return jsonify({'error': str(e)}), 500
+#     finally:
+#         if 'conn' in locals():
+#             conn.close()
 
 def calculate_basic_stats(df: pd.DataFrame) -> Dict[str, Any]:
     """Calculate basic statistics for the dataset."""
@@ -5209,5 +4779,334 @@ def save_dashboard(user_id, dashboard_id):
 #     finally:
 #         await browser.close()
 
+# calculator statistics here
+# Add these routes to your Flask application
+# Helper functions integrated with existing database structure
+
+def get_file_data(user_id, file_id):
+    """
+    Retrieve structured file data from the database
+    Returns data as a list of dictionaries (rows)
+    """
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get file metadata to find the unique_key
+        c.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return None
+            
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
+        
+        # Verify table exists
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not c.fetchone():
+            return None
+        
+        # Get column names
+        c.execute(f'PRAGMA table_info("{table_name}")')
+        columns = [col[1] for col in c.fetchall()]
+        
+        # Get all data
+        c.execute(f'SELECT * FROM "{table_name}"')
+        rows = c.fetchall()
+        
+        # Convert to list of dictionaries
+        data = []
+        for row in rows:
+            row_dict = {}
+            for i, col_name in enumerate(columns):
+                row_dict[col_name] = row[i]
+            data.append(row_dict)
+            
+        return data
+        
+    except Exception as e:
+        app.logger.error(f"Error retrieving file data: {str(e)}")
+        return None
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+
+def update_file_data(user_id, file_id, data):
+    """
+    Update file data in database by adding or updating a column
+    
+    Args:
+        user_id: User ID
+        file_id: File ID
+        data: List of dictionaries with the updated data
+    """
+    try:
+        if not data:
+            return False
+            
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get file metadata to find the unique_key
+        c.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return False
+            
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
+        
+        # Convert data to DataFrame for easier manipulation
+        df = pd.DataFrame(data)
+        
+        # Drop the old table and recreate with the new data
+        # This is a simple approach - a more optimized approach would be to only add/update 
+        # the specific column, but this ensures all data is preserved
+        temp_table = f"temp_{uuid.uuid4().hex}"
+        df.to_sql(temp_table, conn, if_exists='replace', index=False)
+        
+        c.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+        c.execute(f'ALTER TABLE "{temp_table}" RENAME TO "{table_name}"')
+        
+        conn.commit()
+        return True
+        
+    except Exception as e:
+        app.logger.error(f"Error updating file data: {str(e)}")
+        if 'conn' in locals():
+            conn.rollback()
+        return False
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+
+@app.route('/calculate-statistics/<user_id>/<file_id>', methods=['POST'])
+def calculate_statistics(user_id, file_id):
+    """
+    Perform statistical calculations on columns in a file
+    """
+    try:
+        data = request.json
+        first_column = data.get('first_column')
+        second_column = data.get('second_column')
+        operator = data.get('operator')
+        new_column_name = data.get('new_column_name')
+
+        # Input validation
+        if not first_column:
+            return jsonify({"success": False, "error": "First column is required"}), 400
+        
+        if not new_column_name:
+            return jsonify({"success": False, "error": "Output column name is required"}), 400
+
+        # Get file data from database
+        file_data = get_file_data(user_id, file_id)
+        
+        if not file_data:
+            return jsonify({"success": False, "error": "File not found"}), 404
+        
+        # Convert to pandas DataFrame for easier manipulation
+        df = pd.DataFrame(file_data)
+        
+        # Check if columns exist
+        if first_column not in df.columns:
+            return jsonify({"success": False, "error": f"Column '{first_column}' not found"}), 400
+        
+        if second_column and second_column not in df.columns:
+            return jsonify({"success": False, "error": f"Column '{second_column}' not found"}), 400
+
+        # Make sure columns contain numeric data
+        try:
+            df[first_column] = pd.to_numeric(df[first_column], errors='coerce')
+            if second_column:
+                df[second_column] = pd.to_numeric(df[second_column], errors='coerce')
+        except Exception as e:
+            return jsonify({"success": False, "error": f"Columns must contain numeric data: {str(e)}"}), 400
+
+        # Calculate based on operator
+        result = None
+        message = ""
+        
+        if operator == '+':
+            result = df[first_column] + df[second_column]
+            message = f"Added columns '{first_column}' and '{second_column}'"
+        
+        elif operator == '-':
+            result = df[first_column] - df[second_column]
+            message = f"Subtracted '{second_column}' from '{first_column}'"
+        
+        elif operator == '*':
+            result = df[first_column] * df[second_column]
+            message = f"Multiplied '{first_column}' by '{second_column}'"
+        
+        elif operator == '/':
+            # Handle division by zero
+            result = df[first_column] / df[second_column].replace(0, np.nan)
+            message = f"Divided '{first_column}' by '{second_column}'"
+        
+        elif operator == 'min':
+            result = df[[first_column, second_column]].min(axis=1)
+            message = f"Calculated minimum between '{first_column}' and '{second_column}'"
+        
+        elif operator == 'max':
+            result = df[[first_column, second_column]].max(axis=1)
+            message = f"Calculated maximum between '{first_column}' and '{second_column}'"
+        
+        elif operator == 'mean':
+            # For mean, if second_column is provided, calculate mean of both columns
+            if second_column:
+                result = df[[first_column, second_column]].mean(axis=1)
+                message = f"Calculated mean of '{first_column}' and '{second_column}'"
+            else:
+                result = df[first_column]
+                message = f"Prepared '{first_column}' for mean calculation"
+        
+        elif operator == 'correlation':
+            # Calculate correlation coefficient (Pearson's r)
+            correlation = df[first_column].corr(df[second_column])
+            result = correlation
+            message = f"Correlation between '{first_column}' and '{second_column}' is {correlation:.4f}"
+        
+        elif operator == 'stddev':
+            # For standard deviation, if second_column is provided, calculate pooled std
+            if second_column:
+                # Pooled standard deviation
+                n1 = df[first_column].count()
+                n2 = df[second_column].count()
+                s1 = df[first_column].std()
+                s2 = df[second_column].std()
+                
+                pooled_std = np.sqrt(((n1-1)*s1**2 + (n2-1)*s2**2) / (n1+n2-2))
+                result = pooled_std
+                message = f"Pooled standard deviation of '{first_column}' and '{second_column}' is {pooled_std:.4f}"
+            else:
+                std = df[first_column].std()
+                result = std
+                message = f"Standard deviation of '{first_column}' is {std:.4f}"
+        
+        else:
+            return jsonify({"success": False, "error": f"Unknown operator: {operator}"}), 400
+
+        # Prepare and return the result
+        if isinstance(result, pd.Series):
+            result_data = result.to_dict()
+            
+            # Get descriptive statistics on the result
+            stats_data = {
+                "mean": float(result.mean()),
+                "median": float(result.median()),
+                "std": float(result.std()),
+                "min": float(result.min()) if not pd.isna(result.min()) else None,
+                "max": float(result.max()) if not pd.isna(result.max()) else None,
+                "count": int(result.count()),
+                "missing": int(result.isna().sum())
+            }
+            
+            sample_data = {i: float(val) if not pd.isna(val) else None 
+                          for i, val in enumerate(result.iloc[:5])}
+            
+            return jsonify({
+                "success": True,
+                "result": {
+                    "data": result_data,
+                    "stats": stats_data,
+                    "sample": sample_data
+                },
+                "message": message
+            })
+        else:
+            # For scalar results (like correlation or single std)
+            return jsonify({
+                "success": True,
+                "result": float(result) if result is not None else None,
+                "message": message
+            })
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        app.logger.error(f"Error calculating statistics: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/apply-calculation/<user_id>/<file_id>', methods=['POST'])
+def apply_calculation(user_id, file_id):
+    """
+    Apply calculation result as a new column in the file
+    """
+    try:
+        data = request.json
+        new_column_name = data.get('new_column_name')
+        result_data = data.get('result_data')
+        
+        if not new_column_name:
+            return jsonify({"success": False, "error": "New column name is required"}), 400
+        
+        if not result_data:
+            return jsonify({"success": False, "error": "Result data is required"}), 400
+
+        # Get file data
+        file_data = get_file_data(user_id, file_id)
+        
+        if not file_data:
+            return jsonify({"success": False, "error": "File not found"}), 404
+        
+        # Check if column already exists
+        df = pd.DataFrame(file_data)
+        if new_column_name in df.columns:
+            return jsonify({"success": False, "error": f"Column '{new_column_name}' already exists"}), 400
+        
+        # Handle different result formats
+        if isinstance(result_data, dict) and 'data' in result_data:
+            # Series data from operations like +, -, etc.
+            new_data = result_data['data']
+            
+            # Convert string indices to integers if needed
+            if all(k.isdigit() for k in new_data.keys()):
+                new_data = {int(k): v for k, v in new_data.items()}
+            
+            # Add the new column to each row
+            for i, row in enumerate(file_data):
+                # Handle potential missing indices
+                if str(i) in new_data:
+                    row[new_column_name] = new_data[str(i)]
+                elif i in new_data:
+                    row[new_column_name] = new_data[i]
+                else:
+                    row[new_column_name] = None
+        
+        elif isinstance(result_data, (int, float)):
+            # Scalar result like correlation or stddev
+            # Add the same value to all rows
+            for row in file_data:
+                row[new_column_name] = result_data
+        
+        # Save the updated data back to database
+        success = update_file_data(user_id, file_id, file_data)
+        
+        if not success:
+            return jsonify({"success": False, "error": "Failed to update data"}), 500
+            
+        return jsonify({
+            "success": True,
+            "message": f"New column '{new_column_name}' created successfully"
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error applying calculation: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+# calculator statistics end
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
