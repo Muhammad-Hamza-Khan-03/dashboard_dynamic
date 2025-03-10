@@ -1,3 +1,4 @@
+'use client'
 import React, { useCallback,useState, useEffect, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -17,7 +18,7 @@ import axios from 'axios';
 import { useInterval } from './use-interval';
 import { useToast } from '@/components/ui/use-toast';
 import { Progress } from '@/components/ui/progress';
-
+import dynamic from 'next/dynamic'
 // Type definitions for better type safety
 interface AnalysisModalProps {
   fileId: string;

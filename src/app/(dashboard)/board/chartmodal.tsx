@@ -388,19 +388,19 @@ onClose();
                     <SelectItem value="heatmap">Heat Map</SelectItem>
                     <SelectItem value="treemap">Tree Map</SelectItem>
                     <SelectItem value="sankey">Sankey Diagram</SelectItem>
-                    <SelectItem value="sunburst">Sunburst Chart</SelectItem>
-                    <SelectItem value="graph">Network Graph</SelectItem>
+                    {/* <SelectItem value="sunburst">Sunburst Chart</SelectItem> */}
+                    {/* <SelectItem value="graph">Network Graph</SelectItem> */}
                     <SelectItem value="liquid">Liquid Fill</SelectItem>
                   </SelectGroup>
 
                   {/* 3D Charts */}
-                  <SelectGroup>
+                  {/* <SelectGroup>
                     <SelectLabel className="font-semibold text-red-600">3D Visualizations</SelectLabel>
                     <SelectItem value="bar3d">3D Bar Chart</SelectItem>
                     <SelectItem value="line3d">3D Line Chart</SelectItem>
                     <SelectItem value="scatter3d">3D Scatter Plot</SelectItem>
                     <SelectItem value="surface3d">3D Surface Chart</SelectItem>
-                  </SelectGroup>
+                  </SelectGroup> */}
 
                   {/* Special Effects */}
                   <SelectGroup>
@@ -410,7 +410,7 @@ onClose();
                 </SelectContent>
               </Select>
             {/* inside chart selection for 3d charts   */}
-{['surface3d', 'bar3d', 'line3d', 'scatter3d'].includes(chartType) && (
+{/* {['surface3d', 'bar3d', 'line3d', 'scatter3d'].includes(chartType) && (
   <div className="mt-2 text-xs text-blue-600 bg-blue-50 p-2 rounded">
     <p>3D charts require exactly 3 numeric columns:</p>
     <ul className="list-disc pl-4 mt-1">
@@ -419,7 +419,7 @@ onClose();
       <li>Z-axis: Third selected column</li>
     </ul>
   </div>
-)}
+)} */}
 
 {/* ///////////////////////////////////////// */}
               {/* Chart-specific Options */}

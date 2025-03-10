@@ -20,8 +20,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -31,12 +29,13 @@ import {
 } from "@/components/ui/select";
 import FileUpload from "./fileupload";
 import FileDelete from "@/features/sqlite/components/file-delete";
-import { SplitDialog } from "./split-dialog";
+
 
 import DataAnalysisModal from "./data-analysis-modal-component";
 import EnhancedEditForm from "./EditForm";
-import { FetchEventLike } from "hono/types";
-
+import RenameFileDialog from "./renameFileDialog";
+import { FileEdit } from "lucide-react";
+import StatisticsCalculatorStandalone from "./Calulator";
 
 // Update the dynamic import with proper typing
 const DataTable = dynamic<React.ComponentProps<typeof import('@/components/data-table').DataTable>>(() =>
@@ -82,28 +81,18 @@ interface FileContent {
     total_pages: number;
   };
 }
-interface DataTableProps<TData> {
-  columns: ColumnDef<TData, any>[]
-  data: TData[]
-  filterkey: string
-  onRowSelectionChange: (rows: Row<TData>[]) => void
-  onReset: () => void
-}
 interface TableInfo {
   id: string;
   name: string;
   full_name: string;
 }
 
-
-///////
 // Add these interfaces
 interface Sheet {
   name: string;
   key: string;
 }
 
-///////
 type DataItem = FileData;
 interface PaginationInfo {
   total_rows: number;
@@ -157,13 +146,15 @@ const DataTablePage: React.FC = () => {
   const [editSheetOpen, setEditSheetOpen] = useState(false);
 
   const [fileChanged, setFileChanged] = useState<boolean>(false);
-
+  const [isRenameFileDialogOpen, setIsRenameFileDialogOpen] = useState(false);
   const [activeRow, setActiveRow] = useState<{
     data: any;
     index: number;
     field: string;
     value: any;
   } | null>(null);
+  const [isColumnManagementOpen, setIsColumnManagementOpen] = useState(false);
+const [activeColumn, setActiveColumn] = useState<string>('');
 
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
@@ -177,10 +168,6 @@ const DataTablePage: React.FC = () => {
     setFileChanged(true);
   }, [selectedFile]);
 
-
-  /////////////////////////////////////////////////////
-
-  // Reset state helper function
 
   const handleOpenAnalysisModal = () => {
     setFileChanged(false);
@@ -196,6 +183,22 @@ const DataTablePage: React.FC = () => {
     setPaginationInfo(null);
     setSelectedTable(null);
   };
+  
+  const handleColumnsChange = useCallback((newColumns: ColumnDef<DataItem, any>[]) => {
+    setColumns(newColumns);
+  }, []);
+  
+  const handleFileRenamed = useCallback((newFilename: string) => {
+    if (selectedFile) {
+      setSelectedFile({
+        ...selectedFile,
+        filename: newFilename
+      });
+      
+      // Refresh the file list to reflect the renamed file
+      refetchFileList();
+    }
+  }, [selectedFile, refetchFileList]);
 
   // Modify the fetchFileData function
   const fetchFileData = useCallback(async (fileId: string, filename: string, page: number = 1) => {
@@ -262,12 +265,6 @@ const DataTablePage: React.FC = () => {
     }
   }, [user?.id, selectedTable]);
 
-  // Helper function to parse CSV content
-
-
-
-  // Helper function to parse text content
-  ///////////////////////////////////////////////////////////////////////////////////
   useEffect(() => {
     const loadTableData = async () => {
       if (!selectedFile?.file_id || !currentTable || !user?.id) return;
@@ -360,10 +357,17 @@ const DataTablePage: React.FC = () => {
       });
       setColumnOrder(order);
     }
-
+  
     return columns.map(column => ({
       accessorKey: column,
-      header: column,
+      header: () => {
+        return (
+          <div className="flex items-center space-x-2">
+            <span>{column}</span>
+           
+          </div>
+        );
+      },
       cell: ({ row }) => {
         const value = row.getValue(column);
         return (
@@ -372,7 +376,11 @@ const DataTablePage: React.FC = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handleEdit(row.index, column, formatCellValue(value))}
+              
+              onClick={(e) => {
+                e.stopPropagation();
+                // setActiveColumn(column);
+                handleEdit(row.index, column, formatCellValue(value))}}
             >
               <Edit className="h-4 w-4" />
             </Button>
@@ -381,7 +389,7 @@ const DataTablePage: React.FC = () => {
       }
     }));
   };
-
+  
   const updateData = (newData: DataItem[]) => {
     setData(newData);
     dataRef.current = newData;
@@ -798,50 +806,6 @@ const DataTablePage: React.FC = () => {
       </div>
     );
   }
-  const renderEditForm = () => {
-    if (!activeRow) return null;
-
-    // Sort fields based on column order
-    const sortedFields = Object.entries(activeRow.data)
-      .filter(([key]) => key !== 'id' && key !== 'rowId')
-      .sort(([keyA], [keyB]) => {
-        const orderA = columnOrder[keyA] ?? Infinity;
-        const orderB = columnOrder[keyB] ?? Infinity;
-        return orderA - orderB;
-      });
-
-    return (
-      <div className="grid gap-4 py-4">
-        {sortedFields.map(([key, value]) => (
-          <div key={key} className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor={key} className="text-right text-gray-700">
-              {key}
-            </Label>
-            <Input
-              id={key}
-              value={(value as string) ?? ''}
-              onChange={(e) => {
-                setActiveRow(prev => {
-                  if (!prev) return prev;
-                  return {
-                    ...prev,
-                    data: {
-                      ...prev.data,
-                      [key]: e.target.value
-                    }
-                  };
-                });
-              }}
-              className={`col-span-3 border-gray-300 focus:border-gray-500 focus:ring-gray-500 ${key === focusedField ? 'ring-2 ring-gray-500' : ''
-                }`}
-              autoFocus={key === focusedField}
-              disabled={loading}
-            />
-          </div>
-        ))}
-      </div>
-    );
-  };
 
   return (
     // Main container - Adding a subtle background and better spacing
@@ -985,7 +949,18 @@ const DataTablePage: React.FC = () => {
                 }}
               />
             )} */}
-
+ <StatisticsCalculatorStandalone 
+    fileId={selectedFile?.file_id || ''}
+    userId={user?.id || ''}
+    onColumnAdded={() => {
+      // Refresh data when a column is added
+      if (selectedFile) {
+        fetchFileData(selectedFile.file_id, selectedFile.filename, currentPage);
+      }
+    }}
+    buttonVariant="default"
+    buttonClassName="bg-gray-700 text-white hover:bg-gray-600"
+  />
             {selectedRows.length > 0 && (
               <Button
                 variant="destructive"
@@ -1005,6 +980,14 @@ const DataTablePage: React.FC = () => {
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Data
             </Button> */}
+<Button
+  className="bg-gray-100 text-gray-800 hover:bg-gray-200"
+  onClick={() => setIsRenameFileDialogOpen(true)}
+  disabled={!selectedFile}
+>
+  <FileEdit className="mr-2 h-4 w-4" />
+  Rename File
+</Button>
 
             <Button
               onClick={handleReset}
@@ -1043,23 +1026,16 @@ const DataTablePage: React.FC = () => {
           ) : data.length > 0 ? (
             <>
               <DataTable
-                // key={tableKey}
-                // columns={columns}
-                // data={data}
-                // onRowSelectionChange={setSelectedRows}
-                // onReset={handleReset}
-                // filterkey=""
-
-                key={tableKey}
-                columns={columns}
-                data={data}
-                userId={user?.id || ''}
-                fileId={selectedFile?.file_id || ''}
-                onRowSelectionChange={setSelectedRows}
-                filterkey={filterkey}
-                onReset={handleReset}
-
-              />
+  key={tableKey}
+  columns={columns}
+  data={data}
+  userId={user?.id || ''}
+  fileId={selectedFile?.file_id || ''}
+  onRowSelectionChange={setSelectedRows}
+  filterkey={filterkey}
+  onReset={handleReset}
+  onColumnsChange={handleColumnsChange}
+/>
               {renderPagination()}
             </>
           ) : (
@@ -1171,6 +1147,30 @@ const DataTablePage: React.FC = () => {
           </div>
         </SheetContent>
       </Sheet>
+      {selectedFile && (
+  <RenameFileDialog
+    isOpen={isRenameFileDialogOpen}
+    onClose={() => setIsRenameFileDialogOpen(false)}
+    fileId={selectedFile.file_id}
+    userId={user?.id || ''}
+    currentFilename={selectedFile.filename}
+    onFileRenamed={handleFileRenamed}
+  />
+)}
+{/* {isColumnManagementOpen && (
+  <ColumnManagementDialog
+    isOpen={isColumnManagementOpen}
+    onClose={() => setIsColumnManagementOpen(false)}
+    column={activeColumn}
+    fileId={selectedFile?.file_id || ''}
+    userId={user?.id || ''}
+    onColumnChange={handleColumnChange}
+    allColumns={columns.map(col => 
+      typeof col === 'string' ? col : 
+      'accessorKey' in col ? (col.accessorKey as string) : ''
+    ).filter(Boolean)}
+  />
+)} */}
     </div>
   );
 };

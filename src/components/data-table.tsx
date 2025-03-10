@@ -17,11 +17,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Filter, Loader2 } from 'lucide-react';
+import { Filter, Loader2, Edit, Trash2, FilePlus, ChevronDown } from 'lucide-react';
 import FilterSidebar from '@/app/(dashboard)/upload/filtering-sidebar';
 import { toast } from '@/components/ui/use-toast';
+import ColumnManagementDialog from '@/app/(dashboard)/upload/columnManagementDialog';
 
 interface PaginationInfo {
   total_rows: number;
@@ -38,6 +46,7 @@ interface DataTableProps {
   onRowSelectionChange: (rows: Row<FileData>[]) => void;
   filterkey: string; // Used to trigger filter resets
   onReset: () => void;
+  onColumnsChange?: (columns: ColumnDef<FileData, any>[]) => void;
 }
 
 export function DataTable({
@@ -48,6 +57,7 @@ export function DataTable({
   onRowSelectionChange,
   filterkey,
   onReset,
+  onColumnsChange,
 }: DataTableProps) {
   // State management
   const [data, setData] = React.useState<FileData[]>(initialData);
@@ -63,6 +73,14 @@ export function DataTable({
     page_size: 50,
     total_pages: 0,
   });
+  const [columnManagement, setColumnManagement] = React.useState<{
+    isOpen: boolean;
+    column: string | null;
+  }>({
+    isOpen: false,
+    column: null,
+  });
+  const [activeTab, setActiveTab] = React.useState("rename");
 
   // Reset filters when filterkey changes
   React.useEffect(() => {
@@ -144,6 +162,52 @@ export function DataTable({
     fetchFilteredData(currentFilters, newPage);
   };
 
+  // Column management functions
+  const openColumnManagement = (column: string, tab: string = "rename") => {
+    setColumnManagement({
+      isOpen: true,
+      column,
+    });
+    setActiveTab(tab);
+  };
+
+  const closeColumnManagement = () => {
+    setColumnManagement({
+      isOpen: false,
+      column: null,
+    });
+  };
+
+  const handleColumnAction = (action: string, oldColumn?: string, newColumn?: string) => {
+    if (!onColumnsChange) return;
+
+    if (action === 'delete' && oldColumn) {
+      // Filter out the deleted column
+      const updatedColumns = columns.filter(
+        (col) => 'accessorKey' in col && col.accessorKey !== oldColumn
+      );
+      onColumnsChange(updatedColumns);
+    } 
+    else if (action === 'rename' && oldColumn && newColumn) {
+      // Rename the column
+      const updatedColumns = columns.map((col) => {
+        if ('accessorKey' in col && col.accessorKey === oldColumn) {
+          return {
+            ...col,
+            accessorKey: newColumn,
+            header: newColumn,
+          };
+        }
+        return col;
+      });
+      onColumnsChange(updatedColumns);
+    } 
+    else if (action === 'add' && newColumn) {
+      // Add the new column (will be refreshed from backend)
+      onReset();
+    }
+  };
+
   // Initialize table
   const table = useReactTable({
     data,
@@ -164,6 +228,19 @@ export function DataTable({
 
   return (
     <div className="space-y-4">
+      {/* Column Management Dialog */}
+      {columnManagement.isOpen && columnManagement.column && (
+        <ColumnManagementDialog
+          isOpen={columnManagement.isOpen}
+          onClose={closeColumnManagement}
+          column={columnManagement.column}
+          fileId={fileId}
+          userId={userId}
+          onColumnChange={handleColumnAction}
+          activeTab={activeTab}
+        />
+      )}
+
       {/* Filter Sidebar */}
       <FilterSidebar
         isOpen={filterPanelOpen}
@@ -181,10 +258,10 @@ export function DataTable({
           {Object.entries(currentFilters).map(([column, value]) => (
             <div key={column} className="bg-primary/10 text-primary px-2 py-1 rounded-md text-sm">
               {column}: {typeof value === 'object' ? (
-    `${value?.min || '*'} - ${value?.max || '*'}` as React.ReactNode
-) : (
-    value as React.ReactNode
-)}
+                `${value?.min || '*'} - ${value?.max || '*'}` as React.ReactNode
+              ) : (
+                value as React.ReactNode
+              )}
             </div>
           ))}
           <Button
@@ -210,25 +287,73 @@ export function DataTable({
                     aria-label="Select all"
                   />
                 </TableHead>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    <div className="flex items-center justify-between">
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
+                {headerGroup.headers.map((header) => {
+                  // Get the column accessor key if it exists
+                  const accessorKey = header.column.columnDef.accessorKey as string | undefined;
+
+                  return (
+                    <TableHead key={header.id}>
+                      <div className="flex items-center justify-between">
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                        <div className="flex">
+                          {/* Filter button */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openFilterPanel(header.column.id)}
+                            className="px-1"
+                          >
+                            <Filter className="h-4 w-4" />
+                          </Button>
+                          
+                          {/* Column management dropdown */}
+                          {accessorKey && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="px-1"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => openColumnManagement(accessorKey, "rename")}
+                                  className="flex items-center"
+                                >
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Rename Column
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => openColumnManagement(accessorKey, "split")}
+                                  className="flex items-center"
+                                >
+                                  <FilePlus className="mr-2 h-4 w-4" />
+                                  Split Column
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => openColumnManagement(accessorKey, "delete")}
+                                  className="flex items-center text-red-600"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete Column
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openFilterPanel(header.column.id)}
-                      >
-                        <Filter className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableHead>
-                ))}
+                        </div>
+                      </div>
+                    </TableHead>
+                  );
+                })}
               </TableRow>
             ))}
           </TableHeader>
