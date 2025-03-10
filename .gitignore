@@ -65,5 +65,7 @@ wheels/
 
 static/exports/
 stats.db
-user_files.db-x-graph*.png
+*.png
 .env
+stats.db
+ui_requirements.txt
