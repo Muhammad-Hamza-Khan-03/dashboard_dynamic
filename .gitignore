@@ -74,3 +74,4 @@ ui_requirements.txt
 *.db
 .env
 *.db
+*.png
