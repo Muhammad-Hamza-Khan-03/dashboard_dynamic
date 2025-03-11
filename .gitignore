@@ -69,3 +69,8 @@ stats.db
 .env
 stats.db
 ui_requirements.txt
+.env
+.env
+*.db
+.env
+*.db

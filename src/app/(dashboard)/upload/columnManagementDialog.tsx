@@ -184,11 +184,7 @@ const ColumnManagementDialog: React.FC<ColumnManagementDialogProps> = ({
               <FilePlus className="h-4 w-4 mr-2" />
               Split
             </TabsTrigger>
-            <TabsTrigger value="calculate">
-                <Calculator className="h-4 w-4 mr-2" />
-                Calculate
-              </TabsTrigger>
-          </TabsList>
+            </TabsList>
 
           {error && (
             <Alert variant="destructive" className="mt-4">

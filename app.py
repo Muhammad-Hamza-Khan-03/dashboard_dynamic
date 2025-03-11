@@ -45,7 +45,7 @@ class DataExplorerProAPI:
         self._setup_routes()
 
     def _setup_model_and_memory(self):
-        self.model = ChatGroq(api_key=self.GROQ_API_KEY, model="llama-3.3-70b-specdec")
+        self.model = ChatGroq(api_key=self.GROQ_API_KEY, model="deepseek-r1-distill-qwen-32b")
         self.memory = ConversationBufferMemory(return_messages=True)
 
     def _setup_routes(self):
