@@ -549,7 +549,7 @@ def handle_sqlite_upload(file, user_id, filename, c, conn):
         os.unlink(temp_path)
 
         conn.commit()
-        return parent_file_id
+        return parent_file_id,table_unique_key,table_name
 
     except Exception as e:
         app.logger.error(f"Error in handle_sqlite_upload: {str(e)}")
@@ -4575,6 +4575,76 @@ def save_dashboard(user_id, dashboard_id):
             conn.close()
             
 # nest_asyncio.apply()
+async def generate_chart_image(html_content):
+    """
+    Generate an image from HTML content using pyppeteer.
+    
+    Args:
+        html_content: The HTML content of the chart
+        
+    Returns:
+        Binary image data (PNG)
+    """
+    import pyppeteer
+    
+    # Full HTML template with necessary scripts
+    full_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2/dist/echarts-gl.min.js"></script>
+        <style>
+            body, html {{
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                width: 1000px;
+                height: 600px;
+            }}
+            #chart-container {{
+                width: 100%;
+                height: 100%;
+            }}
+        </style>
+    </head>
+    <body>
+        <div id="chart-container">
+            {html_content}
+        </div>
+    </body>
+    </html>
+    """
+    
+    browser = await pyppeteer.launch({
+        'headless': True,
+        'args': ['--no-sandbox', '--disable-setuid-sandbox']
+    })
+    
+    try:
+        page = await browser.newPage()
+        await page.setViewport({'width': 1000, 'height': 600})
+        await page.setContent(full_html)
+        await page.waitForSelector('#chart-container')
+        await page.waitForTimeout(2000)
+        
+        screenshot = await page.screenshot({
+            'type': 'png',
+            'fullPage': False,
+            'clip': {
+                'x': 0,
+                'y': 0,
+                'width': 1000,
+                'height': 600
+            }
+        })
+        
+        return screenshot
+        
+    finally:
+        await browser.close()
 # async def generate_chart_image(html_content):
 
 #     """
