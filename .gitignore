@@ -69,3 +69,12 @@ stats.db
 .env
 stats.db
 ui_requirements.txt
+*.log
+*.csv
+*.json
+*.db
+uploads
+visualizations
+main.py
+test.py
+
