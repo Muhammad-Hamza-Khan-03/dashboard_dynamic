@@ -24,13 +24,13 @@ const routes = [
     // },
     {
         href: "/upload",
-        label: "Data Table"
+        label: "Data Upload"
     },
 
 
     {
         href: "/board",
-        label: "Board"
+        label: "Dashboard"
     },
     // {
     //     href: "/DataWorkspace",
