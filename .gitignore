@@ -77,4 +77,5 @@ uploads
 visualizations
 main.py
 test.py
+*.png
 
