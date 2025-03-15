@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import tempfile
 import traceback
-from flask import Flask, Response, request, jsonify
+from flask import Flask, Response, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import io
@@ -27,27 +27,23 @@ from pyecharts.charts import (
     Sankey, Sunburst
 )
 from pyecharts.commons.utils import JsCode
-import pandas as pd
-import sqlite3
-import uuid
-import traceback
-
-import sqlite3
+from dotenv import load_dotenv
 import psutil
 import datetime
 import decimal
 import math
-import logging
 import json
 import time
 from typing import List, Dict, Any, Generator, Tuple,Optional
 from dataclasses import dataclass
 import traceback
+from flask import jsonify, request
 import queue
 from background_worker_implementation import *
-import threading
 import asyncio
 from EnhancedGenerator import *
+from insightai import InsightAI
+from contextlib import redirect_stdout
  # Import required libraries
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
@@ -66,7 +62,7 @@ CACHE_TIMEOUT = 300  # Cache timeout in seconds
 CHUNK_SIZE = 100000  # Maximum rows to fetch at once
 stats_task_queue = queue.Queue()
 TASK_STATUS = {}
-
+load_dotenv()
 
 ## Background worker implementation starts
 def process_statistics_task(task):
@@ -262,6 +258,204 @@ def background_worker():
         except Exception as e:
             logging.error(f"Error in background worker: {str(e)}")
             traceback.print_exc()
+def configure_llm_settings():
+    """
+    Set up LLM configuration for InsightAI.
+    Loads from .env file or sets defaults.
+    """
+    load_dotenv()
+    
+    # First try to load API keys
+    openai_key = os.getenv('OPENAI_API_KEY')
+    groq_key = os.getenv('GROQ_API_KEY')
+    
+    if not openai_key or not groq_key:
+        print("Warning: API keys not found in environment variables")
+        # For development only - replace with your keys
+        os.environ['OPENAI_API_KEY'] = 'sk-your-openai-key'
+        os.environ['GROQ_API_KEY'] = 'gsk-your-groq-key'
+    
+    # Set the LLM_CONFIG
+    llm_config = [
+        {"agent": "Expert Selector", "details": {"model": "deepseek-r1-distill-qwen-32b", "provider":"groq","max_tokens": 500, "temperature": 0}},
+        {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-qwen-32b", "provider":"groq","max_tokens": 500, "temperature": 0}},
+        {"agent": "SQL Analyst", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+        {"agent": "SQL Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+        {"agent": "SQL Executor", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+        {"agent": "Planner", "details": {"model": "deepseek-r1-distill-qwen-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+        {"agent": "Code Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+        {"agent": "Code Debugger", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+        {"agent": "Solution Summarizer", "details": {"model": "deepseek-r1-distill-qwen-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}}
+    ]
+    
+    # Set as environment variable
+    os.environ['LLM_CONFIG'] = json.dumps(llm_config)
+def create_insight_instance(file_id, user_id, report_enabled=False, report_questions=3):
+    """
+    Create an InsightAI instance based on file type (CSV or DB)
+    """
+    # Set API keys and LLM config first
+    configure_llm_settings()
+    
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+    
+    # Get file metadata
+    c.execute("""
+        SELECT file_type, unique_key, filename
+        FROM user_files
+        WHERE file_id = ? AND user_id = ?
+    """, (file_id, user_id))
+    
+    result = c.fetchone()
+    if not result:
+        conn.close()
+        return None, "File not found"
+    
+    file_type, unique_key, filename = result
+    
+    # Create visualization directory - SIMPLIFIED PATH
+    viz_dir = os.path.join('static', 'visualization')
+    os.makedirs(viz_dir, exist_ok=True)
+    
+    # Set environment variable to tell InsightAI where to save visualizations
+    os.environ['VISUALIZATION_DIR'] = viz_dir
+    
+    try:
+        if file_type == 'csv':
+            # For CSV files
+            table_name = f"table_{unique_key}"
+            
+            # Query all data from the table
+            df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+            
+            # Create InsightAI instance with DataFrame
+            insight = InsightAI(
+                df=df,
+                debug=True,
+                exploratory=True,
+                generate_report=report_enabled,
+                report_questions=report_questions
+            )
+            
+            return insight, None
+            
+        elif file_type in ['db', 'sqlite', 'sqlite3']:
+            # For database files, create a temporary file
+            temp_db = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+            temp_db.close()
+            
+            # Copy the database content to the temporary file
+            c.execute("""
+                SELECT s.table_name
+                FROM structured_file_storage s
+                WHERE s.unique_key = ?
+            """, (unique_key,))
+            
+            db_result = c.fetchone()
+            if not db_result:
+                return None, "Database structure not found"
+                
+            # Create connection to temp DB
+            temp_conn = sqlite3.connect(temp_db.name)
+            
+            # Copy all tables from the main DB to the temp DB
+            table_name = db_result[0]
+            query = f'SELECT * FROM "{table_name}"'
+            df = pd.read_sql_query(query, conn)
+            df.to_sql(table_name, temp_conn, index=False, if_exists='replace')
+            
+            # Create InsightAI instance with db_path
+            insight = InsightAI(
+                db_path=temp_db.name,
+                debug=True,
+                exploratory=True,
+                generate_report=report_enabled,
+                report_questions=report_questions
+            )
+            
+            return insight, None
+    except Exception as e:
+        return None, str(e)
+    finally:
+        conn.close()
+        
+@app.route('/process_question/<user_id>/<file_id>', methods=['POST'])
+def process_question(user_id, file_id):
+    try:
+        data = request.json
+        question = data.get('question', '')
+        generate_report = data.get('generate_report', False)
+        report_questions = data.get('report_questions', 3)
+        
+        if not question and not generate_report:
+            return jsonify({'error': 'Question or report generation required'}), 400
+            
+        # Create InsightAI instance
+        insight, error = create_insight_instance(
+            file_id, 
+            user_id, 
+            report_enabled=generate_report,
+            report_questions=report_questions
+        )
+        
+        if error:
+            return jsonify({'error': error}), 500
+            
+        if not insight:
+            return jsonify({'error': 'Failed to create analysis instance'}), 500
+        
+        # Capture stdout to get the output
+        output_buffer = io.StringIO()
+        with redirect_stdout(output_buffer):
+            if generate_report:
+                # Generate a report
+                insight.pd_agent_converse()
+                result = "Report generated successfully"
+            else:
+                # Process a single question
+                insight.pd_agent_converse(question)
+                result = output_buffer.getvalue()
+        
+        # Find all generated visualizations
+        viz_dir = os.path.join('static', 'visualization')
+        viz_files = []
+        
+        if os.path.exists(viz_dir):
+            # Get only the most recent .png files based on modification time
+            all_files = [(f, os.path.getmtime(os.path.join(viz_dir, f))) 
+                        for f in os.listdir(viz_dir) if f.endswith('.png')]
+            
+            # Sort by modification time, newest first
+            all_files.sort(key=lambda x: x[1], reverse=True)
+            
+            # Take the 10 most recent files
+            viz_files = [f[0] for f in all_files[:10]]
+        
+        # Check for report file
+        report_file = None
+        report_files = [f for f in os.listdir() if f.startswith('data_analysis_report_') and f.endswith('.md')]
+        
+        if report_files:
+            report_file = report_files[0]
+            # Copy report to visualization directory for easier access
+            source_path = report_file
+            dest_path = os.path.join(viz_dir, report_file)
+            import shutil
+            shutil.copy2(source_path, dest_path)
+            report_file = os.path.join('visualization', report_file)
+            
+        return jsonify({
+            'success': True,
+            'output': result,
+            'visualizations': [os.path.join('visualization', f) for f in viz_files],
+            'report_file': report_file
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error processing question: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
 
 def start_background_worker():
     """Start the background worker thread"""
@@ -2378,27 +2572,58 @@ def list_files(user_id):
     c = conn.cursor()
     try:
         c.execute("""
-            SELECT file_id, filename, file_type, is_structured, created_at,unique_key,parent_file_id
+            SELECT file_id, filename, file_type, is_structured, created_at, unique_key, parent_file_id
             FROM user_files
             WHERE user_id = ? 
         """, (user_id,))
         files = c.fetchall()
-        file_list = [
-            {
-                'file_id': f[0],
-                'filename': f[1],
-                'file_type': f[2],
-                'is_structured': bool(f[3]),
-                'created_at': f[4],
-                'unique_key': f[5]
-            } for f in files if f[2] == 'csv' or f[2] =='pdf' or f[2]=='db' or f[2]=='xlsx' or f[6] is not None
-        ]
+        file_list = []
+        
+        for f in files:
+            # Only include parent files or standalone files
+            if f[2] in ['csv', 'db', 'sqlite', 'sqlite3'] or f[6] is None:
+                file_list.append({
+                    'file_id': f[0],
+                    'filename': f[1],
+                    'file_type': f[2],
+                    'is_structured': bool(f[3]),
+                    'created_at': f[4],
+                    'unique_key': f[5],
+                    'supported_by_insightai': f[2] in ['csv', 'db', 'sqlite', 'sqlite3']
+                })
+        
         return jsonify({'files': file_list}), 200
     except Exception as e:
         app.logger.error(f"Error listing files: {str(e)}")
         return f'Error listing files: {str(e)}', 500
     finally:
         conn.close()
+        
+@app.route('/report/<user_id>/<file_id>', methods=['GET'])
+def serve_report(user_id, file_id):
+    # Find the latest report file
+    viz_dir = os.path.join('static', 'visualization')
+    report_files = [f for f in os.listdir(viz_dir) if f.startswith('data_analysis_report_') and f.endswith('.md')]
+    
+    if not report_files:
+        return jsonify({'error': 'Report not found'}), 404
+        
+    # Get the latest report
+    report_file = os.path.join(viz_dir, report_files[-1])
+    
+    # Read and fix image paths in the report content
+    with open(report_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+        
+    # Fix image paths to point to the visualization directory
+    fixed_content = content.replace('(visualization/', f'(/visualization/')
+        
+    return jsonify({'report_content': fixed_content})
+
+# Add a route to serve static files from the visualization directory
+@app.route('/visualization/<path:filename>')
+def serve_visualization(filename):
+    return send_from_directory('visualization', filename)
 
 def handle_excel_upload(file, user_id, filename, c, conn):
     """Handle Excel file by extracting sheets and storing them similarly to DB tables."""
@@ -5177,4 +5402,4 @@ def apply_calculation(user_id, file_id):
         return jsonify({"success": False, "error": str(e)}), 500
 # calculator statistics end
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=False, port=5000)

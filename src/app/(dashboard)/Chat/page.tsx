@@ -1,48 +1,55 @@
 "use client";
-// Import statements
+
 import { useUser } from "@clerk/nextjs";
-import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { format } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
+import Image from 'next/image';
 import {
   Send,
   Paperclip,
-  ChevronUp,
-  Edit,
-  Check,
-  X,
-  ChevronLeft,
-  ChevronDown,
-  ChevronRight,
   Download,
-  BookmarkCheckIcon,
-  Palette,
-  Layout,
+  FileText,
+  Database,
+  BarChart,
+  AlertCircle,
+  Book,
+  Settings,
+  CheckCircle2,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  Bot,
+  Code,
+  Search,
+  Coffee,
+  Terminal,
+  Zap,
+  Sparkles,
+  ImageIcon,
+  ExternalLink
 } from 'lucide-react';
-import axios from 'axios';
+
+// UI components
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardFooter,
   CardHeader,
   CardTitle,
+  CardDescription,
+  CardFooter,
 } from '@/components/ui/card';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -50,1099 +57,1029 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Alert,
+  AlertTitle,
+  AlertDescription,
+} from "@/components/ui/alert";
+import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Snackbar, Alert, Box } from '@mui/material'; // Importing Box from MUI
-
-// Dynamically import Plotly for client-side rendering
-const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Define interfaces
-interface MessageVersion {
-  content: string;
-  timestamp: Date;
+interface ExistingFile {
+  file_id: number;
+  filename: string;
+  file_type: string;
+  is_structured: boolean;
+  created_at: string;
+  unique_key: string;
+  supported_by_insightai: boolean;
 }
 
-interface Message {
-  id: string;
-  sender: 'user' | 'ai' | 'system';
-  type?: 'text' | 'mermaid' | 'table' | 'plot' | 'data_cleaning';
-  plotData?: any;
-  mermaidCode?: string;
-  attachment?: any;
-  versions: MessageVersion[];
-  currentVersionIndex: number;
+interface SelectedFile {
+  type: 'new' | 'existing';
+  file?: File;
+  fileId?: number;
+  fileType?: string;
+  fileName?: string;
 }
 
-interface CollapsibleCodeProps {
-  code: string;
-  language?: string;
+interface AnalysisConfig {
+  generateReport: boolean;
+  questionCount: number;
 }
+
+interface AnalysisResult {
+  success: boolean;
+  output: string;
+  visualizations?: string[];
+  report_file?: string;
+}
+
 interface FilePreview {
   columns: string[];
   rows: string[][];
 }
 
-// Mermaid Diagram Component
-const MermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
-  const mermaidRef = useRef<HTMLDivElement>(null);
-  const dialogMermaidRef = useRef<HTMLDivElement>(null);
-  const [showDialog, setShowDialog] = useState(false);
+interface AgentSection {
+  agentName: string;
+  modelName: string;
+  content: string;
+  icon: React.ReactNode;
+}
 
-  // This function handles the Mermaid rendering logic for any container
-  const renderMermaidDiagram = async (container: HTMLDivElement, content: string) => {
-    try {
-      const mermaid = (await import('mermaid')).default;
-      
-      // Initialize Mermaid with our preferred settings
-      mermaid.initialize({
-        startOnLoad: true,
-        theme: 'default',
-        logLevel: 'error',
-        securityLevel: 'loose',
-        classDiagram: {
-          useMaxWidth: true,
-          diagramPadding: 8,
-          htmlLabels: true,
-        },
-        flowchart: {
-          htmlLabels: true,
-          curve: 'basis',
+interface VisualizationInfo {
+  path: string;
+  filename: string;
+}
+
+// Custom Collapsible Component (to avoid dependency on @/components/ui/collapsible)
+interface CollapsibleProps {
+  children: React.ReactNode;
+  className?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+const Collapsible: React.FC<CollapsibleProps> = ({ 
+  children, 
+  className = "", 
+  open, 
+  onOpenChange 
+}) => {
+  const [isOpen, setIsOpen] = useState(open || false);
+  
+  useEffect(() => {
+    if (open !== undefined && open !== isOpen) {
+      setIsOpen(open);
+    }
+  }, [open, isOpen]);
+  
+  const handleToggle = () => {
+    const newState = !isOpen;
+    setIsOpen(newState);
+    if (onOpenChange) {
+      onOpenChange(newState);
+    }
+  };
+  
+  return (
+    <div className={className}>
+      {React.Children.map(children, child => {
+        if (React.isValidElement(child) && 
+            child.type === CollapsibleTrigger) {
+          return React.cloneElement(child as React.ReactElement<any>, {
+            onClick: handleToggle,
+            'aria-expanded': isOpen
+          });
         }
-      });
+        if (React.isValidElement(child) && 
+            child.type === CollapsibleContent) {
+          return isOpen ? child : null;
+        }
+        return child;
+      })}
+    </div>
+  );
+};
 
-      // Clear existing content
-      container.innerHTML = '';
-      
-      // Create and set up the diagram container
-      const diagramContainer = document.createElement('div');
-      diagramContainer.className = 'mermaid';
-      diagramContainer.innerHTML = content;
-      container.appendChild(diagramContainer);
+interface CollapsibleTriggerProps {
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
+  'aria-expanded'?: boolean;
+}
 
-      // Render the diagram
-      await mermaid.contentLoaded();
+const CollapsibleTrigger: React.FC<CollapsibleTriggerProps> = ({ 
+  children, 
+  className = "", 
+  ...props 
+}) => {
+  return (
+    <button 
+      type="button" 
+      className={className} 
+      {...props}
+    >
+      {children}
+    </button>
+  );
+};
 
-      // Add styling to the generated SVG
-      const svg = container.querySelector('svg');
-      if (svg) {
-        svg.style.maxWidth = '100%';
-        svg.style.height = 'auto';
-        svg.style.backgroundColor = 'white';
-        svg.setAttribute('width', '100%');
-        svg.setAttribute('height', 'auto');
-      }
-    } catch (error) {
-      console.error('Mermaid rendering error:', error);
-      container.innerHTML = `
-        <div class="p-4">
-          <div class="text-red-500 font-bold mb-2">Error rendering diagram</div>
-          <pre class="bg-gray-100 p-4 rounded-lg overflow-auto text-sm">
-            ${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
-          </pre>
-        </div>
-      `;
-    }
-  };
+interface CollapsibleContentProps {
+  children: React.ReactNode;
+  className?: string;
+}
 
-  // Effect for the main diagram
-  useEffect(() => {
-    if (mermaidRef.current) {
-      renderMermaidDiagram(mermaidRef.current, chart);
-    }
-  }, [chart]);
+const CollapsibleContent: React.FC<CollapsibleContentProps> = ({ 
+  children, 
+  className = "" 
+}) => {
+  return (
+    <div className={className}>
+      {children}
+    </div>
+  );
+};
 
-  // Effect for the dialog diagram
-  useEffect(() => {
-    if (showDialog && dialogMermaidRef.current) {
-      renderMermaidDiagram(dialogMermaidRef.current, chart);
-    }
-  }, [showDialog, chart]);
-
-  const handleDownload = () => {
-    if (mermaidRef.current) {
-      const svg = mermaidRef.current.querySelector('svg');
-      if (svg) {
-        const svgData = svg.outerHTML;
-        const blob = new Blob([svgData], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'diagram.svg';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }
-    }
-  };
+// Custom MarkdownImage component for properly rendering images in reports
+const MarkdownImage: React.FC<{
+  src?: string;
+  alt?: string;
+}> = ({ src, alt }) => {
+  const [showFullScreen, setShowFullScreen] = useState(false);
+  
+  // Correct image URL if it's a relative path
+  const imageUrl = src?.startsWith('http') ? 
+    src : 
+    src?.startsWith('/') ? 
+      `http://localhost:5000${src}` : 
+      `http://localhost:5000/${src}`;
 
   return (
     <>
-      {/* Main diagram container */}
-      <div 
-        ref={mermaidRef}
-        className="w-full overflow-x-auto bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
-        style={{
-          minHeight: '200px',
-          padding: '1rem',
-          cursor: 'pointer'
-        }}
-        onClick={() => setShowDialog(true)}
-      />
-
-      {/* Dialog for enlarged view */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-[90vw] w-full">
-          <DialogHeader>
-            <DialogTitle>Diagram View</DialogTitle>
-          </DialogHeader>
-          
-          {/* Diagram content in dialog */}
-          <div className="mt-4 p-4 bg-white rounded-lg overflow-auto">
-            <div ref={dialogMermaidRef} className="w-full" />
-          </div>
-          
-          {/* Dialog footer with actions */}
-          <DialogFooter className="flex justify-end space-x-2 mt-4">
-            <Button
-              variant="outline"
-              onClick={() => setShowDialog(false)}
-            >
-              Close
-            </Button>
-            <Button
-              onClick={handleDownload}
-              className="flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Download SVG
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <div className="my-4 relative border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+        <div className="relative w-full h-64">
+          <Image
+            src={imageUrl || '/placeholder.png'}
+            alt={alt || 'Visualization'}
+            fill
+            className="object-contain"
+          />
+          <button 
+            className="absolute top-2 right-2 p-1 bg-white/80 rounded-full hover:bg-white transition-colors"
+            onClick={() => setShowFullScreen(true)}
+          >
+            <ExternalLink className="h-4 w-4" />
+          </button>
+        </div>
+        {alt && (
+          <div className="text-center text-sm text-muted-foreground py-2 px-2">{alt}</div>
+        )}
+      </div>
+      
+      {showFullScreen && (
+        <Dialog open={showFullScreen} onOpenChange={setShowFullScreen}>
+          <DialogContent className="max-w-3xl w-full">
+            <DialogHeader>
+              <DialogTitle>{alt || 'Visualization'}</DialogTitle>
+            </DialogHeader>
+            <div className="relative w-full h-[60vh]">
+              <Image
+                src={imageUrl || '/placeholder.png'}
+                alt={alt || 'Visualization'}
+                fill
+                className="object-contain"
+              />
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => window.open(imageUrl, '_blank')}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download Image
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 };
 
-const CollapsibleCode: React.FC<CollapsibleCodeProps> = ({ code, language }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+// Agent Box Component
+const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="w-full">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="w-full flex justify-between items-center mb-2 hover:bg-accent"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <span className="text-sm font-medium">
-          {isExpanded ? 'Hide Code' : 'Show Code'}
-        </span>
-        {isExpanded ? (
-          <ChevronUp className="h-4 w-4" />
-        ) : (
-          <ChevronDown className="h-4 w-4" />
-        )}
-      </Button>
-      {isExpanded && (
-        <div className="max-h-[200px] overflow-auto rounded-lg border border-gray-200">
-          <SyntaxHighlighter
-            style={tomorrow}
-            language={language || 'text'}
-            customStyle={{
-              background: '#f5f5f5',
-              padding: '10px',
-              fontSize: '14px',
+    <Collapsible 
+      className="w-full border rounded-lg my-2 overflow-hidden"
+      open={isOpen}
+      onOpenChange={setIsOpen}
+    >
+      <CollapsibleTrigger className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+        <div className="flex items-center space-x-2">
+          {section.icon}
+          <div>
+            <h3 className="font-medium">{section.agentName}</h3>
+            <p className="text-sm text-muted-foreground">Model: {section.modelName}</p>
+          </div>
+        </div>
+        {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="p-4 bg-gray-50 dark:bg-gray-800 border-t">
+        <div className="prose prose-sm max-w-none dark:prose-invert">
+          <ReactMarkdown 
+            remarkPlugins={[remarkGfm]}
+            components={{
+              img: ({ node, ...props }) => (
+                <MarkdownImage src={props.src} alt={props.alt} />
+              )
             }}
           >
-            {code}
-          </SyntaxHighlighter>
+            {section.content}
+          </ReactMarkdown>
         </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
+
+// Visualization Gallery Component
+const VisualizationGallery: React.FC<{
+  visualizations: string[];
+}> = ({ visualizations }) => {
+  if (!visualizations || visualizations.length === 0) return null;
+  
+  const visualizationItems: VisualizationInfo[] = visualizations.map(path => ({
+    path,
+    filename: path.split('/').pop() || path
+  }));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center">
+          <ImageIcon className="h-5 w-5 mr-2 text-blue-500" />
+          Visualizations
+        </CardTitle>
+        <CardDescription>
+          Generated plots and visualizations from your analysis
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {visualizationItems.map((viz, index) => (
+            <MarkdownImage 
+              key={index}
+              src={viz.path}
+              alt={viz.filename.replace(/\.(png|jpg|jpeg|gif)$/i, '').replace(/_/g, ' ')}
+            />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+// File Selection Component
+const FileSelector: React.FC<{
+  userId: string | undefined;
+  onFileSelect: (file: SelectedFile | null) => void;
+}> = ({ userId, onFileSelect }) => {
+  const [files, setFiles] = useState<ExistingFile[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [filePreview, setFilePreview] = useState<FilePreview | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Fetch existing files when component mounts
+  useEffect(() => {
+    const fetchFiles = async () => {
+      if (!userId) return;
+      
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await axios.get(`http://localhost:5000/list_files/${userId}`);
+        setFiles(response.data.files.filter((f: ExistingFile) => 
+          f.file_type === 'csv' || f.file_type === 'db' || 
+          f.file_type === 'sqlite' || f.file_type === 'sqlite3'
+        ));
+      } catch (err: any) {
+        console.error('Error fetching files:', err);
+        setError('Failed to load existing files: ' + (err.message || 'Unknown error'));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    if (userId) {
+      fetchFiles();
+    }
+  }, [userId]);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files || !event.target.files[0] || !userId) return;
+    
+    const file = event.target.files[0];
+    const fileType = file.name.split('.').pop()?.toLowerCase();
+    
+    // Check if file type is supported
+    if (!['csv', 'db', 'sqlite', 'sqlite3'].includes(fileType || '')) {
+      setError('Unsupported file type. Please upload CSV or SQLite database files.');
+      return;
+    }
+    
+    setUploadingFile(true);
+    setUploadProgress(0);
+    setError(null);
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      // Upload with progress tracking
+      const response = await axios.post(
+        `http://localhost:5000/upload/${userId}`,
+        formData,
+        {
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / (progressEvent.total || 100)
+            );
+            setUploadProgress(percentCompleted);
+          }
+        }
+      );
+      
+      if (response.data.file_id) {
+        // Successfully uploaded
+        setUploadProgress(100);
+        
+        // Refresh file list
+        const filesResponse = await axios.get(`http://localhost:5000/list_files/${userId}`);
+        setFiles(filesResponse.data.files.filter((f: ExistingFile) => 
+          f.file_type === 'csv' || f.file_type === 'db' || 
+          f.file_type === 'sqlite' || f.file_type === 'sqlite3'
+        ));
+        
+        // Select the newly uploaded file
+        const newFile: SelectedFile = {
+          type: 'existing',
+          fileId: response.data.file_id,
+          fileType: fileType || '',
+          fileName: file.name
+        };
+        
+        onFileSelect(newFile);
+        
+        // Show preview if available
+        if (response.data.preview) {
+          setFilePreview(response.data.preview);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error uploading file:', err);
+      setError('Failed to upload file: ' + (err.response?.data?.error || err.message || 'Unknown error'));
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Select Data Source</CardTitle>
+        <CardDescription>Upload a new file or select from your existing files</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Tabs defaultValue="upload">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="upload">Upload New File</TabsTrigger>
+            <TabsTrigger value="existing">Existing Files</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="upload" className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="file-upload">Upload CSV or Database File</Label>
+              <div className="grid w-full max-w-sm items-center gap-1.5">
+                <Input
+                  id="file-upload"
+                  type="file"
+                  accept=".csv,.db,.sqlite,.sqlite3"
+                  onChange={handleFileUpload}
+                  disabled={uploadingFile}
+                />
+                {uploadingFile && (
+                  <div className="space-y-2">
+                    <Progress value={uploadProgress} className="w-full h-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Uploading: {uploadProgress}%
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="existing" className="space-y-4">
+            {isLoading ? (
+              <div className="flex justify-center p-4">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : files.length > 0 ? (
+              <Select onValueChange={(value) => {
+                const selectedFile = files.find(f => f.file_id.toString() === value);
+                if (selectedFile) {
+                  onFileSelect({
+                    type: 'existing',
+                    fileId: selectedFile.file_id,
+                    fileType: selectedFile.file_type,
+                    fileName: selectedFile.filename
+                  });
+                }
+              }}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a file" />
+                </SelectTrigger>
+                <SelectContent>
+                  {files.map((file) => (
+                    <SelectItem key={file.file_id} value={file.file_id.toString()}>
+                      <div className="flex items-center">
+                        {file.file_type === 'csv' ? (
+                          <FileText className="h-4 w-4 mr-2" />
+                        ) : (
+                          <Database className="h-4 w-4 mr-2" />
+                        )}
+                        {file.filename} ({file.file_type})
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="text-center p-4 border rounded-lg">
+                <p className="text-muted-foreground">No files available. Upload a new file to get started.</p>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+        
+        {error && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        
+        {filePreview && (
+          <div className="mt-4">
+            <h3 className="text-md font-medium mb-2">Data Preview</h3>
+            <div className="overflow-x-auto border rounded-lg">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {filePreview.columns.map((col, idx) => (
+                      <th 
+                        key={idx}
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filePreview.rows.slice(0, 5).map((row, idx) => (
+                    <tr key={idx}>
+                      {row.map((cell, cellIdx) => (
+                        <td 
+                          key={cellIdx}
+                          className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"
+                        >
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+// Analysis Configuration Component
+const AnalysisConfig: React.FC<{
+  onConfigChange: (config: AnalysisConfig) => void;
+}> = ({ onConfigChange }) => {
+  const [generateReport, setGenerateReport] = useState(false);
+  const [questionCount, setQuestionCount] = useState(3);
+  
+  useEffect(() => {
+    onConfigChange({
+      generateReport,
+      questionCount
+    });
+  }, [generateReport, questionCount, onConfigChange]);
+  
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Analysis Options</CardTitle>
+        <CardDescription>Configure how you want to analyze your data</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="generate-report" 
+              checked={generateReport}
+              onCheckedChange={(checked) => setGenerateReport(checked === true)}
+            />
+            <label 
+              htmlFor="generate-report" 
+              className="text-sm font-medium leading-none cursor-pointer"
+            >
+              Generate Comprehensive Report
+            </label>
+          </div>
+          
+          {generateReport && (
+            <div className="pl-6 space-y-2">
+              <Label htmlFor="question-count">Number of Questions to Explore</Label>
+              <Input
+                id="question-count"
+                type="number"
+                min="1"
+                max="10"
+                value={questionCount}
+                onChange={(e) => setQuestionCount(parseInt(e.target.value) || 3)}
+                className="w-24"
+              />
+              <p className="text-xs text-muted-foreground">
+                More questions will provide deeper insights but will take longer to process.
+              </p>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+// Function to parse output and identify agent sections
+const parseAgentSections = (output: string): {
+  sections: AgentSection[];
+  visualizationPaths: string[];
+} => {
+  // Regular expressions to identify agent sections - avoid using "s" flag
+  const agentRegex = /Calling Model: ([^\n]+)\n\n([\s\S]*?)(?=Calling Model:|I now have the final answer:|Generated Code:|Chain Summary|$)/g;
+  
+  const sections: AgentSection[] = [];
+  const visualizationPaths: string[] = [];
+  let match;
+  
+  // Extract visualization paths from code
+  const vizPathRegex = /plt\.savefig\(['"](\[visualization\][\/\\][^'"]+)['"]\)/g;
+  let vizMatch;
+  while ((vizMatch = vizPathRegex.exec(output)) !== null) {
+    const path = vizMatch[1].replace('[visualization]/', 'visualization/');
+    visualizationPaths.push(path);
+  }
+  
+  // Find all agent sections
+  while ((match = agentRegex.exec(output)) !== null) {
+    const modelName = match[1].trim();
+    let agentName = "Agent";
+    let content = match[2].trim();
+    let icon = <Bot className="h-5 w-5" />;
+    
+    // Extract agent name from the content
+    if (content.includes("Selecting the expert")) {
+      agentName = "Expert Selector";
+      icon = <Search className="h-5 w-5 text-blue-500" />;
+    } else if (content.includes("Drafting a plan")) {
+      agentName = "Planner";
+      icon = <Coffee className="h-5 w-5 text-amber-500" />;
+    } else if (content.includes("generating the first version of the code")) {
+      agentName = "Code Generator";
+      icon = <Code className="h-5 w-5 text-green-500" />;
+    } else if (content.includes("reviewing and debugging")) {
+      agentName = "Code Debugger";
+      icon = <Terminal className="h-5 w-5 text-red-500" />;
+    } else if (content.includes("assess, summarize and rank")) {
+      agentName = "Solution Summarizer";
+      icon = <Sparkles className="h-5 w-5 text-purple-500" />;
+    } else if (content.startsWith("{")) {
+      // JSON response - could be Expert or Analyst selector
+      if (content.includes("expert")) {
+        agentName = "Expert Selector Response";
+        icon = <Search className="h-5 w-5 text-blue-500" />;
+      } else if (content.includes("analyst")) {
+        agentName = "Analyst Selector Response";
+        icon = <Zap className="h-5 w-5 text-yellow-500" />;
+      }
+    }
+    
+    sections.push({
+      agentName,
+      modelName,
+      content,
+      icon
+    });
+  }
+  
+  // Look for summary section - avoid using "s" flag
+  const summaryRegex = /I now have the final answer:([\s\S]*?)(?=Here is the final code|$)/;
+  const summaryMatch = summaryRegex.exec(output);
+  if (summaryMatch) {
+    sections.push({
+      agentName: "Analysis Summary",
+      modelName: "InsightAI",
+      content: summaryMatch[1].trim(),
+      icon: <Sparkles className="h-5 w-5 text-purple-500" />
+    });
+  }
+  
+  // Look for final code section - avoid using "s" flag
+  const codeRegex = /Here is the final code that accomplishes the task:([\s\S]*?)(?=Chain Summary|$)/;
+  const codeMatch = codeRegex.exec(output);
+  if (codeMatch) {
+    sections.push({
+      agentName: "Generated Code",
+      modelName: "InsightAI",
+      content: "```python\n" + codeMatch[1].trim() + "\n```",
+      icon: <Code className="h-5 w-5 text-green-500" />
+    });
+  }
+  
+  // Look for chain summary - avoid using "s" flag
+  const chainRegex = /Chain Summary[\s\S]*?$/;
+  const chainMatch = chainRegex.exec(output);
+  if (chainMatch) {
+    const summaryText = chainMatch[0].replace(/Chain Summary[\s\S]*?:/, '').trim();
+    sections.push({
+      agentName: "Execution Summary",
+      modelName: "InsightAI Stats",
+      content: summaryText,
+      icon: <BarChart className="h-5 w-5 text-blue-500" />
+    });
+  }
+  
+  return { sections, visualizationPaths };
+};
+
+// Function to fix image paths in markdown content
+const fixMarkdownImagePaths = (content: string): string => {
+  if (!content) return '';
+  
+  // Replace relative image paths with absolute URLs
+  return content.replace(
+    /!\[(.*?)\]\((visualization\/[^)]+)\)/g,
+    (match, alt, path) => {
+      return `![${alt}](/visualization/${path.replace('visualization/', '')})`;
+    }
+  );
+};
+
+// Analysis Panel Component
+const AnalysisPanel: React.FC<{
+  userId: string | undefined;
+  selectedFile: SelectedFile | null;
+  config: AnalysisConfig;
+}> = ({ userId, selectedFile, config }) => {
+  const [question, setQuestion] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showFullReport, setShowFullReport] = useState(false);
+  const [reportContent, setReportContent] = useState<string | null>(null);
+  const [agentSections, setAgentSections] = useState<AgentSection[]>([]);
+  const [extractedVisualizations, setExtractedVisualizations] = useState<string[]>([]);
+  
+  // Reset states when selected file changes
+  useEffect(() => {
+    setQuestion('');
+    setResult(null);
+    setError(null);
+    setReportContent(null);
+    setAgentSections([]);
+    setExtractedVisualizations([]);
+  }, [selectedFile]);
+  
+  // Parse agent sections and visualizations when result changes
+  useEffect(() => {
+    if (result && result.output) {
+      const { sections, visualizationPaths } = parseAgentSections(result.output);
+      setAgentSections(sections);
+      
+      // Combine manually extracted visualization paths with those returned from API
+      const allVisualizations = [
+        ...(result.visualizations || []),
+        ...visualizationPaths
+      ];
+      
+      // Remove duplicates
+      setExtractedVisualizations([...new Set(allVisualizations)]);
+    }
+  }, [result]);
+  
+  // Process and fix image paths in report content
+  useEffect(() => {
+    if (reportContent) {
+      const fixedContent = fixMarkdownImagePaths(reportContent);
+      if (fixedContent !== reportContent) {
+        setReportContent(fixedContent);
+      }
+    }
+  }, [reportContent]);
+  
+  const handleAnalysis = async () => {
+    if (!userId || !selectedFile || 
+        (!question && !config.generateReport) || 
+        isProcessing) return;
+    
+    setIsProcessing(true);
+    setError(null);
+    setResult(null);
+    setAgentSections([]);
+    setExtractedVisualizations([]);
+    
+    try {
+      // Process the question with the file ID
+      if (selectedFile.type === 'existing' && selectedFile.fileId) {
+        const response = await axios.post(
+          `http://localhost:5000/process_question/${userId}/${selectedFile.fileId}`,
+          {
+            question: config.generateReport ? '' : question,
+            generate_report: config.generateReport,
+            report_questions: config.questionCount
+          }
+        );
+        
+        if (response.data.success) {
+          setResult(response.data);
+          
+          // If there's a report file, fetch its content
+          if (response.data.report_file) {
+            try {
+              const reportResponse = await axios.get(
+                `http://localhost:5000/report/${userId}/${selectedFile.fileId}`
+              );
+              if (reportResponse.data.report_content) {
+                setReportContent(reportResponse.data.report_content);
+              }
+            } catch (reportErr) {
+              console.error("Failed to fetch report content:", reportErr);
+            }
+          }
+        } else {
+          throw new Error(response.data.error || 'Processing failed');
+        }
+      } else {
+        throw new Error('Invalid file selection');
+      }
+    } catch (err: any) {
+      console.error('Error processing analysis:', err);
+      setError(err.response?.data?.error || err.message || 'An unknown error occurred');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+  
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Ask Questions About Your Data</CardTitle>
+          <CardDescription>
+            {config.generateReport 
+              ? "Generate a comprehensive analysis report" 
+              : "Ask specific questions about your data"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!config.generateReport ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="question">Your Question</Label>
+                <div className="flex space-x-2">
+                  <Input
+                    id="question"
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    placeholder="e.g., What are the 5 most expensive phones?"
+                    disabled={isProcessing}
+                    className="flex-1"
+                  />
+                  <Button 
+                    onClick={handleAnalysis}
+                    disabled={!question || isProcessing}
+                  >
+                    {isProcessing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Ask any question about your data. InsightAI will analyze it and provide insights.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <Button
+                className="w-full"
+                onClick={handleAnalysis}
+                disabled={isProcessing}
+              >
+                {isProcessing ? (
+                  <div className="flex items-center">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Generating Report...
+                  </div>
+                ) : (
+                  <div className="flex items-center">
+                    <Book className="h-4 w-4 mr-2" />
+                    Generate Comprehensive Report
+                  </div>
+                )}
+              </Button>
+              
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  This will generate a comprehensive report with {config.questionCount} insightful questions and visualizations.
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      
+      {extractedVisualizations.length > 0 && (
+        <VisualizationGallery visualizations={extractedVisualizations} />
+      )}
+      
+      {agentSections.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Analysis Process</CardTitle>
+            <CardDescription>
+              See how InsightAI analyzed your data step by step
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {agentSections.map((section, index) => (
+                <AgentBox key={index} section={section} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {reportContent && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Book className="h-5 w-5 mr-2 text-blue-500" />
+              Analysis Report
+            </CardTitle>
+            <div className="flex justify-between items-center">
+              <CardDescription>
+                Comprehensive analysis of your dataset
+              </CardDescription>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowFullReport(!showFullReport)}
+              >
+                {showFullReport ? "Show Summary" : "Show Full Report"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className={`prose max-w-none ${!showFullReport ? "max-h-[400px] overflow-y-auto" : ""}`}>
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  img: ({ node, ...props }) => (
+                    <MarkdownImage src={props.src} alt={props.alt} />
+                  )
+                }}
+              >
+                {reportContent}
+              </ReactMarkdown>
+            </div>
+            
+            {/* Download options */}
+            {result?.report_file && (
+              <div className="flex justify-end mt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => window.open(`http://localhost:5000/${result.report_file}`, '_blank')}
+                  className="flex items-center"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Report
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );
 };
 
-// Table Cell with Tooltip Component
-const TableCellWithTooltip: React.FC<{ content: string }> = ({ content }) => {
-  const maxLength = 20;
-
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <TableCell className="truncate max-w-xs cursor-pointer">
-            {content.length > maxLength
-              ? `${content.substring(0, maxLength)}...`
-              : content}
-          </TableCell>
-        </TooltipTrigger>
-        {content.length > maxLength && (
-          <TooltipContent className="p-2">
-            <span>{content}</span>
-          </TooltipContent>
-        )}
-      </Tooltip>
-    </TooltipProvider>
-  );
-};
-
-// ChatSection Component
-export default function ChatSection() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<FilePreview | null>(null);
-  const [agentType, setAgentType] = useState('data_visualization');
-  const [isLoading, setIsLoading] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+// Main Component
+export default function InsightAIPage() {
   const { user } = useUser();
-
-  // New State Variables for Plotly Integration
-  const [selectedColor, setSelectedColor] = useState('#0000ff'); // Marker color
-  const [selectedBackground, setSelectedBackground] = useState('#ffffff'); // Background color
-  const [snackbar, setSnackbar] = useState<{
-    open: boolean;
-    message: string;
-    severity: 'info' | 'success' | 'error';
-  }>({
-    open: false,
-    message: '',
-    severity: 'info',
+  const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
+  const [config, setConfig] = useState<AnalysisConfig>({
+    generateReport: false,
+    questionCount: 3
   });
-
-  // Auto-scroll to bottom when messages update
-  useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
-    }
-  }, [messages, isLoading]);
-
-  // Handle File Upload
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      const selectedFile = event.target.files[0];
-      setFile(selectedFile);
-
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      try {
-        setIsLoading(true);
-        const response = await axios.post('http://localhost:7000/upload', formData);
-
-        if (response.data.message) {
-          setMessages((prevMessages) => [
-            ...prevMessages,
-            {
-              id: Date.now().toString(),
-              sender: 'system',
-              versions: [
-                {
-                  content: `File uploaded: ${selectedFile.name}`,
-                  timestamp: new Date(),
-                },
-              ],
-              currentVersionIndex: 0,
-            },
-          ]);
-          setSuggestions(response.data.suggested_prompts || []);
-          // Handle data preview if provided
-          if (response.data.preview) {
-            setFilePreview(response.data.preview);
-          }
-        }
-      } catch (error: any) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'An unknown error occurred';
-        console.error('Error uploading file:', errorMessage);
-        setMessages((prevMessages) => [
-          ...prevMessages,
-          {
-            id: (Date.now() + 1).toString(),
-            sender: 'system',
-            versions: [
-              {
-                content: 'Error uploading file. Please try again.',
-                timestamp: new Date(),
-              },
-            ],
-            currentVersionIndex: 0,
-          },
-        ]);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-  };
-
-  // Handle Suggestion Click
-  const handleSuggestionClick = (suggestion: string) => {
-    setInputMessage(suggestion);
-  };
-
-  // Handle Sending Message
-  const handleSendMessage = async () => {
-    if ((inputMessage.trim() === '' && !file) || isLoading) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      sender: 'user',
-      versions: [
-        {
-          content: inputMessage,
-          timestamp: new Date(),
-        },
-      ],
-      currentVersionIndex: 0,
-    };
-
-    setMessages((prevMessages) => [...prevMessages, userMessage]);
-    setInputMessage('');
-    setIsLoading(true);
-
-    try {
-      const response = await axios.post('http://localhost:7000/query', {
-        question: userMessage.versions[userMessage.currentVersionIndex].content,
-        agent_type: agentType,
-      });
-
-      if (response.data.error) {
-        throw new Error(response.data.error);
-      }
-
-      // Construct AI Message
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        versions: [
-          {
-            content: response.data.output || 'I have processed your request.',
-            timestamp: new Date(),
-          },
-        ],
-        currentVersionIndex: 0,
-        type: 'text',
-      };
-
-      // Handle Graph Data
-      if (response.data.graph) {
-        aiMessage.type = 'plot';
-        // Parse the graph data
-        if (typeof response.data.graph === 'string') {
-          aiMessage.plotData = JSON.parse(response.data.graph);
-        } else {
-          aiMessage.plotData = response.data.graph;
-        }
-      }
-
-      // Handle Mermaid Diagram
-      if (response.data.mermaid) {
-        aiMessage.type = 'mermaid';
-        aiMessage.mermaidCode = response.data.mermaid;
-      }
-
-      // Handle Data Cleaning Attachment
-      if (agentType === 'data_cleaning' && response.data.attachment) {
-        aiMessage.type = 'data_cleaning';
-        aiMessage.attachment = response.data.attachment;
-      }
-
-      setMessages((prevMessages) => [...prevMessages, aiMessage]);
-      setSuggestions(response.data.suggestions || []);
-    } catch (error: any) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'An unknown error occurred';
-      console.error('Error sending message:', errorMessage);
-      const errorAiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        versions: [
-          {
-            content: `An error occurred while processing your request: ${errorMessage}. Please try again or contact support if the issue persists.`,
-            timestamp: new Date(),
-          },
-        ],
-        currentVersionIndex: 0,
-      };
-      setMessages((prevMessages) => [...prevMessages, errorAiMessage]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Handle Editing a Message
-  const handleEditMessage = (messageId: string) => {
-    setEditingMessageId(messageId);
-    const messageToEdit = messages.find((msg) => msg.id === messageId);
-    if (messageToEdit) {
-      const currentVersion = messageToEdit.versions[messageToEdit.currentVersionIndex];
-      setEditContent(currentVersion.content);
-    }
-  };
-
-  // Handle Saving an Edited Message
-  const handleSaveEdit = async (messageId: string) => {
-    // Update the message with the new content
-    setMessages((prevMessages) =>
-      prevMessages.map((msg) => {
-        if (msg.id === messageId) {
-          const newVersion: MessageVersion = {
-            content: editContent,
-            timestamp: new Date(),
-          };
-          return {
-            ...msg,
-            versions: [...msg.versions.slice(0, msg.currentVersionIndex + 1), newVersion],
-            currentVersionIndex: msg.currentVersionIndex + 1,
-          };
-        }
-        return msg;
-      })
-    );
-    setEditingMessageId(null);
-
-    // Optionally, send the updated message to the backend to get a new AI response
-    const editedMessage = messages.find((msg) => msg.id === messageId);
-    if (editedMessage) {
-      const latestContent = editContent;
-      setIsLoading(true);
-      try {
-        const response = await axios.post('http://localhost:7000/query', {
-          question: latestContent,
-          agent_type: agentType,
-        });
-
-        if (response.data.error) {
-          throw new Error(response.data.error);
-        }
-
-        const aiMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          sender: 'ai',
-          versions: [
-            {
-              content: response.data.output || 'I have processed your request.',
-              timestamp: new Date(),
-            },
-          ],
-          currentVersionIndex: 0,
-          type: 'text',
-        };
-
-        // Handle Graph Data
-        if (response.data.graph) {
-          aiMessage.type = 'plot';
-          if (typeof response.data.graph === 'string') {
-            aiMessage.plotData = JSON.parse(response.data.graph);
-          } else {
-            aiMessage.plotData = response.data.graph;
-          }
-        }
-
-        // Handle Mermaid Diagram
-        if (response.data.mermaid) {
-          aiMessage.type = 'mermaid';
-          aiMessage.mermaidCode = response.data.mermaid;
-        }
-
-        // Handle Data Cleaning Attachment
-        if (agentType === 'data_cleaning' && response.data.attachment) {
-          aiMessage.type = 'data_cleaning';
-          aiMessage.attachment = response.data.attachment;
-        }
-
-        setMessages((prevMessages) => [...prevMessages, aiMessage]);
-      } catch (error: any) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'An unknown error occurred';
-        console.error('Error sending edited message:', errorMessage);
-        const errorAiMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          sender: 'ai',
-          versions: [
-            {
-              content: `An error occurred while processing your edited message: ${errorMessage}. Please try again or contact support if the issue persists.`,
-              timestamp: new Date(),
-            },
-          ],
-          currentVersionIndex: 0,
-        };
-        setMessages((prevMessages) => [...prevMessages, errorAiMessage]);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-  };
-
-  // Handle Cancelling an Edit
-  const handleCancelEdit = () => {
-    setEditingMessageId(null);
-    setEditContent('');
-  };
-
-  // Handle Navigating Between Message Versions
-  const handleVersionNavigation = (messageId: string, direction: 'prev' | 'next') => {
-    setMessages((prevMessages) =>
-      prevMessages.map((msg) => {
-        if (msg.id === messageId) {
-          const newIndex =
-            direction === 'prev'
-              ? Math.max(0, msg.currentVersionIndex - 1)
-              : Math.min(msg.versions.length - 1, msg.currentVersionIndex + 1);
-          return {
-            ...msg,
-            currentVersionIndex: newIndex,
-          };
-        }
-        return msg;
-      })
-    );
-  };
-
-  // Handle Export Graph as JSON
-  const exportGraphAsJSON = async (graph: any) => {
-    try {
-      const response = await axios.post('http://localhost:7000/export_graph', {
-        graph: JSON.stringify(graph),
-      });
-
-      if (response.status !== 200) {
-        throw new Error('Failed to export graph');
-      }
-
-      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'graph.json';
-      a.click();
-      window.URL.revokeObjectURL(url);
-
-      setSnackbar({ open: true, message: 'Graph exported successfully!', severity: 'success' });
-    } catch (error: any) {
-      console.error('Error exporting graph:', error);
-      setSnackbar({ open: true, message: `Error exporting graph: ${error.message}`, severity: 'error' });
-    }
-  };
-
-  // Render Content Based on Message Type
-  const renderContent = (message: Message) => {
-    const currentVersion = message.versions[message.currentVersionIndex];
-
-    if (editingMessageId === message.id) {
-      // In-Place Editing UI
-      return (
-        <div>
-          <textarea
-            className="w-full p-2 border rounded"
-            rows={4}
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-          />
-          <div className="flex justify-end mt-2 space-x-2">
-            <Button size="sm" variant="outline" onClick={handleCancelEdit}>
-              <X className="h-4 w-4" />
-              Cancel
-            </Button>
-            <Button size="sm" onClick={() => handleSaveEdit(message.id)}>
-              <Check className="h-4 w-4" />
-              Save
-            </Button>
-          </div>
-        </div>
-      );
-    }
-
-    if (message.type === 'mermaid' && message.mermaidCode) {
-      console.log('Rendering Mermaid diagram:', message.mermaidCode);
-      return <MermaidDiagram chart={message.mermaidCode} />;
-    }
-
-    if (message.type === 'plot' && message.plotData) {
-      let plotData = message.plotData;
-
-      // Parse graph data if it's a string
-      if (typeof plotData === 'string') {
-        try {
-          plotData = JSON.parse(plotData);
-        } catch (e) {
-          console.error('Failed to parse plotData:', e);
-          return <div>Error parsing plot data.</div>;
-        }
-      }
-
-      return (
-        <Box sx={{ width: '100%', my: 2 }}>
-          <Plot
-            key={message.id} // Ensure unique key for re-rendering
-            data={plotData.data.map((trace: any) => ({
-              ...trace,
-              marker: {
-                ...trace.marker,
-                color: selectedColor, // Dynamically set the marker color
-              },
-            }))}
-            layout={{
-              ...plotData.layout,
-              width: '100%', // Full width of the container
-              height: 400, // Fixed height for the graph
-              plot_bgcolor: selectedBackground, // Background color of the plot area
-              paper_bgcolor: selectedBackground, // Background color of the paper (outer area)
-              font: {
-                color:
-                  selectedBackground === '#000000'
-                    ? '#ffffff' // White text for dark backgrounds
-                    : selectedBackground === '#ffffff'
-                      ? selectedColor // Use selectedColor for light backgrounds
-                      : '#000000', // Default to black text
-              },
-            }}
-            config={{ responsive: true }} // Make the graph responsive to container size
-          />
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  style={{ marginTop: '4px' }} // Use inline style instead of `sx`
-                  onClick={() => exportGraphAsJSON(plotData)}
-                >
-                  <BookmarkCheckIcon size={16} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Export Graph as JSON</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </Box>
-      );
-    }
-
-    if (message.type === 'data_cleaning' && message.attachment) {
-      return (
-        <div className="mt-4">
-          <h3 className="text-lg font-bold">Data Cleaning Results:</h3>
-          <ReactMarkdown
-            className="prose"
-            remarkPlugins={[remarkGfm]}
-            components={MarkdownComponents}
-          >
-            {message.attachment.cleaning_output}
-          </ReactMarkdown>
-          <h3 className="text-lg font-bold mt-4">Preview of Cleaned Data:</h3>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {message.attachment.preview_data.length > 0 &&
-                    Object.keys(message.attachment.preview_data[0]).map((key) => (
-                      <TableHead key={key}>{key}</TableHead>
-                    ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {message.attachment.preview_data.map((row: any, idx: number) => (
-                  <TableRow key={idx}>
-                    {Object.values(row).map((value: any, cellIdx: number) => (
-                      <TableCellWithTooltip key={cellIdx} content={String(value)} />
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <Button
-            variant="outline"
-            className="mt-4"
-            onClick={() => {
-              window.open('http://localhost:7000/download_cleaned_data', '_blank');
-            }}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Download Cleaned Data
-          </Button>
-        </div>
-      );
-    }
-
-    // Default: Render Markdown Content
-    return (
-      <ReactMarkdown
-        className="prose"
-        remarkPlugins={[remarkGfm]}
-        components={MarkdownComponents}
-      >
-        {currentVersion.content}
-      </ReactMarkdown>
-    );
-  };
-
-  // Define Markdown Components for Custom Rendering
-  const MarkdownComponents = {
-    code({
-      inline,
-      className,
-      children,
-      ...props
-    }: {
-      inline?: boolean;
-      className?: string;
-      children: React.ReactNode;
-    }) {
-      const match = /language-(\w+)/.exec(className || '');
-      return !inline && match ? (
-        <CollapsibleCode
-          code={String(children).replace(/\n$/, '')}
-          language={match[1]}
-        />
-      ) : (
-        <code className="bg-gray-200 rounded px-1 py-0.5" {...props}>
-          {children}
-        </code>
-      );
-    },
-    table: ({ children }: { children: React.ReactNode }) => (
-      <table className="table-auto">{children}</table>
-    ),
-    thead: ({ children }: { children: React.ReactNode }) => (
-      <thead>{children}</thead>
-    ),
-    tbody: ({ children }: { children: React.ReactNode }) => (
-      <tbody>{children}</tbody>
-    ),
-    tr: ({ children }: { children: React.ReactNode }) => (
-      <tr>{children}</tr>
-    ),
-    th: ({ children }: { children: React.ReactNode }) => (
-      <th className="px-4 py-2 border">{children}</th>
-    ),
-    td: ({ children }: { children: React.ReactNode }) => (
-      <td className="px-4 py-2 border">{children}</td>
-    ),
-  };
-
-  // Render All Messages
-  const renderMessages = () => {
-    return (
-      <AnimatePresence initial={false}>
-        {messages.map((message) => {
-          const currentVersion = message.versions[message.currentVersionIndex];
-          const totalVersions = message.versions.length;
-          return (
-            <motion.div
-              key={message.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-              className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'
-                } mb-4`}
-            >
-              <div
-                className={`flex items-start gap-2 max-w-full sm:max-w-[80%] ${message.sender === 'user' ? 'flex-row-reverse' : ''
-                  }`}
-              >
-                <Avatar className="w-8 h-8 hidden sm:block">
-                  <AvatarFallback>
-                    {message.sender === 'ai' ? 'AI' : 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                <div
-                  className={`rounded-lg p-3 ${message.sender === 'user'
-                    ? 'bg-primary text-primary-foreground shadow-lg'
-                    : 'bg-muted shadow-sm'
-                    }`}
-                >
-                  {renderContent(message)}
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-xs opacity-50">
-                      {format(currentVersion.timestamp, 'HH:mm')}
-                    </span>
-                    {message.sender === 'user' && (
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleEditMessage(message.id)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {totalVersions > 1 && (
-                          <div className="flex items-center space-x-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={message.currentVersionIndex <= 0}
-                              onClick={() =>
-                                handleVersionNavigation(message.id, 'prev')
-                              }
-                            >
-                              <ChevronLeft className="h-4 w-4" />
-                            </Button>
-                            <span className="text-xs">
-                              {message.currentVersionIndex + 1}/{totalVersions}
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={
-                                message.currentVersionIndex >= totalVersions - 1
-                              }
-                              onClick={() =>
-                                handleVersionNavigation(message.id, 'next')
-                              }
-                            >
-                              <ChevronRight className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-    );
-  };
-
-  // Render Color Selection Controls
-  const renderColorControls = () => {
-    return (
-      <div className="flex space-x-2 mb-2">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  const color = prompt('Enter marker color (hex code):', selectedColor);
-                  if (color && /^#([0-9A-F]{3}){1,2}$/i.test(color)) {
-                    setSelectedColor(color);
-                  } else if (color) {
-                    setSnackbar({ open: true, message: 'Invalid color code!', severity: 'error' });
-                  }
-                }}
-              >
-                <Palette className="h-4 w-4" />
-                <span className="sr-only">Select Marker Color</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Select Marker Color</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  const color = prompt('Enter background color (hex code):', selectedBackground);
-                  if (color && /^#([0-9A-F]{3}){1,2}$/i.test(color)) {
-                    setSelectedBackground(color);
-                  } else if (color) {
-                    setSnackbar({ open: true, message: 'Invalid color code!', severity: 'error' });
-                  }
-                }}
-              >
-                <Layout className="h-4 w-4" />
-                <span className="sr-only">Select Background Color</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Select Background Color</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-    );
-  };
-
+  
   return (
-    <Card className="w-full max-w-4xl mx-auto shadow-md rounded-lg">
-      <CardHeader>
-        <CardTitle className="text-xl sm:text-2xl font-bold text-center mb-2">
-          Welcome, {user?.firstName || 'Guest'}! Chat with Your Data
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {/* Data Preview Table at the Top */}
-        {filePreview && (
-          <div className="mb-4">
-            <h3 className="text-lg font-bold mb-2">Data Preview:</h3>
-            <div className="overflow-x-auto max-h-[200px] overflow-y-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {filePreview.columns.map((col, idx) => (
-                      <TableHead key={idx}>{col}</TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filePreview.rows.slice(0, 5).map((row, idx) => (
-                    <TableRow key={idx}>
-                      {row.map((cell, cellIdx) => (
-                        <TableCellWithTooltip key={cellIdx} content={cell} />
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+    <div className="container mx-auto py-8 px-4">
+      <h1 className="text-3xl font-bold text-center mb-8">
+        InsightAI Data Analysis
+      </h1>
+      
+      <div className="max-w-4xl mx-auto space-y-6">
+        <FileSelector 
+          userId={user?.id} 
+          onFileSelect={setSelectedFile}
+        />
+        
+        {selectedFile && (
+          <>
+            <div className="bg-muted p-4 rounded-lg flex items-center">
+              <div className="mr-2">
+                {selectedFile.fileType === 'csv' ? (
+                  <FileText className="h-5 w-5" />
+                ) : (
+                  <Database className="h-5 w-5" />
+                )}
+              </div>
+              <div>
+                <p className="font-medium">Selected File: {selectedFile.fileName || 'Unknown file'}</p>
+                <p className="text-sm text-muted-foreground">
+                  Type: {selectedFile.fileType?.toUpperCase() || 'Unknown'} | 
+                  ID: {selectedFile.fileId || 'New file'}
+                </p>
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Color Selection Controls */}
-        {renderColorControls()}
-
-        {/* Scrollable Message Area */}
-        <div
-          className="h-[300px] sm:h-[400px] lg:h-[500px] pr-4 overflow-y-auto"
-          ref={scrollAreaRef}
-        >
-          {renderMessages()}
-          {isLoading && (
-            <div className="flex justify-center items-center py-4">
-              <span className="loading loading-dots loading-md"></span>
-            </div>
-          )}
-        </div>
-      </CardContent>
-      <CardFooter className="flex flex-col gap-4">
-        {/* Suggestions */}
-        {suggestions.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="flex flex-wrap gap-2 mb-2"
-          >
-            {suggestions.map((suggestion, index) => (
-              <Button
-                key={index}
-                variant="outline"
-                size="sm"
-                onClick={() => handleSuggestionClick(suggestion)}
-              >
-                {suggestion}
-              </Button>
-            ))}
-          </motion.div>
-        )}
-        {/* Message Input and Controls */}
-        <div className="flex flex-col sm:flex-row w-full items-center space-y-2 sm:space-y-0 sm:space-x-2">
-          {/* Agent Type Selector and File Upload */}
-          <div className="flex w-full sm:w-auto space-x-2">
-            <Select value={agentType} onValueChange={setAgentType}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select agent type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="data_visualization">Data Visualization</SelectItem>
-                <SelectItem value="research_assistant">Research Assistant</SelectItem>
-                <SelectItem value="sql">SQL</SelectItem>
-                <SelectItem value="data_cleaning">Data Cleaning</SelectItem>
-                <SelectItem value="business_analytics">Business Analytics</SelectItem>
-                <SelectItem value="mermaid_diagram">Mermaid Diagram</SelectItem>
-              </SelectContent>
-            </Select>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    onClick={() => {
-                      fileInputRef.current?.click();
-                    }}
-                  >
-                    <Paperclip className="h-4 w-4" />
-                    <span className="sr-only">Attach file</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Attach file</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <Input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              onChange={handleFileChange}
+            
+            <AnalysisConfig onConfigChange={setConfig} />
+            
+            <AnalysisPanel 
+              userId={user?.id}
+              selectedFile={selectedFile}
+              config={config}
             />
-          </div>
-          {/* Message Input Field and Send Button */}
-          <div className="flex w-full space-x-2">
-            <Input
-              type="text"
-              placeholder="Type your message..."
-              value={editingMessageId ? editContent : inputMessage}
-              onChange={(e) =>
-                editingMessageId
-                  ? setEditContent(e.target.value)
-                  : setInputMessage(e.target.value)
-              }
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (!isLoading) {
-                    handleSendMessage();
-                  }
-                }
-              }}
-              className="flex-1"
-              disabled={isLoading}
-            />
-            <Button
-              type="submit"
-              size="icon"
-              onClick={() => handleSendMessage()}
-              disabled={isLoading}
-            >
-              {editingMessageId ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-              <span className="sr-only">
-                {editingMessageId ? 'Update message' : 'Send message'}
-              </span>
-            </Button>
-          </div>
-        </div>
-      </CardFooter>
-
-      {/* Snackbar for Notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </Card>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
