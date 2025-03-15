@@ -65,6 +65,19 @@ wheels/
 
 static/exports/
 stats.db
+*.png
+.env
+stats.db
+ui_requirements.txt
+*.log
+*.csv
+*.json
+*.db
+uploads
+visualizations
+main.py
+test.py
+
 user_files.db-x-graph*.png
 .env
 *.json

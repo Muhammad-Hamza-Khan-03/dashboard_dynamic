@@ -1,4 +1,3 @@
-import nest_asyncio
 from scipy import stats
 import numpy as np
 from typing import Dict, Any
@@ -11,7 +10,6 @@ from flask_cors import CORS
 import sqlite3
 import io
 import logging
-import pandas as pd
 import xml.etree.ElementTree as ET
 import PyPDF2
 from werkzeug.utils import secure_filename
@@ -38,6 +36,7 @@ import json
 import time
 from typing import List, Dict, Any, Generator, Tuple,Optional
 from dataclasses import dataclass
+import traceback
 from flask import jsonify, request
 import queue
 from background_worker_implementation import *
@@ -54,6 +53,7 @@ from reportlab.lib.utils import ImageReader
 import base64
 from io import BytesIO
 from PIL import Image
+
 app = Flask(__name__)
 cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 CORS(app)
@@ -1474,7 +1474,7 @@ def upload_file(user_id):
                 task_id = create_stats_task(sheet_unique_key, new_table_name)
 
             elif extension in ['db', 'sqlite', 'sqlite3']:
-                file_id, table_unique_key, new_table_name = handle_sqlite_upload(file, user_id, filename, c, conn)
+                file_id,table_unique_key,new_table_name = handle_sqlite_upload(file, user_id, filename, c, conn)
                 # process_table_statistics_background(table_unique_key, new_table_name)
                 task_id = create_stats_task(table_unique_key, new_table_name)
 
@@ -4049,15 +4049,7 @@ def export_dashboard_images(user_id):
         
         export_path = os.path.join(export_dir, f"{export_name.replace(' ', '_')}_{export_id}.pdf")
         
-        # Import required libraries
-        from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.lib import colors
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.units import mm, inch
-        from reportlab.lib.utils import ImageReader
-        import base64
-        from io import BytesIO
-        from PIL import Image
+       
         
         # Create PDF canvas
         c = canvas.Canvas(export_path, pagesize=landscape(A4))
@@ -4806,6 +4798,76 @@ def save_dashboard(user_id, dashboard_id):
             conn.close()
             
 # nest_asyncio.apply()
+async def generate_chart_image(html_content):
+    """
+    Generate an image from HTML content using pyppeteer.
+    
+    Args:
+        html_content: The HTML content of the chart
+        
+    Returns:
+        Binary image data (PNG)
+    """
+    import pyppeteer
+    
+    # Full HTML template with necessary scripts
+    full_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2/dist/echarts-gl.min.js"></script>
+        <style>
+            body, html {{
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                width: 1000px;
+                height: 600px;
+            }}
+            #chart-container {{
+                width: 100%;
+                height: 100%;
+            }}
+        </style>
+    </head>
+    <body>
+        <div id="chart-container">
+            {html_content}
+        </div>
+    </body>
+    </html>
+    """
+    
+    browser = await pyppeteer.launch({
+        'headless': True,
+        'args': ['--no-sandbox', '--disable-setuid-sandbox']
+    })
+    
+    try:
+        page = await browser.newPage()
+        await page.setViewport({'width': 1000, 'height': 600})
+        await page.setContent(full_html)
+        await page.waitForSelector('#chart-container')
+        await page.waitForTimeout(2000)
+        
+        screenshot = await page.screenshot({
+            'type': 'png',
+            'fullPage': False,
+            'clip': {
+                'x': 0,
+                'y': 0,
+                'width': 1000,
+                'height': 600
+            }
+        })
+        
+        return screenshot
+        
+    finally:
+        await browser.close()
 # async def generate_chart_image(html_content):
 
 #     """
