@@ -20,7 +20,7 @@ import StatCardModal from './stat-Card-Modal';
 import DataTableModal from './dataTableSelection';
 import SaveDashboardButton from './save-dashboard-button';
 import { BrainCircuit } from 'lucide-react';
-import AiDashboardModal, { AiDashboardConfig } from './aiDashboardModal'
+import AiDashboardModal, { AiDashboardConfig } from './ai-dashboard/aiDashboardModal'
 import { toast } from '@/components/ui/use-toast';
 
 // Interfaces
@@ -187,8 +187,7 @@ const BoardMain: React.FC = () => {
 
     return () => clearTimeout(timeoutId);
   }, [charts, selectedDashboard]);
-
-  const handleAiDashboardCreate = (config: AiDashboardConfig) => {
+  const handleAiDashboardCreate = async (config: AiDashboardConfig) => {
     if (!selectedDashboard) {
       toast({
         title: "No dashboard selected",
@@ -211,9 +210,10 @@ const BoardMain: React.FC = () => {
       }
     }
   
-    // Process text boxes
+    // Process text boxes with unique IDs
     if (config.textBoxes && config.textBoxes.length > 0) {
       for (const textBox of config.textBoxes) {
+        // Ensure each text box gets a unique ID with both timestamp and random component
         const newTextBox: TextBoxData = {
           id: `textbox-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           type: 'textbox',
@@ -221,10 +221,16 @@ const BoardMain: React.FC = () => {
           position: textBox.position
         };
         setTextBoxes(prev => [...prev, newTextBox]);
+        
+        // Small delay to ensure timestamp difference
+        // This is a safety measure in case the loop processes very quickly
+        if (config.textBoxes.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
       }
     }
   
-    // Process data tables
+    // Process data tables with unique IDs
     if (config.dataTables && config.dataTables.length > 0) {
       for (const tableConfig of config.dataTables) {
         handleDataTableCreate({
@@ -232,10 +238,15 @@ const BoardMain: React.FC = () => {
           title: tableConfig.title,
           position: tableConfig.position
         });
+        
+        // Small delay to ensure timestamp difference
+        if (config.dataTables.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
       }
     }
   
-    // Process stat cards
+    // Process stat cards with unique IDs
     if (config.statCards && config.statCards.length > 0) {
       for (const cardConfig of config.statCards) {
         handleStatCardCreate({
@@ -244,6 +255,11 @@ const BoardMain: React.FC = () => {
           title: cardConfig.title,
           position: cardConfig.position
         });
+        
+        // Small delay to ensure timestamp difference
+        if (config.statCards.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
       }
     }
   
@@ -252,7 +268,6 @@ const BoardMain: React.FC = () => {
       description: `Added ${config.charts?.length || 0} charts, ${config.textBoxes?.length || 0} text boxes, ${config.dataTables?.length || 0} data tables, and ${config.statCards?.length || 0} stat cards.`,
     });
   };
-  
   const handleChartTitleChange = useCallback((chartId: string, title: string) => {
     setCharts(prev => prev.map(chart =>
       chart.id === chartId ? { ...chart, title } : chart
@@ -275,7 +290,7 @@ const BoardMain: React.FC = () => {
       });
       return newRow;
     }); const newTable: DataTable = {
-      id: `table-${Date.now()}`,
+      id: `table-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       columns: config.columns,
       data: filteredData,
       title: config.title,
