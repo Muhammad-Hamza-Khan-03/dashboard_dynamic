@@ -2601,15 +2601,14 @@ def list_files(user_id):
         
 @app.route('/report/<user_id>/<file_id>', methods=['GET'])
 def serve_report(user_id, file_id):
-    # Find the latest report file
-    viz_dir = os.path.join('static', 'visualization')
-    report_files = [f for f in os.listdir(viz_dir) if f.startswith('data_analysis_report_') and f.endswith('.md')]
+    # Find the latest report file in the root directory
+    report_files = [f for f in os.listdir() if f.startswith('data_analysis_report_') and f.endswith('.md')]
     
     if not report_files:
         return jsonify({'error': 'Report not found'}), 404
         
     # Get the latest report
-    report_file = os.path.join(viz_dir, report_files[-1])
+    report_file = report_files[-1]
     
     # Read and fix image paths in the report content
     with open(report_file, 'r', encoding='utf-8') as f:
@@ -2619,7 +2618,6 @@ def serve_report(user_id, file_id):
     fixed_content = content.replace('(visualization/', f'(/visualization/')
         
     return jsonify({'report_content': fixed_content})
-
 # Add a route to serve static files from the visualization directory
 @app.route('/visualization/<path:filename>')
 def serve_visualization(filename):
