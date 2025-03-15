@@ -67,3 +67,4 @@ static/exports/
 stats.db
 user_files.db-x-graph*.png
 .env
+*.json
