@@ -45,6 +45,15 @@ import asyncio
 from EnhancedGenerator import *
 from insightai import InsightAI
 from contextlib import redirect_stdout
+ # Import required libraries
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib import colors
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm, inch
+from reportlab.lib.utils import ImageReader
+import base64
+from io import BytesIO
+from PIL import Image
 app = Flask(__name__)
 cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 CORS(app)
@@ -734,7 +743,7 @@ def handle_sqlite_upload(file, user_id, filename, c, conn):
         os.unlink(temp_path)
 
         conn.commit()
-        return parent_file_id
+        return parent_file_id,table_unique_key,table_name
 
     except Exception as e:
         app.logger.error(f"Error in handle_sqlite_upload: {str(e)}")
@@ -1460,12 +1469,12 @@ def upload_file(user_id):
         if extension in structured_extensions:
             # Handle different file types
             if extension in ['xlsx', 'xls']: #2
-                file_id = handle_excel_upload(file, user_id, filename, c, conn)
+                file_id,sheet_unique_key,new_table_name = handle_excel_upload(file, user_id, filename, c, conn)
                 # process_table_statistics_background(sheet_unique_key, table_name)
                 task_id = create_stats_task(sheet_unique_key, new_table_name)
 
             elif extension in ['db', 'sqlite', 'sqlite3']:
-                file_id = handle_sqlite_upload(file, user_id, filename, c, conn)
+                file_id, table_unique_key, new_table_name = handle_sqlite_upload(file, user_id, filename, c, conn)
                 # process_table_statistics_background(table_unique_key, new_table_name)
                 task_id = create_stats_task(table_unique_key, new_table_name)
 
@@ -2668,7 +2677,7 @@ def handle_excel_upload(file, user_id, filename, c, conn):
                 continue
 
         conn.commit()
-        return parent_file_id
+        return parent_file_id,sheet_unique_key,table_name
 
     except Exception as e:
         app.logger.error(f"Error in handle_excel_upload: {str(e)}")
