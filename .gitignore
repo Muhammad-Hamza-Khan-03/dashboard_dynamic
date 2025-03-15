@@ -79,3 +79,9 @@ main.py
 test.py
 *.png
 
+user_files.db-x-graph*.png
+.env
+*.json
+static/
+visualization/
+data_analysis*.md
