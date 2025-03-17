@@ -1,7 +1,7 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -30,7 +30,14 @@ import {
   Zap,
   Sparkles,
   ImageIcon,
-  ExternalLink
+  ExternalLink,
+  Minus,
+  Plus,
+  History,
+  XCircle,
+  Save,
+  Archive,
+  Trash2
 } from 'lucide-react';
 
 // UI components
@@ -66,6 +73,7 @@ import {
   DialogHeader,
   DialogFooter,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Alert,
@@ -81,6 +89,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from "@/components/ui/badge";
 
 // Define interfaces
 interface ExistingFile {
@@ -111,6 +120,7 @@ interface AnalysisResult {
   output: string;
   visualizations?: string[];
   report_file?: string;
+  is_report?: boolean;
 }
 
 interface FilePreview {
@@ -123,6 +133,7 @@ interface AgentSection {
   modelName: string;
   content: string;
   icon: React.ReactNode;
+  order: number;
 }
 
 interface VisualizationInfo {
@@ -130,7 +141,18 @@ interface VisualizationInfo {
   filename: string;
 }
 
-// Custom Collapsible Component (to avoid dependency on @/components/ui/collapsible)
+interface SavedReport {
+  id: string;
+  file_id: number;
+  file_name: string;
+  visualizations: string[];
+  report_file?: string;
+  question_count: number;
+  created_at: string;
+  content?: string; // Optional because we'll fetch this separately
+}
+
+// Custom Collapsible Component
 interface CollapsibleProps {
   children: React.ReactNode;
   className?: string;
@@ -335,28 +357,172 @@ const VisualizationGallery: React.FC<{
   }));
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center">
-          <ImageIcon className="h-5 w-5 mr-2 text-blue-500" />
-          Visualizations
-        </CardTitle>
-        <CardDescription>
-          Generated plots and visualizations from your analysis
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {visualizationItems.map((viz, index) => (
-            <MarkdownImage 
-              key={index}
-              src={viz.path}
-              alt={viz.filename.replace(/\.(png|jpg|jpeg|gif)$/i, '').replace(/_/g, ' ')}
-            />
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {visualizationItems.map((viz, index) => (
+        <MarkdownImage 
+          key={index}
+          src={viz.path}
+          alt={viz.filename.replace(/\.(png|jpg|jpeg|gif)$/i, '').replace(/_/g, ' ')}
+        />
+      ))}
+    </div>
+  );
+};
+
+// Enhanced function to parse output and extract visualizations better
+const parseAgentSections = (output: string): {
+  sections: AgentSection[];
+  visualizationPaths: string[];
+} => {
+  // Regular expressions to identify agent sections
+  const agentRegex = /Calling Model: ([^\n]+)\n\n([\s\S]*?)(?=Calling Model:|I now have the final answer:|Generated Code:|Chain Summary|$)/g;
+  
+  const sections: AgentSection[] = [];
+  const visualizationPaths: string[] = [];
+  let match;
+  
+  // Extract visualization paths from code more comprehensively
+  // Check for plt.savefig calls
+  const vizPathRegex = /plt\.savefig\(['"](\[visualization\][\/\\][^'"]+)['"]\)/g;
+  let vizMatch;
+  while ((vizMatch = vizPathRegex.exec(output)) !== null) {
+    const path = vizMatch[1].replace('[visualization]/', 'visualization/');
+    visualizationPaths.push(path);
+  }
+  
+  // Also look for file paths mentioned in the output
+  const vizFilePathRegex = /saved (?:to|as) ['"]?([^'"\s]+\.(?:png|jpg|jpeg|svg))['"]?/gi;
+  while ((vizMatch = vizFilePathRegex.exec(output)) !== null) {
+    const path = vizMatch[1];
+    const formattedPath = path.includes('visualization/') ? path : `visualization/${path.split('/').pop()}`;
+    visualizationPaths.push(formattedPath);
+  }
+  
+  // Check for explicit mentions of visualization files
+  const explicitVizRegex = /visualization\/[^'")\s]+\.(?:png|jpg|jpeg|svg)/g;
+  while ((vizMatch = explicitVizRegex.exec(output)) !== null) {
+    visualizationPaths.push(vizMatch[0]);
+  }
+  
+  // Find all agent sections
+  while ((match = agentRegex.exec(output)) !== null) {
+    const modelName = match[1].trim();
+    let agentName = "Agent";
+    let content = match[2].trim();
+    let icon = <Bot className="h-5 w-5" />;
+    let order = 100; // Default order (will be sorted later)
+    
+    // Extract agent name from the content and assign order
+    if (content.includes("Selecting the expert")) {
+      agentName = "Expert Selector";
+      icon = <Search className="h-5 w-5 text-blue-500" />;
+      order = 1;
+    } else if (content.includes("selecting the best analyst")) {
+      agentName = "Analyst Selector";
+      icon = <Zap className="h-5 w-5 text-yellow-500" />;
+      order = 2;
+    } else if (content.includes("Drafting a plan")) {
+      agentName = "Planner";
+      icon = <Coffee className="h-5 w-5 text-amber-500" />;
+      order = 3;
+    } else if (content.includes("generating the first version of the code")) {
+      agentName = "Code Generator";
+      icon = <Code className="h-5 w-5 text-green-500" />;
+      order = 5;
+    } else if (content.includes("reviewing and debugging")) {
+      agentName = "Code Debugger";
+      icon = <Terminal className="h-5 w-5 text-red-500" />;
+      order = 6;
+    } else if (content.includes("assess, summarize and rank")) {
+      agentName = "Solution Summarizer";
+      icon = <Sparkles className="h-5 w-5 text-purple-500" />;
+      order = 7;
+    } else if (content.startsWith("{")) {
+      // JSON response - could be Expert or Analyst selector
+      if (content.includes("expert")) {
+        agentName = "Expert Selector Response";
+        icon = <Search className="h-5 w-5 text-blue-500" />;
+        order = 1;
+      } else if (content.includes("analyst")) {
+        agentName = "Analyst Selector Response";
+        icon = <Zap className="h-5 w-5 text-yellow-500" />;
+        order = 2;
+      }
+    }
+    
+    sections.push({
+      agentName,
+      modelName,
+      content,
+      icon,
+      order
+    });
+  }
+  
+  // Look for summary section
+  const summaryRegex = /I now have the final answer:([\s\S]*?)(?=Here is the final code|$)/;
+  const summaryMatch = summaryRegex.exec(output);
+  if (summaryMatch) {
+    sections.push({
+      agentName: "Analysis Summary",
+      modelName: "InsightAI",
+      content: summaryMatch[1].trim(),
+      icon: <Sparkles className="h-5 w-5 text-purple-500" />,
+      order: 4
+    });
+  }
+  
+  // Look for final code section
+  const codeRegex = /Here is the final code that accomplishes the task:([\s\S]*?)(?=Chain Summary|$)/;
+  const codeMatch = codeRegex.exec(output);
+  if (codeMatch) {
+    const codeContent = codeMatch[1].trim();
+    sections.push({
+      agentName: "Generated Code",
+      modelName: "InsightAI",
+      content: "```python\n" + codeContent + "\n```",
+      icon: <Code className="h-5 w-5 text-green-500" />,
+      order: 8
+    });
+    
+    // Extract additional visualization paths from the code section
+    const vizPathRegex = /['"](visualization\/[^'"]+)['"]/g;
+    let vizMatch;
+    while ((vizMatch = vizPathRegex.exec(codeContent)) !== null) {
+      visualizationPaths.push(vizMatch[1]);
+    }
+  }
+  
+  // Look for chain summary
+  const chainRegex = /Chain Summary[\s\S]*?$/;
+  const chainMatch = chainRegex.exec(output);
+  if (chainMatch) {
+    const summaryText = chainMatch[0].replace(/Chain Summary[\s\S]*?:/, '').trim();
+    sections.push({
+      agentName: "Execution Summary",
+      modelName: "InsightAI Stats",
+      content: summaryText,
+      icon: <BarChart className="h-5 w-5 text-blue-500" />,
+      order: 9
+    });
+  }
+  
+  // Remove duplicate visualization paths
+  const uniqueVisualizationPaths = [...new Set(visualizationPaths)];
+  
+  return { sections, visualizationPaths: uniqueVisualizationPaths };
+};
+
+// Function to fix image paths in markdown content
+const fixMarkdownImagePaths = (content: string): string => {
+  if (!content) return '';
+  
+  // Replace relative image paths with absolute URLs
+  return content.replace(
+    /!\[(.*?)\]\((visualization\/[^)]+)\)/g,
+    (match, alt, path) => {
+      return `![${alt}](/visualization/${path.replace('visualization/', '')})`;
+    }
   );
 };
 
@@ -593,6 +759,102 @@ const FileSelector: React.FC<{
   );
 };
 
+// Improved Number Selector Component
+const NumberSelector: React.FC<{
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+}> = ({ value, onChange, min = 1, max = 10 }) => {
+  const handleIncrement = () => {
+    if (value < max) {
+      onChange(value + 1);
+    }
+  };
+  
+  const handleDecrement = () => {
+    if (value > min) {
+      onChange(value - 1);
+    }
+  };
+  
+  return (
+    <div className="flex items-center space-x-2 border rounded-md p-1">
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        onClick={handleDecrement}
+        disabled={value <= min}
+        className="h-8 w-8 p-0 flex items-center justify-center"
+      >
+        <Minus className="h-3 w-3" />
+      </Button>
+      
+      <div className="flex-1 text-center font-medium min-w-[40px]">
+        {value}
+      </div>
+      
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        onClick={handleIncrement}
+        disabled={value >= max}
+        className="h-8 w-8 p-0 flex items-center justify-center"
+      >
+        <Plus className="h-3 w-3" />
+      </Button>
+    </div>
+  );
+};
+
+// Report Item Component
+const ReportItem: React.FC<{
+  report: SavedReport;
+  onSelect: () => void;
+  isSelected: boolean;
+  onDelete: () => void;
+}> = ({ report, onSelect, isSelected, onDelete }) => {
+  // Format the date for display
+  const formattedDate = new Date(report.created_at).toLocaleString();
+  
+  return (
+    <div 
+      className={`p-4 border rounded-lg mb-3 cursor-pointer hover:bg-gray-50 transition-colors flex justify-between ${isSelected ? 'border-blue-500 bg-blue-50' : ''}`}
+      onClick={onSelect}
+    >
+      <div>
+        <div className="flex items-center space-x-2">
+          <Book className="h-4 w-4 text-blue-500" />
+          <h3 className="font-medium">{report.file_name}</h3>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          Generated on {formattedDate}
+        </div>
+        <div className="text-sm text-muted-foreground">
+          {report.question_count} questions analyzed
+        </div>
+      </div>
+      <div className="flex items-center">
+        {report.visualizations.length > 0 && (
+          <Badge className="mr-2" variant="outline">
+            {report.visualizations.length} visualization{report.visualizations.length !== 1 ? 's' : ''}
+          </Badge>
+        )}
+        <Button 
+          variant="ghost" 
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        >
+          <Trash2 className="h-4 w-4 text-red-500" />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 // Analysis Configuration Component
 const AnalysisConfig: React.FC<{
   onConfigChange: (config: AnalysisConfig) => void;
@@ -631,16 +893,19 @@ const AnalysisConfig: React.FC<{
           
           {generateReport && (
             <div className="pl-6 space-y-2">
-              <Label htmlFor="question-count">Number of Questions to Explore</Label>
-              <Input
-                id="question-count"
-                type="number"
-                min="1"
-                max="10"
-                value={questionCount}
-                onChange={(e) => setQuestionCount(parseInt(e.target.value) || 3)}
-                className="w-24"
-              />
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="question-count" className="min-w-[180px]">
+                  Number of Questions to Explore:
+                </Label>
+                <div className="flex-1 max-w-[120px]">
+                  <NumberSelector
+                    value={questionCount}
+                    onChange={setQuestionCount}
+                    min={1}
+                    max={10}
+                  />
+                </div>
+              </div>
               <p className="text-xs text-muted-foreground">
                 More questions will provide deeper insights but will take longer to process.
               </p>
@@ -652,122 +917,7 @@ const AnalysisConfig: React.FC<{
   );
 };
 
-// Function to parse output and identify agent sections
-const parseAgentSections = (output: string): {
-  sections: AgentSection[];
-  visualizationPaths: string[];
-} => {
-  // Regular expressions to identify agent sections - avoid using "s" flag
-  const agentRegex = /Calling Model: ([^\n]+)\n\n([\s\S]*?)(?=Calling Model:|I now have the final answer:|Generated Code:|Chain Summary|$)/g;
-  
-  const sections: AgentSection[] = [];
-  const visualizationPaths: string[] = [];
-  let match;
-  
-  // Extract visualization paths from code
-  const vizPathRegex = /plt\.savefig\(['"](\[visualization\][\/\\][^'"]+)['"]\)/g;
-  let vizMatch;
-  while ((vizMatch = vizPathRegex.exec(output)) !== null) {
-    const path = vizMatch[1].replace('[visualization]/', 'visualization/');
-    visualizationPaths.push(path);
-  }
-  
-  // Find all agent sections
-  while ((match = agentRegex.exec(output)) !== null) {
-    const modelName = match[1].trim();
-    let agentName = "Agent";
-    let content = match[2].trim();
-    let icon = <Bot className="h-5 w-5" />;
-    
-    // Extract agent name from the content
-    if (content.includes("Selecting the expert")) {
-      agentName = "Expert Selector";
-      icon = <Search className="h-5 w-5 text-blue-500" />;
-    } else if (content.includes("Drafting a plan")) {
-      agentName = "Planner";
-      icon = <Coffee className="h-5 w-5 text-amber-500" />;
-    } else if (content.includes("generating the first version of the code")) {
-      agentName = "Code Generator";
-      icon = <Code className="h-5 w-5 text-green-500" />;
-    } else if (content.includes("reviewing and debugging")) {
-      agentName = "Code Debugger";
-      icon = <Terminal className="h-5 w-5 text-red-500" />;
-    } else if (content.includes("assess, summarize and rank")) {
-      agentName = "Solution Summarizer";
-      icon = <Sparkles className="h-5 w-5 text-purple-500" />;
-    } else if (content.startsWith("{")) {
-      // JSON response - could be Expert or Analyst selector
-      if (content.includes("expert")) {
-        agentName = "Expert Selector Response";
-        icon = <Search className="h-5 w-5 text-blue-500" />;
-      } else if (content.includes("analyst")) {
-        agentName = "Analyst Selector Response";
-        icon = <Zap className="h-5 w-5 text-yellow-500" />;
-      }
-    }
-    
-    sections.push({
-      agentName,
-      modelName,
-      content,
-      icon
-    });
-  }
-  
-  // Look for summary section - avoid using "s" flag
-  const summaryRegex = /I now have the final answer:([\s\S]*?)(?=Here is the final code|$)/;
-  const summaryMatch = summaryRegex.exec(output);
-  if (summaryMatch) {
-    sections.push({
-      agentName: "Analysis Summary",
-      modelName: "InsightAI",
-      content: summaryMatch[1].trim(),
-      icon: <Sparkles className="h-5 w-5 text-purple-500" />
-    });
-  }
-  
-  // Look for final code section - avoid using "s" flag
-  const codeRegex = /Here is the final code that accomplishes the task:([\s\S]*?)(?=Chain Summary|$)/;
-  const codeMatch = codeRegex.exec(output);
-  if (codeMatch) {
-    sections.push({
-      agentName: "Generated Code",
-      modelName: "InsightAI",
-      content: "```python\n" + codeMatch[1].trim() + "\n```",
-      icon: <Code className="h-5 w-5 text-green-500" />
-    });
-  }
-  
-  // Look for chain summary - avoid using "s" flag
-  const chainRegex = /Chain Summary[\s\S]*?$/;
-  const chainMatch = chainRegex.exec(output);
-  if (chainMatch) {
-    const summaryText = chainMatch[0].replace(/Chain Summary[\s\S]*?:/, '').trim();
-    sections.push({
-      agentName: "Execution Summary",
-      modelName: "InsightAI Stats",
-      content: summaryText,
-      icon: <BarChart className="h-5 w-5 text-blue-500" />
-    });
-  }
-  
-  return { sections, visualizationPaths };
-};
-
-// Function to fix image paths in markdown content
-const fixMarkdownImagePaths = (content: string): string => {
-  if (!content) return '';
-  
-  // Replace relative image paths with absolute URLs
-  return content.replace(
-    /!\[(.*?)\]\((visualization\/[^)]+)\)/g,
-    (match, alt, path) => {
-      return `![${alt}](/visualization/${path.replace('visualization/', '')})`;
-    }
-  );
-};
-
-// Analysis Panel Component
+// Analysis Panel Component with improved report management
 const AnalysisPanel: React.FC<{
   userId: string | undefined;
   selectedFile: SelectedFile | null;
@@ -781,6 +931,37 @@ const AnalysisPanel: React.FC<{
   const [reportContent, setReportContent] = useState<string | null>(null);
   const [agentSections, setAgentSections] = useState<AgentSection[]>([]);
   const [extractedVisualizations, setExtractedVisualizations] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<'analysis' | 'reports'>('analysis');
+  const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [selectedReportContent, setSelectedReportContent] = useState<string | null>(null);
+  const [isSavingReport, setIsSavingReport] = useState(false);
+  const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [reportToDelete, setReportToDelete] = useState<string | null>(null);
+  
+  // Fetch saved reports when userId changes or when activeTab changes to 'reports'
+  useEffect(() => {
+    const fetchReports = async () => {
+      if (!userId) return;
+      
+      setIsLoadingReports(true);
+      try {
+        const response = await axios.get(`http://localhost:5000/list_reports/${userId}`);
+        if (response.data.success) {
+          setSavedReports(response.data.reports);
+        }
+      } catch (err) {
+        console.error('Error fetching reports:', err);
+      } finally {
+        setIsLoadingReports(false);
+      }
+    };
+    
+    if (activeTab === 'reports') {
+      fetchReports();
+    }
+  }, [userId, activeTab]);
   
   // Reset states when selected file changes
   useEffect(() => {
@@ -790,11 +971,14 @@ const AnalysisPanel: React.FC<{
     setReportContent(null);
     setAgentSections([]);
     setExtractedVisualizations([]);
+    setActiveTab('analysis');
+    setSelectedReportId(null);
+    setSelectedReportContent(null);
   }, [selectedFile]);
   
   // Parse agent sections and visualizations when result changes
   useEffect(() => {
-    if (result && result.output) {
+    if (result && result.output && !result.is_report) {
       const { sections, visualizationPaths } = parseAgentSections(result.output);
       setAgentSections(sections);
       
@@ -804,10 +988,43 @@ const AnalysisPanel: React.FC<{
         ...visualizationPaths
       ];
       
-      // Remove duplicates
-      setExtractedVisualizations([...new Set(allVisualizations)]);
+      // Remove duplicates and filter out any empty strings
+      const uniqueVisualizations = [...new Set(allVisualizations)].filter(path => path);
+      
+      // Ensure all paths have proper prefix
+      const formattedVisualizations = uniqueVisualizations.map(path => {
+        if (path.startsWith('http')) return path;
+        return path.startsWith('/') ? path : `/${path}`;
+      });
+      
+      setExtractedVisualizations(formattedVisualizations);
+    } else if (result && result.is_report) {
+      // For report responses, just use the visualizations from the API
+      setExtractedVisualizations(result.visualizations || []);
     }
   }, [result]);
+  
+  // Fetch report content when selectedReportId changes
+  useEffect(() => {
+    const fetchReportContent = async () => {
+      if (!userId || !selectedReportId) {
+        setSelectedReportContent(null);
+        return;
+      }
+      
+      try {
+        const response = await axios.get(`http://localhost:5000/get_report/${userId}/${selectedReportId}`);
+        if (response.data.success) {
+          setSelectedReportContent(response.data.content);
+        }
+      } catch (err) {
+        console.error('Error fetching report content:', err);
+        setSelectedReportContent(null);
+      }
+    };
+    
+    fetchReportContent();
+  }, [userId, selectedReportId]);
   
   // Process and fix image paths in report content
   useEffect(() => {
@@ -818,7 +1035,66 @@ const AnalysisPanel: React.FC<{
       }
     }
   }, [reportContent]);
+
+  // Save the current report to the database
+  const saveReport = async () => {
+    if (!userId || !selectedFile || !selectedFile.fileId || !selectedFile.fileName || !reportContent) {
+      return;
+    }
+    
+    setIsSavingReport(true);
+    try {
+      const response = await axios.post(`http://localhost:5000/save_report/${userId}/${selectedFile.fileId}`, {
+        content: reportContent,
+        fileName: selectedFile.fileName,
+        visualizations: extractedVisualizations,
+        reportFile: result?.report_file,
+        questionCount: config.questionCount
+      });
+      
+      if (response.data.success) {
+        // Show success message or notification
+        console.log('Report saved successfully!');
+        
+        // Update reports list if we're in the reports tab
+        if (activeTab === 'reports') {
+          const reportsResponse = await axios.get(`http://localhost:5000/list_reports/${userId}`);
+          if (reportsResponse.data.success) {
+            setSavedReports(reportsResponse.data.reports);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error saving report:', err);
+    } finally {
+      setIsSavingReport(false);
+    }
+  };
   
+  // Delete a report from the database
+  const deleteReport = async (reportId: string) => {
+    if (!userId) return;
+    
+    try {
+      const response = await axios.delete(`http://localhost:5000/delete_report/${userId}/${reportId}`);
+      if (response.data.success) {
+        // Update reports list
+        setSavedReports(prevReports => prevReports.filter(report => report.id !== reportId));
+        
+        // If the deleted report was selected, clear the selection
+        if (selectedReportId === reportId) {
+          setSelectedReportId(null);
+          setSelectedReportContent(null);
+        }
+      }
+    } catch (err) {
+      console.error('Error deleting report:', err);
+    } finally {
+      setShowDeleteConfirm(false);
+      setReportToDelete(null);
+    }
+  };
+
   const handleAnalysis = async () => {
     if (!userId || !selectedFile || 
         (!question && !config.generateReport) || 
@@ -829,6 +1105,8 @@ const AnalysisPanel: React.FC<{
     setResult(null);
     setAgentSections([]);
     setExtractedVisualizations([]);
+    setReportContent(null); // Clear previous report content
+    setActiveTab('analysis'); // Switch to analysis tab
     
     try {
       // Process the question with the file ID
@@ -843,20 +1121,51 @@ const AnalysisPanel: React.FC<{
         );
         
         if (response.data.success) {
+          // Set result based on response - either report or question
           setResult(response.data);
           
-          // If there's a report file, fetch its content
-          if (response.data.report_file) {
+          console.log('API Response:', response.data); // Helpful for debugging
+          
+          // If this is a report or if there's a report file, fetch its content
+          if (response.data.is_report || response.data.report_file) {
             try {
               const reportResponse = await axios.get(
                 `http://localhost:5000/report/${userId}/${selectedFile.fileId}`
               );
-              if (reportResponse.data.report_content) {
+              
+              if (reportResponse.data.success && reportResponse.data.report_content) {
                 setReportContent(reportResponse.data.report_content);
               }
             } catch (reportErr) {
               console.error("Failed to fetch report content:", reportErr);
             }
+          }
+          
+          // For question responses (not reports), parse the output to extract sections
+          if (!response.data.is_report) {
+            const { sections, visualizationPaths } = parseAgentSections(response.data.output);
+            setAgentSections(sections);
+            
+            // Combine manually extracted visualization paths with those returned from API
+            const allVisualizations = [
+              ...(response.data.visualizations || []),
+              ...visualizationPaths
+            ];
+            
+            // Remove duplicates and filter out any empty strings
+            const uniqueVisualizations = [...new Set(allVisualizations)]
+              .filter(path => path);
+            
+            // Ensure all paths have proper prefix
+            const formattedVisualizations = uniqueVisualizations.map(path => {
+              if (path.startsWith('http')) return path;
+              return path.startsWith('/') ? path : `/${path}`;
+            });
+            
+            setExtractedVisualizations(formattedVisualizations);
+          } else {
+            // For report responses, just use the visualizations from the API
+            setExtractedVisualizations(response.data.visualizations || []);
           }
         } else {
           throw new Error(response.data.error || 'Processing failed');
@@ -870,6 +1179,18 @@ const AnalysisPanel: React.FC<{
     } finally {
       setIsProcessing(false);
     }
+  };
+  
+  // Get the Analysis Summary section if available
+  const analysisSummary = agentSections.find(section => section.agentName === "Analysis Summary");
+  
+  // Sort sections by the order property
+  const sortedSections = [...agentSections].sort((a, b) => a.order - b.order);
+  
+  // Handler for deleting a report with confirmation
+  const handleConfirmDelete = (reportId: string) => {
+    setReportToDelete(reportId);
+    setShowDeleteConfirm(true);
   };
   
   return (
@@ -893,7 +1214,7 @@ const AnalysisPanel: React.FC<{
                     id="question"
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
-                    placeholder="e.g., What are the 5 most expensive phones?"
+                    placeholder="e.g., What are the 5 most expensive phones? Show with a barchart"
                     disabled={isProcessing}
                     className="flex-1"
                   />
@@ -912,7 +1233,7 @@ const AnalysisPanel: React.FC<{
               
               <div>
                 <p className="text-sm text-muted-foreground">
-                  Ask any question about your data. InsightAI will analyze it and provide insights.
+                  Ask any question about your data.
                 </p>
               </div>
             </div>
@@ -954,78 +1275,320 @@ const AnalysisPanel: React.FC<{
         </Alert>
       )}
       
-      {extractedVisualizations.length > 0 && (
-        <VisualizationGallery visualizations={extractedVisualizations} />
-      )}
-      
-      {agentSections.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Analysis Process</CardTitle>
-            <CardDescription>
-              See how InsightAI analyzed your data step by step
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {agentSections.map((section, index) => (
-                <AgentBox key={index} section={section} />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      
-      {reportContent && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Book className="h-5 w-5 mr-2 text-blue-500" />
-              Analysis Report
-            </CardTitle>
-            <div className="flex justify-between items-center">
+      {/* Tab navigation for Analysis and Reports */}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'analysis' | 'reports')}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="analysis" className="flex items-center space-x-2">
+            <Sparkles className="h-4 w-4" />
+            <span>Current Analysis</span>
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="flex items-center space-x-2">
+            <History className="h-4 w-4" />
+            <span>Saved Reports {savedReports.length > 0 && `(${savedReports.length})`}</span>
+          </TabsTrigger>
+        </TabsList>
+        
+        {/* Current Analysis Tab Content */}
+        <TabsContent value="analysis">
+          {/* Display the ordered agent sections for question responses */}
+          {sortedSections.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Analysis Process</CardTitle>
+                <CardDescription>
+                  See how InsightAI analyzed your data step by step
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Expert Selector */}
+                  {sortedSections.filter(section => 
+                    section.agentName === "Expert Selector" || 
+                    section.agentName === "Expert Selector Response"
+                  ).map((section, index) => (
+                    <AgentBox key={`expert-${index}`} section={section} />
+                  ))}
+                  
+                  {/* Analyst Selector */}
+                  {sortedSections.filter(section => 
+                    section.agentName === "Analyst Selector" || 
+                    section.agentName === "Analyst Selector Response"
+                  ).map((section, index) => (
+                    <AgentBox key={`analyst-${index}`} section={section} />
+                  ))}
+                  
+                  {/* Code Generator */}
+                  {sortedSections.filter(section => 
+                    section.agentName === "Code Generator" ||
+                    section.agentName === "Planner"
+                  ).map((section, index) => (
+                    <AgentBox key={`code-gen-${index}`} section={section} />
+                  ))}
+                  
+                  {/* Summary Results + Plot */}
+                  {analysisSummary && (
+                    <div className="space-y-4">
+                      <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="flex items-center text-blue-700 dark:text-blue-300">
+                            <Sparkles className="h-5 w-5 mr-2" />
+                            Analysis Summary
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="prose prose-sm max-w-none dark:prose-invert">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {analysisSummary.content}
+                            </ReactMarkdown>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      
+                      {/* Visualizations */}
+                      {extractedVisualizations.length > 0 && (
+                        <Card className="bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-800">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="flex items-center text-blue-700 dark:text-blue-300">
+                              <ImageIcon className="h-5 w-5 mr-2" />
+                              Visualizations
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <VisualizationGallery visualizations={extractedVisualizations} />
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Remaining sections (Code Debugger, Generated Code, Execution Summary) */}
+                  {sortedSections.filter(section => 
+                    section.agentName !== "Expert Selector" && 
+                    section.agentName !== "Expert Selector Response" &&
+                    section.agentName !== "Analyst Selector" &&
+                    section.agentName !== "Analyst Selector Response" &&
+                    section.agentName !== "Code Generator" &&
+                    section.agentName !== "Planner" &&
+                    section.agentName !== "Analysis Summary"
+                  ).map((section, index) => (
+                    <AgentBox key={`other-${index}`} section={section} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* Full report section */}
+          {reportContent && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Book className="h-5 w-5 mr-2 text-blue-500" />
+                  Analysis Report
+                </CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardDescription>
+                    Comprehensive analysis of your dataset
+                  </CardDescription>
+                  <div className="flex space-x-2">
+                    {/* Save report button */}
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={saveReport}
+                      disabled={isSavingReport}
+                    >
+                      {isSavingReport ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-1" />
+                      )}
+                      Save Report
+                    </Button>
+                    
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowFullReport(!showFullReport)}
+                    >
+                      {showFullReport ? "Show Summary" : "Show Full Report"}
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className={`prose max-w-none ${!showFullReport ? "max-h-[400px] overflow-y-auto" : ""}`}>
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      img: ({ node, ...props }) => (
+                        <MarkdownImage src={props.src} alt={props.alt} />
+                      )
+                    }}
+                  >
+                    {reportContent}
+                  </ReactMarkdown>
+                </div>
+                
+                {/* Download options */}
+                {result?.report_file && (
+                  <div className="flex justify-end mt-4">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => window.open(`http://localhost:5000/${result.report_file}`, '_blank')}
+                      className="flex items-center"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Report
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+        
+        {/* Reports Tab Content */}
+        <TabsContent value="reports">
+          <Card>
+            <CardHeader>
+              <CardTitle>Saved Reports</CardTitle>
               <CardDescription>
-                Comprehensive analysis of your dataset
+                View previously generated reports for your data
               </CardDescription>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowFullReport(!showFullReport)}
-              >
-                {showFullReport ? "Show Summary" : "Show Full Report"}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className={`prose max-w-none ${!showFullReport ? "max-h-[400px] overflow-y-auto" : ""}`}>
-              <ReactMarkdown 
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  img: ({ node, ...props }) => (
-                    <MarkdownImage src={props.src} alt={props.alt} />
-                  )
-                }}
-              >
-                {reportContent}
-              </ReactMarkdown>
-            </div>
-            
-            {/* Download options */}
-            {result?.report_file && (
-              <div className="flex justify-end mt-4">
-                <Button 
-                  variant="outline" 
-                  onClick={() => window.open(`http://localhost:5000/${result.report_file}`, '_blank')}
-                  className="flex items-center"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Download Report
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+            </CardHeader>
+            <CardContent>
+              {isLoadingReports ? (
+                <div className="flex justify-center items-center p-10">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="md:col-span-1 space-y-4">
+                    <h3 className="font-medium">Report List</h3>
+                    <div className="max-h-[500px] overflow-y-auto pr-2">
+                      {savedReports.length > 0 ? (
+                        savedReports.map((report) => (
+                          <ReportItem
+                            key={report.id}
+                            report={report}
+                            onSelect={() => setSelectedReportId(report.id)}
+                            isSelected={selectedReportId === report.id}
+                            onDelete={() => handleConfirmDelete(report.id)}
+                          />
+                        ))
+                      ) : (
+                        <div className="text-center p-4 border rounded-lg">
+                          <p className="text-muted-foreground">
+                            No saved reports yet. Generate a report to get started.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="md:col-span-3">
+                    {selectedReportId ? (
+                      selectedReportContent ? (
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center">
+                            <h3 className="font-medium text-lg">
+                              {savedReports.find(r => r.id === selectedReportId)?.file_name || 'Report'}
+                            </h3>
+                            {selectedReportId && (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => {
+                                  const report = savedReports.find(r => r.id === selectedReportId);
+                                  if (report && report.report_file) {
+                                    window.open(`http://localhost:5000/${report.report_file}`, '_blank');
+                                  }
+                                }}
+                                disabled={!savedReports.find(r => r.id === selectedReportId)?.report_file}
+                              >
+                                <Download className="h-4 w-4 mr-2" />
+                                Download Report
+                              </Button>
+                            )}
+                          </div>
+                          
+                          <div className="prose prose-sm max-w-none">
+                            <ReactMarkdown 
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                img: ({ node, ...props }) => (
+                                  <MarkdownImage src={props.src} alt={props.alt} />
+                                )
+                              }}
+                            >
+                              {selectedReportContent}
+                            </ReactMarkdown>
+                          </div>
+                          
+                          {/* Visualizations section */}
+                          {selectedReportId && (
+                            <div className="space-y-2">
+                              <h4 className="font-medium">Visualizations</h4>
+                              <VisualizationGallery 
+                                visualizations={savedReports.find(r => r.id === selectedReportId)?.visualizations || []} 
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-[300px]">
+                          <div className="text-center">
+                            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                            <p className="text-muted-foreground">
+                              Loading report content...
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    ) : (
+                      <div className="flex items-center justify-center h-[300px]">
+                        <div className="text-center">
+                          <Book className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                          <p className="text-muted-foreground">
+                            Select a report to view its contents
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Report</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this report? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDeleteConfirm(false)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={() => reportToDelete && deleteReport(reportToDelete)}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

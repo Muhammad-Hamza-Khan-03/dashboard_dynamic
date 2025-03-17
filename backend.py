@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import tempfile
 import traceback
-from flask import Flask, Response, request, jsonify, send_from_directory
+from flask import Flask, Response, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import sqlite3
 import io
@@ -37,6 +37,7 @@ import time
 from typing import List, Dict, Any, Generator, Tuple,Optional
 from dataclasses import dataclass
 import traceback
+import re
 from flask import jsonify, request
 import queue
 from background_worker_implementation import *
@@ -380,6 +381,8 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
     finally:
         conn.close()
         
+# Modify the process_question function in backend.py to handle report paths correctly
+
 @app.route('/process_question/<user_id>/<file_id>', methods=['POST'])
 def process_question(user_id, file_id):
     try:
@@ -405,53 +408,92 @@ def process_question(user_id, file_id):
         if not insight:
             return jsonify({'error': 'Failed to create analysis instance'}), 500
         
-        # Capture stdout to get the output
-        output_buffer = io.StringIO()
-        with redirect_stdout(output_buffer):
-            if generate_report:
-                # Generate a report
+        # Handle report generation and question answering separately
+        if generate_report:
+            # Generate a report - use a separate output buffer
+            report_buffer = io.StringIO()
+            with redirect_stdout(report_buffer):
                 insight.pd_agent_converse()
-                result = "Report generated successfully"
-            else:
-                # Process a single question
+            
+            # Find all generated visualizations
+            viz_dir = os.path.join('static', 'visualization')
+            viz_files = []
+            
+            if os.path.exists(viz_dir):
+                # Get only the most recent .png files based on modification time
+                all_files = [(f, os.path.getmtime(os.path.join(viz_dir, f))) 
+                            for f in os.listdir(viz_dir) if f.endswith('.png')]
+                
+                # Sort by modification time, newest first
+                all_files.sort(key=lambda x: x[1], reverse=True)
+                
+                # Take the 10 most recent files
+                viz_files = [f[0] for f in all_files[:10]]
+            
+            # Check for report file
+            report_file = None
+            report_files = [f for f in os.listdir() if f.startswith('data_analysis_report_') and f.endswith('.md')]
+            
+            if report_files:
+                # Sort by modification time to get the most recent
+                report_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+                report_file = report_files[0]
+                
+                # Copy report to visualization directory for easier access
+                source_path = report_file
+                dest_path = os.path.join(viz_dir, report_file)
+                import shutil
+                os.makedirs(viz_dir, exist_ok=True)  # Ensure directory exists
+                shutil.copy2(source_path, dest_path)
+            
+            # Create visualization paths with proper format for frontend
+            visualization_paths = [os.path.join('visualization', f) for f in viz_files]
+            
+            return jsonify({
+                'success': True,
+                'output': "Report generated successfully",
+                'visualizations': visualization_paths,
+                'report_file': report_file,
+                'is_report': True  # Flag to indicate this is a report response
+            })
+        else:
+            # Process a single question - use a separate output buffer
+            question_buffer = io.StringIO()
+            with redirect_stdout(question_buffer):
                 insight.pd_agent_converse(question)
-                result = output_buffer.getvalue()
-        
-        # Find all generated visualizations
-        viz_dir = os.path.join('static', 'visualization')
-        viz_files = []
-        
-        if os.path.exists(viz_dir):
-            # Get only the most recent .png files based on modification time
-            all_files = [(f, os.path.getmtime(os.path.join(viz_dir, f))) 
-                        for f in os.listdir(viz_dir) if f.endswith('.png')]
             
-            # Sort by modification time, newest first
-            all_files.sort(key=lambda x: x[1], reverse=True)
+            result = question_buffer.getvalue()
             
-            # Take the 10 most recent files
-            viz_files = [f[0] for f in all_files[:10]]
-        
-        # Check for report file
-        report_file = None
-        report_files = [f for f in os.listdir() if f.startswith('data_analysis_report_') and f.endswith('.md')]
-        
-        if report_files:
-            report_file = report_files[0]
-            # Copy report to visualization directory for easier access
-            source_path = report_file
-            dest_path = os.path.join(viz_dir, report_file)
-            import shutil
-            shutil.copy2(source_path, dest_path)
-            report_file = os.path.join('visualization', report_file)
+            # Find visualizations created by this specific question
+            viz_dir = os.path.join('static', 'visualization')
+            viz_files = []
             
-        return jsonify({
-            'success': True,
-            'output': result,
-            'visualizations': [os.path.join('visualization', f) for f in viz_files],
-            'report_file': report_file
-        })
-        
+            if os.path.exists(viz_dir):
+                # Get only files created in the last minute (assuming this question just ran)
+                current_time = time.time()
+                recent_files = [(f, os.path.getmtime(os.path.join(viz_dir, f))) 
+                                for f in os.listdir(viz_dir) if f.endswith('.png')]
+                
+                # Filter for files created within the last minute
+                one_minute_ago = current_time - 60
+                recent_files = [(f, t) for f, t in recent_files if t > one_minute_ago]
+                
+                # Sort by modification time, newest first
+                recent_files.sort(key=lambda x: x[1], reverse=True)
+                
+                # Take the most recent files
+                viz_files = [f[0] for f in recent_files[:10]]
+            
+            # Create visualization paths
+            visualization_paths = [os.path.join('visualization', f) for f in viz_files]
+            
+            return jsonify({
+                'success': True,
+                'output': result,
+                'visualizations': visualization_paths,
+                'is_report': False  # Flag to indicate this is a question response
+            })
+            
     except Exception as e:
         app.logger.error(f"Error processing question: {str(e)}")
         app.logger.error(traceback.format_exc())
@@ -2601,28 +2643,363 @@ def list_files(user_id):
         
 @app.route('/report/<user_id>/<file_id>', methods=['GET'])
 def serve_report(user_id, file_id):
-    # Find the latest report file in the root directory
-    report_files = [f for f in os.listdir() if f.startswith('data_analysis_report_') and f.endswith('.md')]
+    """Serve the most recent report content"""
+    try:
+        # Find the latest report file in the root directory
+        report_files = [f for f in os.listdir() if f.startswith('data_analysis_report_') and f.endswith('.md')]
+        
+        if not report_files:
+            return jsonify({'error': 'Report not found'}), 404
+            
+        # Sort by modification time to get the most recent
+        report_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+        report_file = report_files[0]
+        
+        # Read the report content
+        with open(report_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Process content to fix image paths
+        # Replace relative image paths with proper server paths
+        processed_content = content.replace('(visualization/', '(/visualization/')
+        
+        return jsonify({
+            'success': True,
+            'report_content': processed_content,
+            'report_file': report_file
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error serving report: {str(e)}")
+        return jsonify({'error': str(e)}), 500
     
-    if not report_files:
-        return jsonify({'error': 'Report not found'}), 404
-        
-    # Get the latest report
-    report_file = report_files[-1]
-    
-    # Read and fix image paths in the report content
-    with open(report_file, 'r', encoding='utf-8') as f:
-        content = f.read()
-        
-    # Fix image paths to point to the visualization directory
-    fixed_content = content.replace('(visualization/', f'(/visualization/')
-        
-    return jsonify({'report_content': fixed_content})
 # Add a route to serve static files from the visualization directory
 @app.route('/visualization/<path:filename>')
 def serve_visualization(filename):
     return send_from_directory('visualization', filename)
+# Add route to serve report files directly
+@app.route('/data_analysis_report_<report_id>.md')
+def serve_report_file(report_id):
+    report_filename = f"data_analysis_report_{report_id}.md"
+    
+    # Check if report exists
+    if os.path.exists(report_filename):
+        # Optional: Set proper MIME type for markdown
+        return send_file(report_filename, mimetype='text/markdown')
+    else:
+        return "Report not found", 404
+@app.route('/save_report/<user_id>/<file_id>', methods=['POST'])
+def save_report(user_id, file_id):
+    """Save a report with its metadata and content"""
+    try:
+        data = request.json
+        report_content = data.get('content')
+        file_name = data.get('fileName')
+        visualizations = data.get('visualizations', [])
+        report_file = data.get('reportFile')
+        question_count = data.get('questionCount', 0)
+        
+        if not report_content or not file_name:
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        # Generate a unique report ID
+        report_id = f"report_{int(time.time())}"
+        
+        # Connect to the database
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Create reports table if it doesn't exist
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS user_reports (
+                report_id TEXT PRIMARY KEY,
+                user_id TEXT,
+                file_id INTEGER,
+                file_name TEXT,
+                content TEXT,
+                visualizations TEXT,
+                report_file TEXT,
+                question_count INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Store the report
+        c.execute('''
+            INSERT INTO user_reports (
+                report_id, user_id, file_id, file_name, 
+                content, visualizations, report_file, question_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            report_id, 
+            user_id, 
+            file_id, 
+            file_name,
+            report_content,
+            json.dumps(visualizations),
+            report_file,
+            question_count
+        ))
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'report_id': report_id,
+            'message': 'Report saved successfully'
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error saving report: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
+@app.route('/list_reports/<user_id>', methods=['GET'])
+def list_reports(user_id):
+    """Get a list of all saved reports for a user"""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Create reports table if it doesn't exist
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS user_reports (
+                report_id TEXT PRIMARY KEY,
+                user_id TEXT,
+                file_id INTEGER,
+                file_name TEXT,
+                content TEXT,
+                visualizations TEXT,
+                report_file TEXT,
+                question_count INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Get all reports for the user, most recent first
+        c.execute('''
+            SELECT report_id, file_id, file_name, visualizations, 
+                   report_file, question_count, created_at
+            FROM user_reports
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        ''', (user_id,))
+        
+        reports = c.fetchall()
+        
+        # Format the results
+        report_list = []
+        for report in reports:
+            report_id, file_id, file_name, visualizations_json, report_file, question_count, created_at = report
+            
+            # Parse the visualizations JSON
+            try:
+                visualizations = json.loads(visualizations_json) if visualizations_json else []
+            except:
+                visualizations = []
+                
+            report_list.append({
+                'id': report_id,
+                'file_id': file_id,
+                'file_name': file_name,
+                'visualizations': visualizations,
+                'report_file': report_file,
+                'question_count': question_count,
+                'created_at': created_at
+            })
+            
+        return jsonify({
+            'success': True,
+            'reports': report_list
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error listing reports: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+@app.route('/get_report/<user_id>/<report_id>', methods=['GET'])
+def get_report(user_id, report_id):
+    """Get the content of a specific report"""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get the report
+        c.execute('''
+            SELECT content, file_name, visualizations, 
+                   report_file, question_count, created_at
+            FROM user_reports
+            WHERE user_id = ? AND report_id = ?
+        ''', (user_id, report_id))
+        
+        report = c.fetchone()
+        
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+            
+        content, file_name, visualizations_json, report_file, question_count, created_at = report
+        
+        # Parse the visualizations JSON
+        try:
+            visualizations = json.loads(visualizations_json) if visualizations_json else []
+        except:
+            visualizations = []
+            
+        # Process content to fix image paths
+        processed_content = content.replace('(visualization/', '(/visualization/')
+            
+        return jsonify({
+            'success': True,
+            'content': processed_content,
+            'file_name': file_name,
+            'visualizations': visualizations,
+            'report_file': report_file,
+            'question_count': question_count,
+            'created_at': created_at
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error getting report: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+@app.route('/delete_report/<user_id>/<report_id>', methods=['DELETE'])
+def delete_report(user_id, report_id):
+    """Delete a specific report"""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Delete the report
+        c.execute('''
+            DELETE FROM user_reports
+            WHERE user_id = ? AND report_id = ?
+        ''', (user_id, report_id))
+        
+        conn.commit()
+        
+        if c.rowcount == 0:
+            return jsonify({'error': 'Report not found'}), 404
+            
+        return jsonify({
+            'success': True,
+            'message': 'Report deleted successfully'
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error deleting report: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+@app.route('/import_existing_reports/<user_id>/<file_id>', methods=['POST'])
+def import_existing_reports(user_id, file_id):
+    """Import existing report files into the database"""
+    try:
+        # Find all report files
+        report_files = [f for f in os.listdir() if f.startswith('data_analysis_report_') and f.endswith('.md')]
+        
+        if not report_files:
+            return jsonify({'message': 'No report files found to import'}), 404
+            
+        imported_count = 0
+        
+        # Get file information
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        c.execute("SELECT filename FROM user_files WHERE file_id = ?", (file_id,))
+        file_result = c.fetchone()
+        
+        if not file_result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        file_name = file_result[0]
+        
+        # Create reports table if it doesn't exist
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS user_reports (
+                report_id TEXT PRIMARY KEY,
+                user_id TEXT,
+                file_id INTEGER,
+                file_name TEXT,
+                content TEXT,
+                visualizations TEXT,
+                report_file TEXT,
+                question_count INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Import each report file
+        for report_file in report_files:
+            # Extract timestamp from filename
+            try:
+                timestamp = report_file.replace('data_analysis_report_', '').replace('.md', '')
+                report_id = f"report_{timestamp}"
+                
+                # Check if report already exists
+                c.execute("SELECT report_id FROM user_reports WHERE report_id = ?", (report_id,))
+                if c.fetchone():
+                    continue
+                    
+                # Read the report content
+                with open(report_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Extract visualizations from content
+                viz_paths = []
+                viz_matches = re.findall(r'!\[.*?\]\((visualization/[^)]+)\)', content)
+                viz_paths.extend(viz_matches)
+                
+                # Register the report
+                c.execute('''
+                    INSERT INTO user_reports (
+                        report_id, user_id, file_id, file_name, 
+                        content, visualizations, report_file, question_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    report_id, 
+                    user_id, 
+                    file_id, 
+                    file_name,
+                    content,
+                    json.dumps(viz_paths),
+                    report_file,
+                    5  # Default question count since we don't know original value
+                ))
+                
+                imported_count += 1
+                
+            except Exception as e:
+                app.logger.error(f"Error importing report {report_file}: {str(e)}")
+                continue
+                
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully imported {imported_count} reports',
+            'imported_reports': imported_count
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error importing reports: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 def handle_excel_upload(file, user_id, filename, c, conn):
     """Handle Excel file by extracting sheets and storing them similarly to DB tables."""
     try:
