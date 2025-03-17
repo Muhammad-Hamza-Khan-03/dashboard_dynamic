@@ -17,6 +17,7 @@ const useFilesList = (userId: string | undefined) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
+  
   const fetchFiles = useCallback(async () => {
     if (!userId) {
       setError('User ID is not available');
@@ -37,10 +38,24 @@ const useFilesList = (userId: string | undefined) => {
     fetchFiles();
   }, [fetchFiles]);
 
-  const refetch = useCallback(() => {
-    fetchFiles();
-  }, [fetchFiles]);
-
+  useEffect(() => {
+    if (userId) {
+      fetchFiles();
+    } else {
+      // Reset state when userId is not available
+      setFileList(null);
+      setError(null);
+      setLoading(false);
+    }
+  }, [userId]);
+  
+  const refetch = () => {
+    if (userId) {
+      fetchFiles();
+    } else {
+      setError("Cannot fetch files: User ID not available");
+    }
+  };
   return { fileList, error, loading, refetch };
 };
 

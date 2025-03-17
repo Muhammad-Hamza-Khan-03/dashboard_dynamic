@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { toast } from "@/components/ui/use-toast";
 import { useUser } from '@clerk/nextjs';
-import { Loader2, PlusCircle, Edit, Save, Trash2, FileIcon, BarChart, RefreshCw, Upload } from "lucide-react";
+import { Loader2, PlusCircle, Edit, Save, Trash2, FileIcon, BarChart, RefreshCw, Upload, FilePlus } from "lucide-react";
 import axios from 'axios';
 import { FileData } from "@/features/sqlite/api/file-content";
 import useFilesList from "@/features/sqlite/api/file-list";
@@ -36,6 +36,7 @@ import EnhancedEditForm from "./EditForm";
 import RenameFileDialog from "./renameFileDialog";
 import { FileEdit } from "lucide-react";
 import StatisticsCalculatorStandalone from "./Calulator";
+import ColumnManagementDialog from "./columnManagementDialog";
 
 // Update the dynamic import with proper typing
 const DataTable = dynamic<React.ComponentProps<typeof import('@/components/data-table').DataTable>>(() =>
@@ -126,8 +127,7 @@ const DataTablePage: React.FC = () => {
   const { user, isLoaded: isUserLoaded } = useUser();
   const { fileList, error: fileListError, loading: fileListLoading, refetch: refetchFileList } = useFilesList(user?.id);
   const [filterkey, setFilterkey] = useState<string>(Date.now().toString());
-  const [editItem, setEditItem] = useState<Partial<DataItem> | null>(null);
-
+ 
   const [selectedRows, setSelectedRows] = useState<Row<DataItem>[]>([]);
 
   const [tableKey, setTableKey] = useState(0);
@@ -147,14 +147,16 @@ const DataTablePage: React.FC = () => {
 
   const [fileChanged, setFileChanged] = useState<boolean>(false);
   const [isRenameFileDialogOpen, setIsRenameFileDialogOpen] = useState(false);
+  const [isColumnManagementOpen, setIsColumnManagementOpen] = useState(false);
+const [activeColumn, setActiveColumn] = useState<string>('');
   const [activeRow, setActiveRow] = useState<{
     data: any;
     index: number;
     field: string;
     value: any;
   } | null>(null);
-  const [isColumnManagementOpen, setIsColumnManagementOpen] = useState(false);
-const [activeColumn, setActiveColumn] = useState<string>('');
+
+  
 
   useEffect(() => {
     if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
@@ -174,7 +176,21 @@ const [activeColumn, setActiveColumn] = useState<string>('');
     setIsAnalysisModalOpen(true);
   };
 
+  //rename
+  const handleCloseRenameDialog = useCallback(() => {
+    setIsRenameFileDialogOpen(false);
+  }, []);
+  
+  const handleCloseColumnManagement = useCallback(() => {
+    // Important: Set state in this specific order
+    setActiveColumn('');
+    setIsColumnManagementOpen(false);
+  }, []);
 
+  const handleCloseAnalysisModal = useCallback(() => {
+    setIsAnalysisModalOpen(false);
+  }, []);
+    
   const resetState = () => {
     setData([]);
     setColumns([]);
@@ -183,6 +199,11 @@ const [activeColumn, setActiveColumn] = useState<string>('');
     setPaginationInfo(null);
     setSelectedTable(null);
   };
+
+  const handleColumnAction = useCallback((column: string) => {
+    setActiveColumn(column);
+    setIsColumnManagementOpen(true);
+  }, []);
   
   const handleColumnsChange = useCallback((newColumns: ColumnDef<DataItem, any>[]) => {
     setColumns(newColumns);
@@ -297,6 +318,73 @@ const [activeColumn, setActiveColumn] = useState<string>('');
     }
   }, [selectedFile, currentTable, currentPage, user?.id]);
 
+  // Add this function to your page.tsx component
+const handleColumnChange = useCallback((
+  action: string, 
+  oldColumn?: string, 
+  newColumn?: string
+) => {
+  if (!selectedFile) return;
+  
+  // Handle different column operations
+  if (action === 'rename' && oldColumn && newColumn) {
+    // Update columns array when a column is renamed
+    const updatedColumns = columns.map(col => {
+      // For accessor-based column definitions
+      if (typeof col === 'object' && 'accessorKey' in col && col.accessorKey === oldColumn) {
+        return {
+          ...col,
+          accessorKey: newColumn,
+          header: () => newColumn
+        };
+      }
+      return col;
+    });
+    
+    // Update the local state
+    handleColumnsChange(updatedColumns);
+    
+    // Refresh data to reflect changes
+    fetchFileData(selectedFile.file_id, selectedFile.filename, currentPage);
+    
+    // Update the UI
+    toast({
+      title: "Success",
+      description: `Column "${oldColumn}" renamed to "${newColumn}"`,
+    });
+  } 
+  else if (action === 'delete' && oldColumn) {
+    // Remove the deleted column from the columns array
+    const updatedColumns = columns.filter(col => {
+      if (typeof col === 'object' && 'accessorKey' in col) {
+        return col.accessorKey !== oldColumn;
+      }
+      return true;
+    });
+    
+    // Update the local state
+    handleColumnsChange(updatedColumns);
+    
+    // Refresh data to reflect changes
+    fetchFileData(selectedFile.file_id, selectedFile.filename, currentPage);
+    
+    // Update the UI
+    toast({
+      title: "Success", 
+      description: `Column "${oldColumn}" deleted successfully`,
+    });
+  }
+  else if (action === 'add' && newColumn) {
+    // For newly added columns, we need to refresh the data to get the updated structure
+    fetchFileData(selectedFile.file_id, selectedFile.filename, currentPage);
+    
+    toast({
+      title: "Success",
+      description: `New column "${newColumn}" added successfully`,
+    });
+  }
+}, [columns, handleColumnsChange, selectedFile, fetchFileData, currentPage]);
+
   useEffect(() => {
     if (isUserLoaded && user && selectedFile) {
       fetchFileData(selectedFile.file_id, selectedFile.filename);
@@ -348,47 +436,64 @@ const [activeColumn, setActiveColumn] = useState<string>('');
     }
   }, [selectedFile, fetchTableNames]);
 
-  const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
-    // Create column order if it doesn't exist
-    if (Object.keys(columnOrder).length === 0) {
-      const order: ColumnOrder = {};
-      columns.forEach((col, index) => {
-        order[col] = index;
-      });
-      setColumnOrder(order);
+// Update your generateColumns function to restore the row editing functionality
+const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
+  // Create column order if it doesn't exist
+  if (Object.keys(columnOrder).length === 0) {
+    const order: ColumnOrder = {};
+    columns.forEach((col, index) => {
+      order[col] = index;
+    });
+    setColumnOrder(order);
+  }
+
+  return columns.map(column => ({
+    accessorKey: column,
+    header: () => {
+      return (
+        <div className="flex items-center justify-between">
+          <span>{column}</span>
+         
+        </div>
+      );
+    },
+    cell: ({ row }) => {
+      const value = row.getValue(column);
+      return (
+        <div className="flex items-center justify-between">
+          <span>{formatCellValue(value)}</span>
+          {/* Restore the original row editing functionality */}
+          <div className="flex space-x-1">
+          {/* Row editing button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEdit(row.index, column, formatCellValue(value));
+            }}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          
+          {/* Column management button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveColumn(column);
+              setIsColumnManagementOpen(true);
+            }}
+          >
+            <FilePlus className="h-4 w-4" />
+          </Button>
+        </div>
+        </div>
+      );
     }
-  
-    return columns.map(column => ({
-      accessorKey: column,
-      header: () => {
-        return (
-          <div className="flex items-center space-x-2">
-            <span>{column}</span>
-           
-          </div>
-        );
-      },
-      cell: ({ row }) => {
-        const value = row.getValue(column);
-        return (
-          <div className="flex items-center justify-between">
-            <span>{formatCellValue(value)}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              
-              onClick={(e) => {
-                e.stopPropagation();
-                // setActiveColumn(column);
-                handleEdit(row.index, column, formatCellValue(value))}}
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-          </div>
-        );
-      }
-    }));
-  };
+  }));
+};
   
   const updateData = (newData: DataItem[]) => {
     setData(newData);
@@ -790,19 +895,23 @@ const [activeColumn, setActiveColumn] = useState<string>('');
       setSelectedFile(null);
     }
   }, [refetchFileList, selectedFile]);
-
+// Show loading state while authenticating
   if (!isUserLoaded) {
     return (
       <div className="flex justify-center items-center h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading user data...</span>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <p>Please sign in to access this page.</p>
+      <div className="flex flex-col justify-center items-center h-screen">
+        <p className="mb-4 text-lg">Please sign in to access this page.</p>
+        <Button onClick={() => window.location.href = "/sign-in"}>
+          Sign In
+        </Button>
       </div>
     );
   }
@@ -950,18 +1059,18 @@ const [activeColumn, setActiveColumn] = useState<string>('');
               />
             )} */}
  <StatisticsCalculatorStandalone 
-    fileId={selectedFile?.file_id || ''}
-    userId={user?.id || ''}
-    onColumnAdded={() => {
-      // Refresh data when a column is added
-      if (selectedFile) {
-        fetchFileData(selectedFile.file_id, selectedFile.filename, currentPage);
-      }
-    }}
-    buttonVariant="default"
-    buttonClassName="bg-gray-700 text-white hover:bg-gray-600"
-  />
-            {selectedRows.length > 0 && (
+  fileId={selectedFile?.file_id || ''}
+  userId={user?.id || ''}
+  onColumnAdded={() => {
+    // Refresh data when a column is added
+    if (selectedFile) {
+      fetchFileData(selectedFile.file_id, selectedFile.filename, currentPage);
+    }
+  }}
+  buttonVariant="default"
+  buttonClassName="bg-gray-700 text-white hover:bg-gray-600"
+/>
+           {selectedRows.length > 0 && (
               <Button
                 variant="destructive"
                 onClick={handleDelete}
@@ -1007,7 +1116,7 @@ const [activeColumn, setActiveColumn] = useState<string>('');
               fileId={selectedFile?.file_id || ''}
               userId={user?.id || ''}
               isOpen={isAnalysisModalOpen}
-              onClose={() => setIsAnalysisModalOpen(false)}
+              onClose={handleCloseAnalysisModal}
               fileChanged={fileChanged}
             />
           </div>
@@ -1150,27 +1259,29 @@ const [activeColumn, setActiveColumn] = useState<string>('');
       {selectedFile && (
   <RenameFileDialog
     isOpen={isRenameFileDialogOpen}
-    onClose={() => setIsRenameFileDialogOpen(false)}
+    onClose={handleCloseRenameDialog}
     fileId={selectedFile.file_id}
     userId={user?.id || ''}
     currentFilename={selectedFile.filename}
     onFileRenamed={handleFileRenamed}
   />
 )}
-{/* {isColumnManagementOpen && (
+{isColumnManagementOpen && (
   <ColumnManagementDialog
     isOpen={isColumnManagementOpen}
-    onClose={() => setIsColumnManagementOpen(false)}
+    onClose={handleCloseColumnManagement}
     column={activeColumn}
     fileId={selectedFile?.file_id || ''}
     userId={user?.id || ''}
     onColumnChange={handleColumnChange}
-    allColumns={columns.map(col => 
-      typeof col === 'string' ? col : 
-      'accessorKey' in col ? (col.accessorKey as string) : ''
+    allColumns={columns.map(col =>
+      typeof col === 'object' && 'accessorKey' in col
+        ? (col.accessorKey as string)
+        : ''
     ).filter(Boolean)}
   />
-)} */}
+)}
+
     </div>
   );
 };

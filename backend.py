@@ -18,7 +18,7 @@ from pdfminer.high_level import extract_text
 from pdfminer.layout import LAParams
 import os
 import threading
-from flask_caching import Cache
+from flask_caching import Cache, logger
 from pyecharts import options as opts
 from pyecharts.charts import (
     Line, Bar, Pie, Scatter, Boxplot, Grid, EffectScatter,
@@ -57,6 +57,8 @@ from reportlab.lib.utils import ImageReader
 import base64
 from io import BytesIO
 from PIL import Image
+from celery_worker import process_statistics_task, stats_task_queue, update_task_status
+import os
 
 app = Flask(__name__)
 cache = Cache(app, config={'CACHE_TYPE': 'simple'})
@@ -487,7 +489,24 @@ def process_pdf_content(pdf_content):
     except Exception as e:
         logging.error(f"Error processing PDF: {str(e)}")
         return None
-
+def upload_local(file, filename):
+    
+    folder = "mydatabase"
+    
+    # Create the folder if it doesn't exist
+    os.makedirs(folder, exist_ok=True)
+    
+    # Create the full path for the file
+    file_path = os.path.join(folder, filename)
+    
+    # Read the content from the uploaded file
+    content = file.read()
+    
+    # Write content to the file (overwriting if it already exists)
+    with open(file_path, "wb") as f:
+        f.write(content)
+    
+    return file_path
 def handle_sqlite_upload(file, user_id, filename, c, conn):
     """Handle SQLite file by extracting tables and storing them similarly to Excel sheets."""
     try:
@@ -1025,8 +1044,8 @@ def calculate_column_statistics(df, column_name):
         'shape_stats': json.dumps(shape_stats),
         'outlier_stats': json.dumps(outlier_stats)
     }
-
-def calculate_dataset_statistics(df):
+# # 
+# def calculate_dataset_statistics(df):
     """Calculate dataset-level statistics for visualization"""
     # Only include numeric columns for dataset-wide statistics
     numeric_df = df.select_dtypes(include=['number'])
@@ -1122,123 +1141,123 @@ def calculate_dataset_statistics(df):
         'scatter_matrix': json.dumps(scatter_matrix)
     }
 
-def store_statistics_for_table(table_id, table_name):
-    """Calculate and store statistics for a table in the stats database"""
-    conn_user = sqlite3.connect('user_files.db')
-    conn_stats = sqlite3.connect('stats.db')
+# def store_statistics_for_table(table_id, table_name):
+#     """Calculate and store statistics for a table in the stats database"""
+#     conn_user = sqlite3.connect('user_files.db')
+#     conn_stats = sqlite3.connect('stats.db')
     
-    try:
-        # Load the data
-        df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn_user)
+#     try:
+#         # Load the data
+#         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn_user)
         
-        # Calculate statistics for each column
-        for column in df.columns:
-            stats = calculate_column_statistics(df, column)
+#         # Calculate statistics for each column
+#         for column in df.columns:
+#             stats = calculate_column_statistics(df, column)
             
-            # Check if statistics already exist for this column
-            c_stats = conn_stats.cursor()
-            c_stats.execute("""
-                SELECT stats_id FROM column_stats
-                WHERE table_id = ? AND column_name = ?
-            """, (table_id, column))
+#             # Check if statistics already exist for this column
+#             c_stats = conn_stats.cursor()
+#             c_stats.execute("""
+#                 SELECT stats_id FROM column_stats
+#                 WHERE table_id = ? AND column_name = ?
+#             """, (table_id, column))
             
-            existing_stats = c_stats.fetchone()
+#             existing_stats = c_stats.fetchone()
             
-            if existing_stats:
-                # Update existing statistics
-                c_stats.execute("""
-                    UPDATE column_stats 
-                    SET data_type = ?, basic_stats = ?, distribution = ?, 
-                        shape_stats = ?, outlier_stats = ?
-                    WHERE table_id = ? AND column_name = ?
-                """, (
-                    stats['data_type'],
-                    stats['basic_stats'],
-                    stats['distribution'],
-                    stats['shape_stats'],
-                    stats['outlier_stats'],
-                    table_id, 
-                    column
-                ))
-            else:
-                # Insert new statistics
-                c_stats.execute("""
-                    INSERT INTO column_stats 
-                    (table_id, column_name, data_type, basic_stats, distribution, 
-                     shape_stats, outlier_stats)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    table_id, 
-                    column, 
-                    stats['data_type'],
-                    stats['basic_stats'],
-                    stats['distribution'],
-                    stats['shape_stats'],
-                    stats['outlier_stats']
-                ))
+#             if existing_stats:
+#                 # Update existing statistics
+#                 c_stats.execute("""
+#                     UPDATE column_stats 
+#                     SET data_type = ?, basic_stats = ?, distribution = ?, 
+#                         shape_stats = ?, outlier_stats = ?
+#                     WHERE table_id = ? AND column_name = ?
+#                 """, (
+#                     stats['data_type'],
+#                     stats['basic_stats'],
+#                     stats['distribution'],
+#                     stats['shape_stats'],
+#                     stats['outlier_stats'],
+#                     table_id, 
+#                     column
+#                 ))
+#             else:
+#                 # Insert new statistics
+#                 c_stats.execute("""
+#                     INSERT INTO column_stats 
+#                     (table_id, column_name, data_type, basic_stats, distribution, 
+#                      shape_stats, outlier_stats)
+#                     VALUES (?, ?, ?, ?, ?, ?, ?)
+#                 """, (
+#                     table_id, 
+#                     column, 
+#                     stats['data_type'],
+#                     stats['basic_stats'],
+#                     stats['distribution'],
+#                     stats['shape_stats'],
+#                     stats['outlier_stats']
+#                 ))
         
-        # Calculate and store dataset statistics
-        dataset_stats = calculate_dataset_statistics(df)
+#         # Calculate and store dataset statistics
+#         dataset_stats = calculate_dataset_statistics(df)
         
-        # Check if dataset statistics already exist
-        c_stats.execute("""
-            SELECT stats_id FROM dataset_stats
-            WHERE table_id = ?
-        """, (table_id,))
+#         # Check if dataset statistics already exist
+#         c_stats.execute("""
+#             SELECT stats_id FROM dataset_stats
+#             WHERE table_id = ?
+#         """, (table_id,))
         
-        existing_stats = c_stats.fetchone()
+#         existing_stats = c_stats.fetchone()
         
-        if existing_stats:
-            # Update existing statistics
-            c_stats.execute("""
-                UPDATE dataset_stats 
-                SET correlation_matrix = ?, parallel_coords = ?, 
-                    violin_data = ?, heatmap_data = ?, scatter_matrix = ?
-                WHERE table_id = ?
-            """, (
-                dataset_stats['correlation_matrix'],
-                dataset_stats['parallel_coords'],
-                dataset_stats['violin_data'],
-                dataset_stats['heatmap_data'],
-                dataset_stats['scatter_matrix'],
-                table_id
-            ))
-        else:
-            # Insert new statistics
-            c_stats.execute("""
-                INSERT INTO dataset_stats 
-                (table_id, correlation_matrix, parallel_coords, 
-                 violin_data, heatmap_data, scatter_matrix)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                table_id,
-                dataset_stats['correlation_matrix'],
-                dataset_stats['parallel_coords'],
-                dataset_stats['violin_data'],
-                dataset_stats['heatmap_data'],
-                dataset_stats['scatter_matrix']
-            ))
+#         if existing_stats:
+#             # Update existing statistics
+#             c_stats.execute("""
+#                 UPDATE dataset_stats 
+#                 SET correlation_matrix = ?, parallel_coords = ?, 
+#                     violin_data = ?, heatmap_data = ?, scatter_matrix = ?
+#                 WHERE table_id = ?
+#             """, (
+#                 dataset_stats['correlation_matrix'],
+#                 dataset_stats['parallel_coords'],
+#                 dataset_stats['violin_data'],
+#                 dataset_stats['heatmap_data'],
+#                 dataset_stats['scatter_matrix'],
+#                 table_id
+#             ))
+#         else:
+#             # Insert new statistics
+#             c_stats.execute("""
+#                 INSERT INTO dataset_stats 
+#                 (table_id, correlation_matrix, parallel_coords, 
+#                  violin_data, heatmap_data, scatter_matrix)
+#                 VALUES (?, ?, ?, ?, ?, ?)
+#             """, (
+#                 table_id,
+#                 dataset_stats['correlation_matrix'],
+#                 dataset_stats['parallel_coords'],
+#                 dataset_stats['violin_data'],
+#                 dataset_stats['heatmap_data'],
+#                 dataset_stats['scatter_matrix']
+#             ))
         
-        conn_stats.commit()
-        logging.info(f"Statistics calculated and stored for table {table_name}")
+#         conn_stats.commit()
+#         logging.info(f"Statistics calculated and stored for table {table_name}")
         
-    except Exception as e:
-        logging.error(f"Error calculating statistics: {str(e)}")
-        traceback.print_exc()
-    finally:
-        conn_user.close()
-        conn_stats.close()
+#     except Exception as e:
+#         logging.error(f"Error calculating statistics: {str(e)}")
+#         traceback.print_exc()
+#     finally:
+#         conn_user.close()
+#         conn_stats.close()
 
 
-def process_table_statistics_background(table_id, table_name):
-    """Run statistics calculation in a background thread"""
-    thread = threading.Thread(
-        target=store_statistics_for_table,
-        args=(table_id, table_name)
-    )
-    thread.daemon = True  # Thread will exit when main thread exits
-    thread.start()
-    return thread
+# def process_table_statistics_background(table_id, table_name):
+#     """Run statistics calculation in a background thread"""
+#     thread = threading.Thread(
+#         target=store_statistics_for_table,
+#         args=(table_id, table_name)
+#     )
+#     thread.daemon = True  # Thread will exit when main thread exits
+#     thread.start()
+#     return thread
 
 
 @app.route('/upload/<user_id>', methods=['POST'])
@@ -1280,6 +1299,9 @@ def upload_file(user_id):
                 task_id = create_stats_task(sheet_unique_key, new_table_name)
 
             elif extension in ['db', 'sqlite', 'sqlite3']:
+                saved_path  = upload_local(file, filename)
+                print("\nsaved to ",saved_path)
+                file.seek(0)
                 file_id,table_unique_key,new_table_name = handle_sqlite_upload(file, user_id, filename, c, conn)
                 # process_table_statistics_background(table_unique_key, new_table_name)
                 task_id = create_stats_task(table_unique_key, new_table_name)
@@ -1545,7 +1567,7 @@ def get_stats_status(user_id, file_id):
 
 # Task status starts
 def create_stats_task(table_id, table_name):
-    """Create a new statistics calculation task"""
+    """Create a new statistics calculation task with Celery"""
     task_id = f"stats_{table_id}_{int(time.time())}"
     
     conn = sqlite3.connect('stats.db')
@@ -1566,9 +1588,10 @@ def create_stats_task(table_id, table_name):
             'table_name': table_name
         })
         
+        logger.info(f"Created statistics task: {task_id}")
         return task_id
     except Exception as e:
-        logging.error(f"Error creating stats task: {str(e)}")
+        logger.error(f"Error creating stats task: {str(e)}")
         return None
     finally:
         conn.close()
@@ -1705,7 +1728,7 @@ def start_stats_calculation(user_id, file_id):
         })
         
     except Exception as e:
-        logging.error(f"Error starting statistics calculation: {str(e)}")
+        logger.error(f"Error starting statistics calculation: {str(e)}")
         return jsonify({'error': str(e)}), 500
     finally:
         if 'conn' in locals():
@@ -1715,17 +1738,64 @@ def start_stats_calculation(user_id, file_id):
 def check_stats_task(task_id):
     """Check the status of a statistics calculation task"""
     try:
-        status = get_task_status(task_id)
+        conn = sqlite3.connect('stats.db')
+        c = conn.cursor()
         
-        if not status:
+        c.execute("""
+            SELECT status, progress, message, created_at, completed_at
+            FROM stats_tasks
+            WHERE task_id = ?
+        """, (task_id,))
+        
+        result = c.fetchone()
+        if not result:
             return jsonify({'error': 'Task not found'}), 404
             
-        return jsonify(status)
+        status, progress, message, created_at, completed_at = result
+        
+        # Get column statistics count for more detailed progress information
+        c.execute("""
+            SELECT COUNT(*)
+            FROM column_stats
+            WHERE table_id = (
+                SELECT table_id FROM stats_tasks WHERE task_id = ?
+            )
+        """, (task_id,))
+        
+        column_count = c.fetchone()[0]
+        
+        return jsonify({
+            'task_id': task_id,
+            'status': status,
+            'progress': progress,
+            'message': message,
+            'created_at': created_at,
+            'completed_at': completed_at,
+            'column_count': column_count
+        })
         
     except Exception as e:
-        logging.error(f"Error checking task status: {str(e)}")
+        logger.error(f"Error checking task status: {str(e)}")
         return jsonify({'error': str(e)}), 500
-## status updates API ENDPOINTS end
+    finally:
+        if 'conn' in locals():
+            conn.close()
+@app.route('/cancel-stats-task/<task_id>', methods=['POST'])
+def cancel_stats_task(task_id):
+    """Cancel a running statistics calculation task"""
+    try:
+        # Update the task status to cancelled
+        update_task_status(task_id, 'cancelled', message='Task cancelled by user')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Task has been marked for cancellation'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error cancelling task: {str(e)}")
+        return jsonify({'error': str(e)}), 500            
+            ## status updates API ENDPOINTS end
 
 # Columns rotes updates here
 @app.route('/delete-column/<user_id>/<file_id>', methods=['POST'])
@@ -3396,6 +3466,16 @@ def apply_filters(user_id, file_id):
         unique_key = result[0]
         table_name = f"table_{unique_key}"
         
+        # Determine numeric columns
+        numericColumns = []
+        c.execute(f"PRAGMA table_info('{table_name}')")
+        columns_info = c.fetchall()
+        for col_info in columns_info:
+            col_name = col_info[1]
+            col_type = col_info[2].lower()
+            if col_type in ['integer', 'real', 'float', 'numeric']:
+                numericColumns.append(col_name)
+
         # Build the SQL query with filters
         where_clauses = []
         params = []

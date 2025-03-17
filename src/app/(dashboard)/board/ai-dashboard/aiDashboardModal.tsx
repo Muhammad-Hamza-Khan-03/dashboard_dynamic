@@ -3,7 +3,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Loader, BrainCircuit, Bot, User, Sparkles, LayoutDashboard, Zap, Code, Check, Database, Type, Table } from 'lucide-react';
+import { 
+  Send, 
+  Loader, 
+  BrainCircuit, 
+  Bot, 
+  User, 
+  Sparkles, 
+  LayoutDashboard, 
+  Zap, 
+  Code, 
+  Check, 
+  Database, 
+  Type, 
+  Table, 
+  LineChart
+} from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import axios from 'axios';
 import Markdown from 'react-markdown';
@@ -16,6 +31,9 @@ import { cn } from '@/lib/utils';
 import { getLayoutTemplateById } from '../template/layoutTemplate';
 import LayoutSelector from '../template/layoutSelector';
 import DashboardPreview from './DashboardPreview';
+
+// Import the enhanced layout algorithm
+import { smartDistributeElements, applyTemplateLayout, createDashboardLayout } from './layout-algorithm';
 
 interface AiDashboardModalProps {
   isOpen: boolean;
@@ -101,9 +119,11 @@ const AiDashboardModal: React.FC<AiDashboardModalProps> = ({
   // Layout template state
   const [activeTab, setActiveTab] = useState('chat');
   const [selectedLayout, setSelectedLayout] = useState('grid-3');
+  const [layoutTemplate, setLayoutTemplate] = useState('executive');
   const [useStructuredLayout, setUseStructuredLayout] = useState(true);
   const [parsedConfig, setParsedConfig] = useState<AiDashboardConfig | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   
   const inputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -135,7 +155,31 @@ const AiDashboardModal: React.FC<AiDashboardModalProps> = ({
     if (window.aiDashboardConfig && useStructuredLayout) {
       applyLayoutToConfig();
     }
-  }, [window.aiDashboardConfig, selectedLayout, useStructuredLayout]);
+  }, [window.aiDashboardConfig, selectedLayout, useStructuredLayout, layoutTemplate]);
+
+  // Check if dark mode is enabled
+  useEffect(() => {
+    // Check for system preference or localStorage value
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const storedPreference = localStorage.getItem('theme');
+    
+    if (storedPreference === 'dark' || (storedPreference !== 'light' && prefersDark)) {
+      setIsDarkMode(true);
+    }
+
+    // Listen for theme changes
+    const observer = new MutationObserver(() => {
+      const isDark = document.documentElement.classList.contains('dark');
+      setIsDarkMode(isDark);
+    });
+    
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
 
   // Function to generate dashboard suggestions from AI
   const generateSuggestions = async () => {
@@ -194,61 +238,38 @@ const AiDashboardModal: React.FC<AiDashboardModalProps> = ({
     }
   };
 
-  // Apply selected layout template to the AI-generated config
+  // Apply selected layout template to the AI-generated config using the enhanced algorithm
   const applyLayoutToConfig = () => {
     if (!window.aiDashboardConfig) return;
     
-    // Get the selected layout template
-    const layoutTemplate = getLayoutTemplateById(selectedLayout);
-    if (!layoutTemplate) return;
+    // Estimated dashboard dimensions
+    const containerWidth = window.innerWidth * 0.7;
+    const containerHeight = window.innerHeight * 0.7;
     
-    // Ensure all required properties exist in the config
-    const safeConfig = {
-      charts: window.aiDashboardConfig.charts || [],
-      textBoxes: window.aiDashboardConfig.textBoxes || [],
-      dataTables: window.aiDashboardConfig.dataTables || [],
-      statCards: window.aiDashboardConfig.statCards || []
-    };
+    // Create a new config with improved layout using our enhanced algorithm
+    let newConfig: AiDashboardConfig;
     
-    // Calculate element counts
-    const elementCounts = {
-      charts: safeConfig.charts.length,
-      textBoxes: safeConfig.textBoxes.length,
-      dataTables: safeConfig.dataTables.length,
-      statCards: safeConfig.statCards.length
-    };
-    
-    // Generate layout positions using the template
-    const layoutPositions = layoutTemplate.generateLayout(
-      elementCounts,
-      window.innerWidth * 0.7, // Estimate dashboard width
-      window.innerHeight * 0.7  // Estimate dashboard height
-    );
-    
-    // Create a new config with the layout positions
-    const newConfig: AiDashboardConfig = {
-      charts: safeConfig.charts.map((chart, index) => ({
-        ...chart,
-        position: layoutPositions.charts[index]?.position || chart.position
-      })),
-      textBoxes: safeConfig.textBoxes.map((textBox, index) => ({
-        ...textBox,
-        position: layoutPositions.textBoxes[index]?.position || textBox.position
-      })),
-      dataTables: safeConfig.dataTables.map((dataTable, index) => ({
-        ...dataTable,
-        position: layoutPositions.dataTables[index]?.position || dataTable.position
-      })),
-      statCards: safeConfig.statCards.map((statCard, index) => ({
-        ...statCard,
-        position: layoutPositions.statCards[index]?.position || statCard.position
-      }))
-    };
+    if (useStructuredLayout) {
+      // Use the advanced layout algorithm with template approach
+      newConfig = applyTemplateLayout(
+        window.aiDashboardConfig, 
+        layoutTemplate,   // "executive", "analytical", or "balanced"
+        containerWidth, 
+        containerHeight
+      );
+    } else {
+      // Use the smart distribution algorithm without a specific template
+      newConfig = smartDistributeElements(
+        window.aiDashboardConfig,
+        containerWidth,
+        containerHeight
+      );
+    }
     
     // Update the parsed config for preview
     setParsedConfig(newConfig);
   };
-  
+
   // Simulates AI thinking with realistic stages and progress
   const simulateThinking = () => {
     const stages = [
@@ -364,7 +385,9 @@ Your final response must include a valid JSON configuration with this structure:
  }
  ]
 }
-Place this JSON at the end of your response, clearly marked with triple backticks (\`\`\`json and \`\`\`).`;
+Place this JSON at the end of your response, clearly marked with triple backticks (\`\`\`json and \`\`\`).
+
+IMPORTANT: When creating the dashboard, make sure that elements have different x,y coordinates and are well spaced apart from each other. Don't place multiple elements at the same position.`;
 
       // Combine the system prompt, user request, and data context
       const aiPrompt = `${systemPrompt}\n\nUser request: ${inputMessage}\n\nColumns: ${JSON.stringify(columns)}\n\nSample data: ${JSON.stringify(sampleData)}`;
@@ -427,9 +450,20 @@ Place this JSON at the end of your response, clearly marked with triple backtick
             statCards: parsedResponse.statCards || []
           };
           
+          // Apply the enhanced layout algorithm to improve element distribution
+          const containerWidth = window.innerWidth * 0.7;
+          const containerHeight = window.innerHeight * 0.7;
+          
+          // Use our enhanced algorithm to create a balanced layout
+          const adjustedConfig = createDashboardLayout(
+            completeConfig,
+            containerWidth,
+            containerHeight
+          );
+          
           // Store the sanitized configuration
-          window.aiDashboardConfig = completeConfig;
-          console.log("Successfully parsed dashboard configuration:", completeConfig);
+          window.aiDashboardConfig = adjustedConfig;
+          console.log("Successfully parsed dashboard configuration:", adjustedConfig);
           
           // Switch to layout tab after getting response
           setTimeout(() => {
@@ -440,7 +474,7 @@ Place this JSON at the end of your response, clearly marked with triple backtick
           if (useStructuredLayout) {
             applyLayoutToConfig();
           } else {
-            setParsedConfig(completeConfig);
+            setParsedConfig(adjustedConfig);
           }
         } else {
           console.error("No valid JSON configuration found in AI response");
@@ -512,7 +546,7 @@ Place this JSON at the end of your response, clearly marked with triple backtick
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-hidden p-0 bg-white dark:bg-slate-900 shadow-2xl border-0">
-        <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-900 dark:to-slate-800">
+        <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950 dark:to-blue-950">
           <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-slate-800 dark:text-slate-200">
             <BrainCircuit className="h-6 w-6 text-indigo-500" />
             AI Dashboard Designer
@@ -584,7 +618,7 @@ Place this JSON at the end of your response, clearly marked with triple backtick
                           className={cn(
                             "max-w-[90%] rounded-lg p-4 shadow-sm",
                             message.role === 'user'
-                              ? "bg-blue-500 text-white"
+                              ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white"
                               : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
                           )}
                         >
@@ -637,7 +671,7 @@ Place this JSON at the end of your response, clearly marked with triple backtick
                           <div className="space-y-3">
                             <div className="h-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-full overflow-hidden">
                               <div 
-                                className="h-full bg-indigo-500 rounded-full transition-all duration-500 ease-in-out"
+                                className="h-full bg-gradient-to-r from-indigo-400 to-indigo-600 rounded-full transition-all duration-500 ease-in-out"
                                 style={{ width: `${thinkingProgress * 100}%` }}
                               />
                             </div>
@@ -690,7 +724,7 @@ Place this JSON at the end of your response, clearly marked with triple backtick
                   <Button
                     onClick={handleSendMessage}
                     disabled={!inputMessage.trim() || isProcessing}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                    className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white"
                   >
                     {isProcessing ? (
                       <Loader className="h-4 w-4 animate-spin" />
@@ -730,20 +764,24 @@ Place this JSON at the end of your response, clearly marked with triple backtick
                     </div>
                   )}
                   
-                  <div className="mt-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md p-4">
+                  <div className="mt-6 bg-gradient-to-br from-white to-blue-50 dark:from-slate-800 dark:to-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-md p-4">
                     <h4 className="text-sm font-semibold mb-3 text-slate-800 dark:text-slate-200">Pro Tips</h4>
                     <ul className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
                       <li className="flex items-start gap-2">
-                        <LayoutDashboard className="h-3.5 w-3.5 text-indigo-500 shrink-0 mt-0.5" />
-                        <span>Specify key metrics and insights you want to highlight</span>
+                        <LineChart className="h-3.5 w-3.5 text-indigo-500 shrink-0 mt-0.5" />
+                        <span>Specify what trends or patterns you want to highlight</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Table className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
+                        <span>Mention which columns are most important to visualize</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
-                        <span>Mention your audience (executives, analysts, operations)</span>
+                        <span>Identify your audience (executives, analysts, operations)</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <Code className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
-                        <span>Include specific chart types if you have preferences</span>
+                        <Type className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
+                        <span>Request descriptive text to explain insights</span>
                       </li>
                     </ul>
                   </div>
@@ -755,13 +793,13 @@ Place this JSON at the end of your response, clearly marked with triple backtick
           <TabsContent value="layout" className="flex-1 overflow-hidden h-full bg-white dark:bg-slate-900">
             <ScrollArea className="h-full">
               <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                   {/* Layout controls */}
-                  <div className="space-y-6">
+                  <div className="space-y-6 md:col-span-2">
                     <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-lg border border-slate-200 dark:border-slate-700">
                       <h3 className="text-sm font-semibold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
                         <LayoutDashboard className="h-4 w-4 text-indigo-500" />
-                        Dashboard Layout
+                        Dashboard Layout Options
                       </h3>
                       
                       <div className="flex items-center space-x-2 mb-4">
@@ -773,38 +811,67 @@ Place this JSON at the end of your response, clearly marked with triple backtick
                             if (checked && window.aiDashboardConfig) {
                               applyLayoutToConfig();
                             } else if (!checked && window.aiDashboardConfig) {
-                              setParsedConfig(window.aiDashboardConfig);
+                              // When not using structured layout, apply smart distribution
+                              const smartConfig = smartDistributeElements(
+                                window.aiDashboardConfig,
+                                window.innerWidth * 0.7,
+                                window.innerHeight * 0.7
+                              );
+                              setParsedConfig(smartConfig);
                             }
                           }}
                           className="data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
                         />
                         <Label htmlFor="use-structured-layout" className="text-sm">
-                          Use structured layout templates
+                          Use enhanced layout templates
                         </Label>
                       </div>
                       
                       {useStructuredLayout && (
-                        <LayoutSelector
-                          selectedLayout={selectedLayout}
-                          onSelectLayout={(layoutId) => {
-                            setSelectedLayout(layoutId);
-                            applyLayoutToConfig();
-                          }}
-                        />
+                        <div className="space-y-4">
+                          <div>
+                            <Label className="text-sm mb-2 block">Layout Template</Label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {['executive', 'analytical', 'balanced'].map((template) => (
+                                <Button
+                                  key={template}
+                                  variant={layoutTemplate === template ? "default" : "outline"}
+                                  className={`text-xs h-8 ${layoutTemplate === template ? 'bg-indigo-600 hover:bg-indigo-700' : ''}`}
+                                  onClick={() => {
+                                    setLayoutTemplate(template);
+                                    if (window.aiDashboardConfig) {
+                                      applyLayoutToConfig();
+                                    }
+                                  }}
+                                >
+                                  {template.charAt(0).toUpperCase() + template.slice(1)}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <LayoutSelector
+                            selectedLayout={selectedLayout}
+                            onSelectLayout={(layoutId) => {
+                              setSelectedLayout(layoutId);
+                              applyLayoutToConfig();
+                            }}
+                          />
+                        </div>
                       )}
                     </div>
                     
                     {parsedConfig && (
-                      <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <div className="bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-800 dark:to-slate-800/50 p-5 rounded-lg border border-slate-200 dark:border-slate-700">
                         <h3 className="text-sm font-semibold mb-3 text-slate-800 dark:text-slate-200 flex items-center gap-2">
                           <Sparkles className="h-4 w-4 text-amber-500" />
-                          Dashboard Summary
+                          Dashboard Overview
                         </h3>
                         
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 p-3 flex items-center gap-3">
+                          <div className="bg-white dark:bg-slate-800/90 rounded-md border border-slate-200 dark:border-slate-700 p-3 flex items-center gap-3">
                             <div className="bg-blue-100 dark:bg-blue-900/30 rounded-md p-2">
-                              <LayoutDashboard className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                              <LineChart className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                             </div>
                             <div>
                               <div className="text-xs text-slate-500 dark:text-slate-400">Charts</div>
@@ -812,7 +879,7 @@ Place this JSON at the end of your response, clearly marked with triple backtick
                             </div>
                           </div>
                           
-                          <div className="bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 p-3 flex items-center gap-3">
+                          <div className="bg-white dark:bg-slate-800/90 rounded-md border border-slate-200 dark:border-slate-700 p-3 flex items-center gap-3">
                             <div className="bg-indigo-100 dark:bg-indigo-900/30 rounded-md p-2">
                               <Table className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                             </div>
@@ -822,7 +889,7 @@ Place this JSON at the end of your response, clearly marked with triple backtick
                             </div>
                           </div>
                           
-                          <div className="bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 p-3 flex items-center gap-3">
+                          <div className="bg-white dark:bg-slate-800/90 rounded-md border border-slate-200 dark:border-slate-700 p-3 flex items-center gap-3">
                             <div className="bg-green-100 dark:bg-green-900/30 rounded-md p-2">
                               <Type className="h-5 w-5 text-green-600 dark:text-green-400" />
                             </div>
@@ -832,7 +899,7 @@ Place this JSON at the end of your response, clearly marked with triple backtick
                             </div>
                           </div>
                           
-                          <div className="bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 p-3 flex items-center gap-3">
+                          <div className="bg-white dark:bg-slate-800/90 rounded-md border border-slate-200 dark:border-slate-700 p-3 flex items-center gap-3">
                             <div className="bg-amber-100 dark:bg-amber-900/30 rounded-md p-2">
                               <Database className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                             </div>
@@ -842,17 +909,41 @@ Place this JSON at the end of your response, clearly marked with triple backtick
                             </div>
                           </div>
                         </div>
+                        
+                        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                          <h4 className="text-xs font-medium mb-2 text-slate-600 dark:text-slate-300">Display Mode</h4>
+                          <div className="flex items-center gap-3">
+                            <Button
+                              size="sm"
+                              variant={!isDarkMode ? "default" : "outline"}
+                              className="flex-1 text-xs h-8"
+                              onClick={() => setIsDarkMode(false)}
+                            >
+                              Light
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={isDarkMode ? "default" : "outline"}
+                              className="flex-1 text-xs h-8"
+                              onClick={() => setIsDarkMode(true)}
+                            >
+                              Dark
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
                   
-                  {/* Dashboard preview */}
-                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 p-5 h-[600px] overflow-hidden flex flex-col">
-                    <h3 className="text-sm font-semibold mb-3 text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-indigo-500" />
-                      Dashboard Preview
-                    </h3>
-                    <div className="flex-1 bg-white dark:bg-slate-800 rounded-md p-2 overflow-hidden relative border border-slate-200 dark:border-slate-700">
+                  {/* Dashboard preview - takes 3 columns in the grid */}
+                  <div className="md:col-span-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col h-[600px] overflow-hidden">
+                    <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-slate-50 to-indigo-50/30 dark:from-slate-800 dark:to-indigo-950/30">
+                      <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-indigo-500" />
+                        Dashboard Preview
+                      </h3>
+                    </div>
+                    <div className="flex-1 p-1 overflow-hidden relative">
                       {!parsedConfig ? (
                         <div className="flex items-center justify-center h-full">
                           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -860,7 +951,11 @@ Place this JSON at the end of your response, clearly marked with triple backtick
                           </p>
                         </div>
                       ) : (
-                        <DashboardPreview config={parsedConfig} scale={0.3} />
+                        <DashboardPreview 
+                          config={parsedConfig} 
+                          scale={0.3} 
+                          isDarkMode={isDarkMode}
+                        />
                       )}
                     </div>
                   </div>
@@ -879,7 +974,7 @@ Place this JSON at the end of your response, clearly marked with triple backtick
                   <Button
                     size="lg"
                     className={cn(
-                      "bg-indigo-600 hover:bg-indigo-700 text-white transition-all",
+                      "bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-md hover:shadow-lg transition-all",
                       isCreating && "opacity-90"
                     )}
                     onClick={handleCreateDashboard}

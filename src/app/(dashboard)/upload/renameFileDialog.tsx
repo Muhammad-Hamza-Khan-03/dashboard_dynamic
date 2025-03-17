@@ -43,6 +43,7 @@ const RenameFileDialog: React.FC<RenameFileDialogProps> = ({
       const baseFilename = currentFilename.split('.')[0];
       setNewFilename(baseFilename);
       setError(null);
+      setLoading(false);
     }
   }, [isOpen, currentFilename]);
 
@@ -85,7 +86,12 @@ const RenameFileDialog: React.FC<RenameFileDialogProps> = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog 
+      open={isOpen} 
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="flex items-center">
@@ -137,7 +143,6 @@ const RenameFileDialog: React.FC<RenameFileDialogProps> = ({
           <Button
             variant="outline"
             onClick={onClose}
-            disabled={loading}
           >
             Cancel
           </Button>
