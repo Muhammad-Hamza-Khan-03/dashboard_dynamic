@@ -13,12 +13,19 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import Plot from 'react-plotly.js';
+
 import axios from 'axios';
 import { useInterval } from './use-interval';
 import { useToast } from '@/components/ui/use-toast';
 import { Progress } from '@/components/ui/progress';
 import dynamic from 'next/dynamic'
+
+const Plot = dynamic(
+  () => import('react-plotly.js'),
+  { ssr: false, loading: () => <div className="h-80 w-full flex items-center justify-center">
+    <Loader2 className="h-8 w-8 animate-spin" />
+  </div> }
+);
 // Type definitions for better type safety
 interface AnalysisModalProps {
   fileId: string;
@@ -53,9 +60,6 @@ interface ColumnStats {
   dataType: string;
 }
 
-type DataStats = {
-  [key: string]: ColumnStats;
-};
 
 interface ColumnStatistics {
   ready: boolean;
@@ -159,10 +163,8 @@ const AnalysisModal = ({ fileId, userId, isOpen, onClose ,fileChanged=false}: An
   const [selectedTableId, setSelectedTableId] = useState<string>('');
   
   // Add new state variables for statistics
-  const [statsStatus, setStatsStatus] = useState<StatsStatus | null>(null);
   const [columnStats, setColumnStats] = useState<{ [key: string]: ColumnStatistics }>({});
   const [datasetStats, setDatasetStats] = useState<DatasetStatistics | null>(null);
-  const [pollingInterval, setPollingInterval] = useState<number | null>(null);
   const [statsReady, setStatsReady] = useState(false);
 
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -428,94 +430,6 @@ const renderProgress = () => {
   };
 
   // Calculate comprehensive statistics
-  const calculateStats = useMemo(() => {
-    if (!data.length || !columns.length) return null;
-
-    const stats: { [key: string]: ColumnStats } = {};
-
-    columns.forEach(column => {
-      // Get all values and determine data type
-      const columnValues = data.map(row => row[column]);
-      const dataType = determineDataType(columnValues);
-
-      // Initialize stats object for the column
-      stats[column] = {
-        mean: 0,
-        median: 0,
-        mode: 0,
-        std: 0,
-        variance: 0,
-        skewness: 0,
-        kurtosis: 0,
-        quartiles: [0, 0],
-        iqr: 0,
-        min: 0,
-        max: 0,
-        outliers: [],
-        values: [],
-        missing: columnValues.filter(v => v === null || v === undefined || v === '').length,
-        total: columnValues.length,
-        dataType
-      };
-
-      // For numeric columns, calculate detailed statistics
-      if (dataType === 'number') {
-        const numericValues = columnValues
-          .map(toNumber)
-          .filter((v): v is number => v !== null);
-
-        if (numericValues.length > 0) {
-          const sorted = [...numericValues].sort((a, b) => a - b);
-          const n = numericValues.length;
-          const mean = numericValues.reduce((a, b) => a + b, 0) / n;
-
-          // Calculate variance and higher moments
-          const variance = numericValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
-          const std = Math.sqrt(variance);
-          const skewness = numericValues.reduce((a, b) =>
-            a + Math.pow((b - mean) / std, 3), 0) / n;
-          const kurtosis = numericValues.reduce((a, b) =>
-            a + Math.pow((b - mean) / std, 4), 0) / n - 3;
-
-          // Calculate quartiles
-          const q1 = sorted[Math.floor(n * 0.25)];
-          const q3 = sorted[Math.floor(n * 0.75)];
-          const iqr = q3 - q1;
-
-          // Identify outliers
-          const lowerBound = q1 - 1.5 * iqr;
-          const upperBound = q3 + 1.5 * iqr;
-          const outliers = numericValues.filter(v => v < lowerBound || v > upperBound);
-
-          // Find mode
-          const frequency: { [key: number]: number } = {};
-          numericValues.forEach(v => { frequency[v] = (frequency[v] || 0) + 1; });
-          const mode = Number(Object.entries(frequency)
-            .sort(([, a], [, b]) => b - a)[0][0]);
-
-          // Update stats object
-          stats[column] = {
-            ...stats[column],
-            mean,
-            median: sorted[Math.floor(n / 2)],
-            mode,
-            std,
-            variance,
-            skewness,
-            kurtosis,
-            quartiles: [q1, q3],
-            iqr,
-            min: sorted[0],
-            max: sorted[sorted.length - 1],
-            outliers,
-            values: numericValues
-          };
-        }
-      }
-    });
-
-    return stats;
-  }, [data, columns]);
 
   // Fetch file data with proper error handling
   useEffect(() => {
@@ -836,7 +750,6 @@ const renderProgress = () => {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {datasetStats.violin_data.columns.map(column => {
-                const stats = datasetStats.violin_data.stats[column];
                 const colStats = columnStats[column];
                 
                 if (!colStats || colStats.data_type !== 'numeric') return null;
@@ -888,7 +801,6 @@ const renderProgress = () => {
     }
 
     const heatmapData = datasetStats.heatmap_data;
-    const columns = heatmapData.x;
 
     return (
       <div className="space-y-6">

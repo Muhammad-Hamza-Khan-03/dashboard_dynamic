@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import axios from 'axios';
 import { X, Upload, Loader2 } from 'lucide-react';
@@ -24,8 +24,18 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const { user } = useUser();
+  const { user, isLoaded: isUserLoaded } = useUser();
+  const [userIdReady, setUserIdReady] = useState<boolean>(false);
   const { toast } = useToast();
+
+  // Track when user ID is ready
+  useEffect(() => {
+    if (isUserLoaded && user?.id) {
+      setUserIdReady(true);
+    } else {
+      setUserIdReady(false);
+    }
+  }, [isUserLoaded, user]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -38,10 +48,24 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
   };
 
   const uploadFiles = async () => {
-
-    //if user not present or no file
-    if (files.length === 0 || !user) 
+    // Check if user is authenticated and files are selected
+    if (files.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select files to upload',
+        variant: 'destructive',
+      });
       return;
+    }
+    
+    if (!userIdReady || !user?.id) {
+      toast({
+        title: 'Error',
+        description: 'User authentication required. Please sign in again or refresh the page.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     setUploading(true);
     setUploadProgress(new Array(files.length).fill(0));
@@ -86,6 +110,16 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
   };
 
   const handleDialogOpenChange = (open: boolean) => {
+    // Only allow opening dialog if user is authenticated
+    if (open && !userIdReady) {
+      toast({
+        title: 'Authentication Required',
+        description: 'Please wait while we authenticate your session, or try refreshing the page.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     setIsDialogOpen(open);
     if (!open) {
       setFiles([]);
@@ -93,7 +127,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
     }
   };
 
-  const allowedFileTypes = ".csv,.xlsx,.xls,.db,.txt,.tsv,.pdf,.xml..docx,.doc";
+  const allowedFileTypes = ".csv,.xlsx,.xls,.db,.txt,.tsv,.pdf,.xml,.docx,.doc";
 
   const uploadContent = (
     <div className="p-4 bg-white rounded-lg">
@@ -141,7 +175,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
           <Button variant="outline" className="mr-2" onClick={() => setIsDialogOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={uploadFiles} disabled={files.length === 0 || uploading}>
+          <Button onClick={uploadFiles} disabled={files.length === 0 || uploading || !userIdReady}>
             {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
             {uploading ? 'Uploading...' : 'Import'}
           </Button>
@@ -154,7 +188,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
     <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
       <DialogTrigger asChild>
         {triggerButton || (
-          <Button className="flex items-center bg-blue-500 text-white hover:bg-blue-600">
+          <Button className="flex items-center bg-blue-500 text-white hover:bg-blue-600" disabled={!userIdReady}>
             <Upload className="mr-2 h-4 w-4" />
             Upload Files
           </Button>

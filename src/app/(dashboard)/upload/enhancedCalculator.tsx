@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calculator, AlertCircle, FileSpreadsheet, ChevronRight } from "lucide-react";
+import { Calculator, AlertCircle, ChevronRight } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -27,7 +27,6 @@ import {
 } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface StatisticsCalculatorProps {
   isOpen: boolean;
@@ -77,16 +76,21 @@ const EnhancedStatisticsCalculator: React.FC<StatisticsCalculatorProps> = ({
   const [result, setResult] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>("calculate");
 
+  // Proper cleanup function that gets called when modal closes
+  const resetState = () => {
+    setFirstColumn('');
+    setSecondColumn('');
+    setOperator('+');
+    setNewColumnName('');
+    setError(null);
+    setResult(null);
+    setActiveTab("calculate");
+  };
+
   // Reset form when dialog opens
   useEffect(() => {
     if (isOpen) {
-      setFirstColumn('');
-      setSecondColumn('');
-      setOperator('+');
-      setNewColumnName('');
-      setError(null);
-      setResult(null);
-      setActiveTab("calculate");
+      resetState();
       fetchColumns();
     }
   }, [isOpen, fileId, userId]);
@@ -207,9 +211,10 @@ const EnhancedStatisticsCalculator: React.FC<StatisticsCalculatorProps> = ({
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error performing calculation');
       console.error("Error calculating statistics:", err);
-    } finally {
-      setLoading(false);
-    }
+    } 
+      
+    setLoading(false);
+    
   };
 
   // Handle apply calculation
@@ -270,45 +275,37 @@ const EnhancedStatisticsCalculator: React.FC<StatisticsCalculatorProps> = ({
       return (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm font-medium">Statistics</CardTitle>
-              </CardHeader>
-              <CardContent className="py-2">
-                <dl className="space-y-1 text-sm">
-                  {Object.entries(result.stats).map(([key, value]) => (
-                    <div key={key} className="grid grid-cols-2">
-                      <dt className="text-gray-600 capitalize">{key}:</dt>
-                      <dd className="font-mono text-right">
-                        {typeof value === 'number' ? 
-                          (Number.isInteger(value) ? value : value.toFixed(4)) : 
-                          String(value)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </CardContent>
-            </Card>
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <h4 className="font-medium mb-2">Statistics</h4>
+              <dl className="space-y-1 text-sm">
+                {Object.entries(result.stats).map(([key, value]) => (
+                  <div key={key} className="grid grid-cols-2">
+                    <dt className="text-gray-600 capitalize">{key}:</dt>
+                    <dd className="font-mono text-right">
+                      {typeof value === 'number' ? 
+                        (Number.isInteger(value) ? value : (value as number).toFixed(4)) : 
+                        String(value)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
             
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm font-medium">Sample Values</CardTitle>
-              </CardHeader>
-              <CardContent className="py-2">
-                <dl className="space-y-1 text-sm">
-                  {result.sample && Object.entries(result.sample).map(([key, value]) => (
-                    <div key={key} className="grid grid-cols-2">
-                      <dt className="text-gray-600">Row {Number(key) + 1}:</dt>
-                      <dd className="font-mono text-right">
-                        {typeof value === 'number' ? 
-                          (Number.isInteger(value) ? value : value.toFixed(4)) : 
-                          String(value)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </CardContent>
-            </Card>
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <h4 className="font-medium mb-2">Sample Values</h4>
+              <dl className="space-y-1 text-sm">
+                {result.sample && Object.entries(result.sample).map(([key, value]) => (
+                  <div key={key} className="grid grid-cols-2">
+                    <dt className="text-gray-600">Row {Number(key) + 1}:</dt>
+                    <dd className="font-mono text-right">
+                      {typeof value === 'number' ? 
+                        (Number.isInteger(value) ? value : (value as number).toFixed(4)) : 
+                        String(value)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           </div>
           
           <p className="text-sm text-gray-600">
@@ -327,7 +324,9 @@ const EnhancedStatisticsCalculator: React.FC<StatisticsCalculatorProps> = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      if (!open) onClose();
+    }}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center">
@@ -346,11 +345,9 @@ const EnhancedStatisticsCalculator: React.FC<StatisticsCalculatorProps> = ({
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="calculate">
-              <Calculator className="h-4 w-4 mr-2" />
               Calculate
             </TabsTrigger>
             <TabsTrigger value="preview" disabled={!result}>
-              <FileSpreadsheet className="h-4 w-4 mr-2" />
               Preview
             </TabsTrigger>
           </TabsList>
@@ -488,7 +485,11 @@ const EnhancedStatisticsCalculator: React.FC<StatisticsCalculatorProps> = ({
         </Tabs>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>
+          <Button 
+            variant="outline" 
+            onClick={onClose} 
+            className="mr-2"
+          >
             Cancel
           </Button>
           {result && (

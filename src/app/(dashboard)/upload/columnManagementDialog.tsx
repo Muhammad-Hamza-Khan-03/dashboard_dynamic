@@ -12,10 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, Trash2, Edit, FilePlus, Calculator } from "lucide-react";
+import { AlertCircle, Trash2, Edit, FilePlus } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-
 
 interface ColumnManagementDialogProps {
   isOpen: boolean;
@@ -43,19 +42,23 @@ const ColumnManagementDialog: React.FC<ColumnManagementDialogProps> = ({
   const [delimiter, setDelimiter] = useState(',');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Update current tab when activeTab prop changes
-  useEffect(() => {
-    setCurrentTab(activeTab);
-  }, [activeTab]);
-
+  
   // Reset form when dialog opens
   useEffect(() => {
     if (isOpen) {
-      setNewColumnName('');
-      setDelimiter(',');
-      setError(null);
+      resetState();
     }
-  }, [isOpen]);
+  }, [isOpen, column]);
+
+  // Function to reset the state
+  const resetState = () => {
+    setNewColumnName('');
+    setDelimiter(',');
+    setError(null);
+    setLoading(false);
+    // Always go back to default tab
+    setCurrentTab(activeTab);
+  };
 
   const handleRenameColumn = async () => {
     if (!newColumnName.trim()) {
@@ -157,12 +160,17 @@ const ColumnManagementDialog: React.FC<ColumnManagementDialogProps> = ({
       setLoading(false);
     }
   };
- 
 
   return (
-    <>
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
+    <Dialog 
+      open={isOpen} 
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+    >
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Column Management: {column}</DialogTitle>
           <DialogDescription>
@@ -170,7 +178,7 @@ const ColumnManagementDialog: React.FC<ColumnManagementDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue={currentTab} value={currentTab} onValueChange={setCurrentTab}>
+        <Tabs value={currentTab} onValueChange={setCurrentTab}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="rename">
               <Edit className="h-4 w-4 mr-2" />
@@ -184,7 +192,7 @@ const ColumnManagementDialog: React.FC<ColumnManagementDialogProps> = ({
               <FilePlus className="h-4 w-4 mr-2" />
               Split
             </TabsTrigger>
-            </TabsList>
+          </TabsList>
 
           {error && (
             <Alert variant="destructive" className="mt-4">
@@ -210,13 +218,14 @@ const ColumnManagementDialog: React.FC<ColumnManagementDialogProps> = ({
               <Button
                 variant="outline"
                 onClick={onClose}
-                disabled={loading}
+                type="button"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleRenameColumn}
                 disabled={loading || !newColumnName.trim()}
+                type="button"
               >
                 {loading ? "Processing..." : "Rename Column"}
               </Button>
@@ -236,7 +245,7 @@ const ColumnManagementDialog: React.FC<ColumnManagementDialogProps> = ({
               <Button
                 variant="outline"
                 onClick={onClose}
-                disabled={loading}
+                type="button"
               >
                 Cancel
               </Button>
@@ -244,6 +253,7 @@ const ColumnManagementDialog: React.FC<ColumnManagementDialogProps> = ({
                 variant="destructive"
                 onClick={handleDeleteColumn}
                 disabled={loading}
+                type="button"
               >
                 {loading ? "Processing..." : "Delete Column"}
               </Button>
@@ -282,25 +292,22 @@ const ColumnManagementDialog: React.FC<ColumnManagementDialogProps> = ({
               <Button
                 variant="outline"
                 onClick={onClose}
-                disabled={loading}
+                type="button"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleAddColumn}
                 disabled={loading || !newColumnName.trim() || !delimiter.trim()}
+                type="button"
               >
                 {loading ? "Processing..." : "Create Column"}
               </Button>
             </DialogFooter>
           </TabsContent>
-         
-
         </Tabs>
       </DialogContent>
-      
     </Dialog>
-      </>
   );
 };
 

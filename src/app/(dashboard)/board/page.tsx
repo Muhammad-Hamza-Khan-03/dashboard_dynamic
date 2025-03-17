@@ -19,6 +19,9 @@ import { Table, Database } from 'lucide-react';
 import StatCardModal from './stat-Card-Modal';
 import DataTableModal from './dataTableSelection';
 import SaveDashboardButton from './save-dashboard-button';
+import { BrainCircuit } from 'lucide-react';
+import AiDashboardModal, { AiDashboardConfig } from './ai-dashboard/aiDashboardModal'
+import { toast } from '@/components/ui/use-toast';
 
 // Interfaces
 interface Position {
@@ -116,8 +119,10 @@ const BoardMain: React.FC = () => {
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [newDashboardName, setNewDashboardName] = useState<string>('');
 
-  const [nodes, setNodes] = useNodesState([]);
-  const [edges, setEdges] = useEdgesState([]);
+  const [showAiDashboardModal, setShowAiDashboardModal] = useState<boolean>(false);
+
+  // const [nodes, setNodes] = useNodesState([]);
+  // const [edges, setEdges] = useEdgesState([]);
 
   const [mode, setMode] = useState<'none' | 'chart' | 'textbox' | 'datatable' | 'statcard'>('none');
   const [textBoxes, setTextBoxes] = useState<TextBoxData[]>([]);
@@ -182,7 +187,87 @@ const BoardMain: React.FC = () => {
 
     return () => clearTimeout(timeoutId);
   }, [charts, selectedDashboard]);
-
+  const handleAiDashboardCreate = async (config: AiDashboardConfig) => {
+    if (!selectedDashboard) {
+      toast({
+        title: "No dashboard selected",
+        description: "Please select or create a dashboard first.",
+        variant: "destructive",
+      });
+      return;
+    }
+  
+    // Process charts
+    if (config.charts && config.charts.length > 0) {
+      for (const chartConfig of config.charts) {
+        handleChartCreate({
+          type: chartConfig.type,
+          columns: chartConfig.columns,
+          title: chartConfig.title,
+          description: chartConfig.description,
+          position: chartConfig.position
+        });
+      }
+    }
+  
+    // Process text boxes with unique IDs
+    if (config.textBoxes && config.textBoxes.length > 0) {
+      for (const textBox of config.textBoxes) {
+        // Ensure each text box gets a unique ID with both timestamp and random component
+        const newTextBox: TextBoxData = {
+          id: `textbox-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: 'textbox',
+          content: textBox.content,
+          position: textBox.position
+        };
+        setTextBoxes(prev => [...prev, newTextBox]);
+        
+        // Small delay to ensure timestamp difference
+        // This is a safety measure in case the loop processes very quickly
+        if (config.textBoxes.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
+      }
+    }
+  
+    // Process data tables with unique IDs
+    if (config.dataTables && config.dataTables.length > 0) {
+      for (const tableConfig of config.dataTables) {
+        handleDataTableCreate({
+          columns: tableConfig.columns,
+          title: tableConfig.title,
+          position: tableConfig.position
+        });
+        
+        // Small delay to ensure timestamp difference
+        if (config.dataTables.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
+      }
+    }
+  
+    // Process stat cards with unique IDs
+    if (config.statCards && config.statCards.length > 0) {
+      for (const cardConfig of config.statCards) {
+        handleStatCardCreate({
+          column: cardConfig.column,
+          statType: cardConfig.statType,
+          title: cardConfig.title,
+          position: cardConfig.position
+        });
+        
+        // Small delay to ensure timestamp difference
+        if (config.statCards.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
+      }
+    }
+  
+    toast({
+      title: "Dashboard created successfully",
+      description: `Added ${config.charts?.length || 0} charts, ${config.textBoxes?.length || 0} text boxes, ${config.dataTables?.length || 0} data tables, and ${config.statCards?.length || 0} stat cards.`,
+    });
+  };
   const handleChartTitleChange = useCallback((chartId: string, title: string) => {
     setCharts(prev => prev.map(chart =>
       chart.id === chartId ? { ...chart, title } : chart
@@ -205,7 +290,7 @@ const BoardMain: React.FC = () => {
       });
       return newRow;
     }); const newTable: DataTable = {
-      id: `table-${Date.now()}`,
+      id: `table-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       columns: config.columns,
       data: filteredData,
       title: config.title,
@@ -725,6 +810,14 @@ const BoardMain: React.FC = () => {
           >
             <Database className="h-5 w-5" />
           </Button>
+          <Button
+    variant="outline"
+    size="icon"
+    className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200"
+    onClick={() => setShowAiDashboardModal(true)}
+  >
+    <BrainCircuit className="h-5 w-5 text-purple-500" />
+  </Button>
         </div>
 
         {showDataTableModal && selectedFile && (
@@ -759,7 +852,18 @@ const BoardMain: React.FC = () => {
             data={selectedFile.data}
           />
         )}
-
+        
+        {/* AI Dashboard Modal */}
+{showAiDashboardModal && selectedFile && (
+  <AiDashboardModal
+    isOpen={showAiDashboardModal}
+    onClose={() => setShowAiDashboardModal(false)}
+    onCreateDashboard={handleAiDashboardCreate}
+    position={clickPosition}
+    columns={selectedFile.columns}
+    data={selectedFile.data}
+  />
+)}
 
         {/* Error Messages */}
         {(fileListError || dataError) && (
