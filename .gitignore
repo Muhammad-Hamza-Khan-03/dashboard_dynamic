@@ -84,3 +84,4 @@ user_files.db-x-graph*.png
 static/
 visualization/
 data_analysis*.md
+stats.db
