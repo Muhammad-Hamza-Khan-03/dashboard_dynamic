@@ -56,7 +56,8 @@ from io import BytesIO
 from PIL import Image
 from celery_worker import process_statistics_task, stats_task_queue, update_task_status
 import os
-
+import matplotlib
+matplotlib.use('Agg')
 app = Flask(__name__)
 cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 CORS(app)
@@ -66,6 +67,9 @@ CHUNK_SIZE = 100000  # Maximum rows to fetch at once
 stats_task_queue = queue.Queue()
 TASK_STATUS = {}
 load_dotenv()
+
+DB_STORAGE_DIR = os.path.join('static', 'databases')
+os.makedirs(DB_STORAGE_DIR, exist_ok=True)
 
 ## Background worker implementation starts
 def process_statistics_task(task):
@@ -305,7 +309,7 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
     
     # Get file metadata
     c.execute("""
-        SELECT file_type, unique_key, filename
+        SELECT file_type, unique_key, filename, parent_file_id
         FROM user_files
         WHERE file_id = ? AND user_id = ?
     """, (file_id, user_id))
@@ -315,7 +319,7 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
         conn.close()
         return None, "File not found"
     
-    file_type, unique_key, filename = result
+    file_type, unique_key, filename, parent_file_id = result
     
     # Create visualization directory - SIMPLIFIED PATH
     viz_dir = os.path.join('static', 'visualization')
@@ -344,33 +348,44 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
             return insight, None
             
         elif file_type in ['db', 'sqlite', 'sqlite3']:
-            # For database files, create a temporary file
-            temp_db = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
-            temp_db.close()
+            # For database files, we'll use the original stored database
             
-            # Copy the database content to the temporary file
+            # If this is a child table entry, get the parent file ID
+            parent_id = parent_file_id if parent_file_id else file_id
+            
+            # Get the parent's unique key to find the stored database file
             c.execute("""
-                SELECT s.table_name
-                FROM structured_file_storage s
-                WHERE s.unique_key = ?
-            """, (unique_key,))
+                SELECT unique_key 
+                FROM user_files 
+                WHERE file_id = ?
+            """, (parent_id,))
             
-            db_result = c.fetchone()
-            if not db_result:
-                return None, "Database structure not found"
-                
-            # Create connection to temp DB
-            temp_conn = sqlite3.connect(temp_db.name)
+            parent_result = c.fetchone()
+            if not parent_result:
+                return None, "Parent database not found"
             
-            # Copy all tables from the main DB to the temp DB
-            table_name = db_result[0]
-            query = f'SELECT * FROM "{table_name}"'
-            df = pd.read_sql_query(query, conn)
-            df.to_sql(table_name, temp_conn, index=False, if_exists='replace')
+            parent_unique_key = parent_result[0]
             
-            # Create InsightAI instance with db_path
+            # Find the stored database path
+            c.execute("""
+                SELECT table_name
+                FROM structured_file_storage
+                WHERE unique_key = ?
+            """, (parent_unique_key,))
+            
+            path_result = c.fetchone()
+            if not path_result:
+                return None, "Database file path not found"
+            
+            db_path = path_result[0]
+            
+            # Verify the file exists
+            if not os.path.exists(db_path):
+                return None, f"Database file not found at {db_path}"
+            
+            # Create InsightAI instance with the original db_path
             insight = InsightAI(
-                db_path=temp_db.name,
+                db_path=db_path,
                 debug=True,
                 exploratory=True,
                 generate_report=report_enabled,
@@ -382,8 +397,6 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
         return None, str(e)
     finally:
         conn.close()
-        
-# Modify the process_question function in backend.py to handle report paths correctly
 
 @app.route('/process_question/<user_id>/<file_id>', methods=['POST'])
 def process_question(user_id, file_id):
@@ -395,6 +408,17 @@ def process_question(user_id, file_id):
         
         if not question and not generate_report:
             return jsonify({'error': 'Question or report generation required'}), 400
+            
+        # Set matplotlib backend explicitly
+        import matplotlib
+        matplotlib.use('Agg')
+        
+        # Create visualization directory
+        viz_dir = os.path.join('static', 'visualization')
+        os.makedirs(viz_dir, exist_ok=True)
+        
+        # Set environment variable so InsightAI knows where to save visualizations
+        os.environ['VISUALIZATION_DIR'] = viz_dir
             
         # Create InsightAI instance
         insight, error = create_insight_instance(
@@ -418,7 +442,6 @@ def process_question(user_id, file_id):
                 insight.pd_agent_converse()
             
             # Find all generated visualizations
-            viz_dir = os.path.join('static', 'visualization')
             viz_files = []
             
             if os.path.exists(viz_dir):
@@ -445,7 +468,6 @@ def process_question(user_id, file_id):
                 source_path = report_file
                 dest_path = os.path.join(viz_dir, report_file)
                 import shutil
-                os.makedirs(viz_dir, exist_ok=True)  # Ensure directory exists
                 shutil.copy2(source_path, dest_path)
             
             # Create visualization paths with proper format for frontend
@@ -467,7 +489,6 @@ def process_question(user_id, file_id):
             result = question_buffer.getvalue()
             
             # Find visualizations created by this specific question
-            viz_dir = os.path.join('static', 'visualization')
             viz_files = []
             
             if os.path.exists(viz_dir):
@@ -489,6 +510,10 @@ def process_question(user_id, file_id):
             # Create visualization paths
             visualization_paths = [os.path.join('visualization', f) for f in viz_files]
             
+            # Important: Close any open matplotlib figures to prevent leaks
+            import matplotlib.pyplot as plt
+            plt.close('all')
+            
             return jsonify({
                 'success': True,
                 'output': result,
@@ -499,6 +524,14 @@ def process_question(user_id, file_id):
     except Exception as e:
         app.logger.error(f"Error processing question: {str(e)}")
         app.logger.error(traceback.format_exc())
+        
+        # Close any open matplotlib figures even on error
+        try:
+            import matplotlib.pyplot as plt
+            plt.close('all')
+        except:
+            pass
+            
         return jsonify({'error': str(e)}), 500
 
 def start_background_worker():
@@ -744,15 +777,23 @@ def upload_local(file, filename):
     
     return file_path
 def handle_sqlite_upload(file, user_id, filename, c, conn):
-    """Handle SQLite file by extracting tables and storing them similarly to Excel sheets."""
+    """Handle SQLite file by preserving original DB and extracting tables."""
     try:
+        # Read the content
         content = file.read()
-        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as temp_file:
-            temp_file.write(content)
-            temp_path = temp_file.name
-
-        # Connect to the uploaded (temporary) SQLite database
-        temp_conn = sqlite3.connect(temp_path)
+        
+        # Generate a unique key for the database file
+        parent_unique_key = str(uuid.uuid4())
+        
+        # Create a permanent path to store the original database
+        permanent_db_path = os.path.join(DB_STORAGE_DIR, f"{parent_unique_key}.db")
+        
+        # Save the original database file
+        with open(permanent_db_path, 'wb') as db_file:
+            db_file.write(content)
+        
+        # Create a temporary connection to analyze the database structure
+        temp_conn = sqlite3.connect(permanent_db_path)
         temp_cursor = temp_conn.cursor()
 
         # Fetch all tables except internal sqlite_* tables
@@ -763,15 +804,23 @@ def handle_sqlite_upload(file, user_id, filename, c, conn):
         if not tables:
             raise ValueError("No tables found in the uploaded SQLite database.")
 
-        # Create parent file entry with no specific table
-        parent_unique_key = str(uuid.uuid4())
+        # Create parent file entry
         c.execute("""
             INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
             VALUES (?, ?, ?, ?, ?)
         """, (user_id, filename, 'db', True, parent_unique_key))
         parent_file_id = c.lastrowid
+        
+        # Store the database file path in structured_file_storage
+        c.execute("""
+            INSERT INTO structured_file_storage (unique_key, file_id, table_name)
+            VALUES (?, ?, ?)
+        """, (parent_unique_key, parent_file_id, permanent_db_path))
 
-        # Process each table and create separate entries in user_files
+        # Process each table and create separate entries for the UI
+        last_table_unique_key = None
+        last_table_name = None
+        
         for table_name, in tables:
             try:
                 # Read table data
@@ -779,11 +828,13 @@ def handle_sqlite_upload(file, user_id, filename, c, conn):
                 
                 # Generate unique key for this table
                 table_unique_key = str(uuid.uuid4())
+                last_table_unique_key = table_unique_key
+                last_table_name = table_name
                 
-                # Create new table name
+                # Create new table name for the extracted version
                 new_table_name = f"table_{table_unique_key}"
                 
-                # Store data in new table
+                # Store data in new table for UI access
                 df.to_sql(new_table_name, conn, index=False, if_exists='replace')
                 
                 # Create entry in user_files for this table
@@ -801,17 +852,20 @@ def handle_sqlite_upload(file, user_id, filename, c, conn):
                 continue
 
         temp_conn.close()
-        os.unlink(temp_path)
 
         conn.commit()
-        return parent_file_id,table_unique_key,table_name
+        return parent_file_id, last_table_unique_key, last_table_name
 
     except Exception as e:
         app.logger.error(f"Error in handle_sqlite_upload: {str(e)}")
         if 'temp_conn' in locals():
             temp_conn.close()
-        if 'temp_path' in locals() and os.path.exists(temp_path):
-            os.unlink(temp_path)
+        # Clean up the permanent file if there was an error
+        if 'permanent_db_path' in locals() and os.path.exists(permanent_db_path):
+            try:
+                os.unlink(permanent_db_path)
+            except:
+                pass
         raise
 
 # //////////////////////////////////////////////
@@ -5040,9 +5094,11 @@ def save_dashboard(user_id, dashboard_id):
             conn.close()
             
 # nest_asyncio.apply()
+# Replace your current generate_chart_image function with this improved version
+
 async def generate_chart_image(html_content):
     """
-    Generate an image from HTML content using pyppeteer.
+    Generate an image from HTML content using pyppeteer without using tkinter.
     
     Args:
         html_content: The HTML content of the chart
@@ -5083,9 +5139,16 @@ async def generate_chart_image(html_content):
     </html>
     """
     
+    # Launch browser with minimal dependencies
     browser = await pyppeteer.launch({
         'headless': True,
-        'args': ['--no-sandbox', '--disable-setuid-sandbox']
+        'args': [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-software-rasterizer'
+        ]
     })
     
     try:

@@ -4,6 +4,8 @@ import { useUser } from "@clerk/nextjs";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { nord } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
 import { format } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -37,7 +39,15 @@ import {
   XCircle,
   Save,
   Archive,
-  Trash2
+  Trash2,
+  Table,
+  ServerCrash,
+  AlignLeft,
+  BookOpen,
+  Lightbulb,
+  Info,
+  Server,
+  Brain
 } from 'lucide-react';
 
 // UI components
@@ -128,17 +138,38 @@ interface FilePreview {
   rows: string[][];
 }
 
+interface AgentResponse {
+  agent: string;
+  chain_id: number;
+  timestamp: string;
+  model: string;
+  content: string;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  elapsed_time?: number;
+  tokens_per_second?: number;
+  cost?: number;
+}
+
 interface AgentSection {
   agentName: string;
   modelName: string;
   content: string;
   icon: React.ReactNode;
   order: number;
+  type?: 'sql' | 'code' | 'summary' | 'explanation' | 'default';
+  thinking?: string;
 }
 
 interface VisualizationInfo {
   path: string;
   filename: string;
+}
+
+interface CodeBlock {
+  language: string;
+  code: string;
 }
 
 interface SavedReport {
@@ -149,7 +180,7 @@ interface SavedReport {
   report_file?: string;
   question_count: number;
   created_at: string;
-  content?: string; // Optional because we'll fetch this separately
+  content?: string;
 }
 
 // Custom Collapsible Component
@@ -307,39 +338,302 @@ const MarkdownImage: React.FC<{
   );
 };
 
-// Agent Box Component
-const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
-  const [isOpen, setIsOpen] = useState(false);
+// SQL Code Component - Enhanced for SQL-specific formatting
+const SqlCode: React.FC<{ sql: string }> = ({ sql }) => {
+  // Process SQL for display
+  const processedSql = sql
+    .split(';')
+    .filter(statement => statement.trim())
+    .map(statement => statement.trim())
+    .join(';\n\n');
+
+  // Check if it's a query or a schema explanation
+  const isSchemaQuery = sql.toLowerCase().includes('sqlite_master');
+  
+  return (
+    <div className="relative">
+      <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-4 overflow-x-auto">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center space-x-2">
+            <Database className="h-4 w-4 text-blue-500" />
+            <span className="text-sm font-medium text-blue-500">
+              {isSchemaQuery ? 'Schema Query' : 'SQL Query'}
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              navigator.clipboard.writeText(sql);
+            }}
+            className="h-8 px-2"
+          >
+            <span className="sr-only">Copy code</span>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <rect
+                x="9"
+                y="9"
+                width="13"
+                height="13"
+                rx="2"
+                ry="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
+              <path
+                d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
+            </svg>
+          </Button>
+        </div>
+        <pre className="text-sm font-mono p-0 overflow-auto">
+          <SyntaxHighlighter language="sql" style={nord} customStyle={{ margin: 0, background: 'transparent' }}>
+            {processedSql}
+          </SyntaxHighlighter>
+        </pre>
+      </div>
+    </div>
+  );
+};
+
+// Database Schema Component
+const DatabaseSchemaExplanation: React.FC<{ content: string }> = ({ content }) => {
+  // Check if this is a database schema explanation
+  const isSchemaExplanation = content.includes('database schema') || 
+                              content.includes('Table:') ||
+                              (content.includes('table') && content.includes('column'));
+
+  if (!isSchemaExplanation) {
+    return (
+      <div className="prose prose-sm max-w-none dark:prose-invert">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {content}
+        </ReactMarkdown>
+      </div>
+    );
+  }
 
   return (
-    <Collapsible 
-      className="w-full border rounded-lg my-2 overflow-hidden"
-      open={isOpen}
-      onOpenChange={setIsOpen}
-    >
-      <CollapsibleTrigger className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-        <div className="flex items-center space-x-2">
-          {section.icon}
-          <div>
-            <h3 className="font-medium">{section.agentName}</h3>
-            <p className="text-sm text-muted-foreground">Model: {section.modelName}</p>
-          </div>
+    <div className="space-y-4">
+      <div className="bg-blue-50 dark:bg-blue-900/10 rounded-lg p-4">
+        <div className="flex items-center space-x-2 mb-3">
+          <Server className="h-5 w-5 text-blue-500" />
+          <h3 className="font-medium text-blue-700 dark:text-blue-300">Database Structure</h3>
         </div>
-        {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="p-4 bg-gray-50 dark:bg-gray-800 border-t">
         <div className="prose prose-sm max-w-none dark:prose-invert">
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}
             components={{
-              img: ({ node, ...props }) => (
-                <MarkdownImage src={props.src} alt={props.alt} />
+              // Enhance table rendering for schema tables
+              table: ({ node, ...props }) => (
+                <div className="overflow-x-auto">
+                  <table className="border-collapse w-full" {...props} />
+                </div>
+              ),
+              // Style table headers
+              th: ({ node, ...props }) => (
+                <th className="border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 px-4 py-2 text-left" {...props} />
+              ),
+              // Style table cells
+              td: ({ node, ...props }) => (
+                <td className="border border-gray-300 dark:border-gray-700 px-4 py-2" {...props} />
+              ),
+              // Highlight table names and column names
+              strong: ({ node, ...props }) => (
+                <strong className="text-blue-600 dark:text-blue-400" {...props} />
               )
             }}
           >
-            {section.content}
+            {content}
           </ReactMarkdown>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// Thinking Process Component
+const ThinkingProcess: React.FC<{ thinking: string }> = ({ thinking }) => {
+  const [expanded, setExpanded] = useState(false);
+  
+  if (!thinking) return null;
+  
+  return (
+    <div className="mt-4">
+      <button 
+        onClick={() => setExpanded(!expanded)}
+        className="text-sm text-blue-500 hover:text-blue-700 flex items-center gap-1"
+      >
+        {expanded ? 'Hide' : 'Show'} thinking process
+        {expanded ? 
+          <ChevronUp className="h-4 w-4" /> : 
+          <ChevronDown className="h-4 w-4" />
+        }
+      </button>
+      
+      {expanded && (
+        <div className="mt-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-md text-sm whitespace-pre-wrap font-mono text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+          {thinking}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Enhanced Agent Box Component that properly extracts and displays <think> content
+const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  // Extract thinking process from the content if present
+  const extractContent = (content: string): { mainContent: string, thinking: string | null } => {
+    const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
+    const thinking = thinkMatch ? thinkMatch[1].trim() : null;
+    
+    // Remove <think> section from content
+    const mainContent = content.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+    
+    return { mainContent, thinking };
+  };
+  
+  // Extract code blocks from content
+  const extractCodeBlocks = (content: string): { cleanContent: string, codeBlocks: CodeBlock[] } => {
+    const codeBlocks: CodeBlock[] = [];
+    const codeRegex = /```(\w*)\n([\s\S]*?)```/g;
+    let codeMatch;
+    
+    // Find all code blocks
+    while ((codeMatch = codeRegex.exec(content)) !== null) {
+      const language = codeMatch[1] || 'plaintext';
+      const code = codeMatch[2].trim();
+      codeBlocks.push({ language, code });
+    }
+    
+    // Remove code blocks from content
+    const cleanContent = content.replace(/```(\w*)\n[\s\S]*?```/g, '');
+    
+    return { cleanContent, codeBlocks };
+  };
+  
+  const { mainContent, thinking } = extractContent(section.content);
+  const { cleanContent, codeBlocks } = extractCodeBlocks(mainContent);
+  
+  const isSqlContent = section.content.includes('SELECT') || section.content.includes('sqlite_master');
+  const isDatabaseExplanation = section.agentName === "SQL Generator" || 
+                                section.content.includes('database schema') || 
+                                (section.content.includes('table') && section.content.includes('column'));
+
+  // Assign type if not already specified
+  const sectionType = section.type || 
+                      (isSqlContent ? 'sql' : 
+                       isDatabaseExplanation ? 'explanation' : 
+                       section.agentName === "Analysis Summary" ? 'summary' : 
+                       section.agentName === "Generated Code" ? 'code' : 
+                       'default');
+
+  // Get background color based on section type
+  const getBgColor = () => {
+    switch(sectionType) {
+      case 'sql':
+        return 'bg-blue-50 dark:bg-blue-900/10';
+      case 'explanation':
+        return 'bg-green-50 dark:bg-green-900/10';
+      case 'summary':
+        return 'bg-purple-50 dark:bg-purple-900/10';
+      case 'code':
+        return 'bg-amber-50 dark:bg-amber-900/10';
+      default:
+        return 'bg-gray-50 dark:bg-gray-800';
+    }
+  };
+
+  return (
+    <Collapsible 
+      className={`w-full border rounded-lg my-2 overflow-hidden ${isOpen ? 'shadow-md' : ''} transition-all`}
+      open={isOpen}
+      onOpenChange={setIsOpen}
+    >
+      <CollapsibleTrigger className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+        <div className="flex items-center space-x-3">
+          {section.icon}
+          <div>
+            <h3 className="font-medium text-gray-900 dark:text-gray-100">{section.agentName}</h3>
+            <div className="flex items-center text-xs text-muted-foreground mt-0.5">
+              <span>{section.modelName}</span>
+              {sectionType === 'sql' && (
+                <Badge variant="outline" className="ml-2 py-0 h-5">SQL</Badge>
+              )}
+              {sectionType === 'explanation' && (
+                <Badge variant="outline" className="ml-2 py-0 h-5 bg-green-50">Schema</Badge>
+              )}
+              {thinking && (
+                <Badge variant="outline" className="ml-2 py-0 h-5">
+                  <Brain className="h-3 w-3 mr-1" />
+                  Thinking
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+        {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </CollapsibleTrigger>
+      <CollapsibleContent className={`p-4 ${getBgColor()} border-t`}>
+        {sectionType === 'sql' ? (
+          <SqlCode sql={mainContent} />
+        ) : sectionType === 'explanation' ? (
+          <DatabaseSchemaExplanation content={mainContent} />
+        ) : (
+          <div className="space-y-4">
+            {/* Main content without code blocks */}
+            {cleanContent && (
+              <div className="prose prose-sm max-w-none dark:prose-invert">
+                <ReactMarkdown 
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    img: ({ node, ...props }) => (
+                      <MarkdownImage src={props.src} alt={props.alt} />
+                    )
+                  }}
+                >
+                  {cleanContent}
+                </ReactMarkdown>
+              </div>
+            )}
+            
+            {/* Code blocks */}
+            {codeBlocks.length > 0 && (
+              <div className="space-y-3">
+                {codeBlocks.map((block, index) => (
+                  <div key={index} className="rounded-md overflow-hidden">
+                    <div className="bg-gray-100 dark:bg-gray-800 px-4 py-1 text-xs font-mono text-gray-500">
+                      {block.language || 'code'}
+                    </div>
+                    <SyntaxHighlighter 
+                      language={block.language || 'plaintext'} 
+                      style={nord}
+                      customStyle={{ margin: 0 }}
+                    >
+                      {block.code}
+                    </SyntaxHighlighter>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Display thinking process */}
+        {thinking && <ThinkingProcess thinking={thinking} />}
       </CollapsibleContent>
     </Collapsible>
   );
@@ -367,6 +661,64 @@ const VisualizationGallery: React.FC<{
       ))}
     </div>
   );
+};
+
+// Process the agent responses from raw JSON
+const processAgentResponses = (responses: AgentResponse[]): AgentSection[] => {
+  const sections: AgentSection[] = [];
+  
+  responses.forEach(response => {
+    let agentName = response.agent;
+    let icon: React.ReactNode;
+    let order = 100;
+    let type: 'sql' | 'code' | 'summary' | 'explanation' | 'default' = 'default';
+    
+    // Process the content to extract thinking and main content
+    const thinkMatch = response.content.match(/<think>([\s\S]*?)<\/think>/);
+    const thinking = thinkMatch ? thinkMatch[1].trim() : undefined;
+    
+    // Assign appropriate icon based on agent type
+    switch(agentName) {
+      case 'Expert Selector':
+        icon = <Search className="h-5 w-5 text-blue-500" />;
+        order = 1;
+        break;
+      case 'Analyst Selector':
+        icon = <Zap className="h-5 w-5 text-yellow-500" />;
+        order = 2;
+        break;
+      case 'Planner':
+        icon = <Coffee className="h-5 w-5 text-amber-500" />;
+        order = 3;
+        break;
+      case 'Code Generator':
+        icon = <Code className="h-5 w-5 text-green-500" />;
+        type = 'code';
+        order = 5;
+        break;
+      case 'Solution Summarizer':
+        icon = <Sparkles className="h-5 w-5 text-purple-500" />;
+        type = 'summary';
+        order = 7;
+        break;
+      default:
+        icon = <Bot className="h-5 w-5" />;
+    }
+    
+    // Add the section with all extracted information
+    sections.push({
+      agentName,
+      modelName: response.model,
+      content: response.content,
+      icon,
+      order,
+      type,
+      thinking
+    });
+  });
+  
+  // Sort by order
+  return sections.sort((a, b) => a.order - b.order);
 };
 
 // Enhanced function to parse output and extract visualizations better
@@ -411,6 +763,7 @@ const parseAgentSections = (output: string): {
     let content = match[2].trim();
     let icon = <Bot className="h-5 w-5" />;
     let order = 100; // Default order (will be sorted later)
+    let type: 'sql' | 'code' | 'summary' | 'explanation' | 'default' = 'default';
     
     // Extract agent name from the content and assign order
     if (content.includes("Selecting the expert")) {
@@ -429,6 +782,7 @@ const parseAgentSections = (output: string): {
       agentName = "Code Generator";
       icon = <Code className="h-5 w-5 text-green-500" />;
       order = 5;
+      type = 'code';
     } else if (content.includes("reviewing and debugging")) {
       agentName = "Code Debugger";
       icon = <Terminal className="h-5 w-5 text-red-500" />;
@@ -437,6 +791,12 @@ const parseAgentSections = (output: string): {
       agentName = "Solution Summarizer";
       icon = <Sparkles className="h-5 w-5 text-purple-500" />;
       order = 7;
+      type = 'summary';
+    } else if (agentName === "SQL Generator" || content.includes("database schema")) {
+      agentName = "SQL Generator";
+      icon = <Database className="h-5 w-5 text-blue-500" />;
+      type = 'explanation';
+      order = 2;
     } else if (content.startsWith("{")) {
       // JSON response - could be Expert or Analyst selector
       if (content.includes("expert")) {
@@ -450,12 +810,18 @@ const parseAgentSections = (output: string): {
       }
     }
     
+    // Handle SQL content
+    if (content.includes("SELECT") && content.includes("FROM")) {
+      type = 'sql';
+    }
+    
     sections.push({
       agentName,
       modelName,
       content,
       icon,
-      order
+      order,
+      type
     });
   }
   
@@ -468,7 +834,8 @@ const parseAgentSections = (output: string): {
       modelName: "InsightAI",
       content: summaryMatch[1].trim(),
       icon: <Sparkles className="h-5 w-5 text-purple-500" />,
-      order: 4
+      order: 4,
+      type: 'summary'
     });
   }
   
@@ -482,7 +849,8 @@ const parseAgentSections = (output: string): {
       modelName: "InsightAI",
       content: "```python\n" + codeContent + "\n```",
       icon: <Code className="h-5 w-5 text-green-500" />,
-      order: 8
+      order: 8,
+      type: 'code'
     });
     
     // Extract additional visualization paths from the code section
@@ -491,6 +859,20 @@ const parseAgentSections = (output: string): {
     while ((vizMatch = vizPathRegex.exec(codeContent)) !== null) {
       visualizationPaths.push(vizMatch[1]);
     }
+  }
+  
+  // Look for SQL result section
+  const sqlResultRegex = /Results for query:([\s\S]*?)(?=Chain Summary|$)/;
+  const sqlResultMatch = sqlResultRegex.exec(output);
+  if (sqlResultMatch) {
+    sections.push({
+      agentName: "SQL Results",
+      modelName: "Database",
+      content: sqlResultMatch[1].trim(),
+      icon: <Table className="h-5 w-5 text-green-500" />,
+      order: 5,
+      type: 'explanation'
+    });
   }
   
   // Look for chain summary
@@ -724,25 +1106,25 @@ const FileSelector: React.FC<{
             <h3 className="text-md font-medium mb-2">Data Preview</h3>
             <div className="overflow-x-auto border rounded-lg">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
                     {filePreview.columns.map((col, idx) => (
                       <th 
                         key={idx}
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                       >
                         {col}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
                   {filePreview.rows.slice(0, 5).map((row, idx) => (
-                    <tr key={idx}>
+                    <tr key={idx} className={idx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
                       {row.map((cell, cellIdx) => (
                         <td 
                           key={cellIdx}
-                          className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"
+                          className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
                         >
                           {cell}
                         </td>
@@ -819,7 +1201,7 @@ const ReportItem: React.FC<{
   
   return (
     <div 
-      className={`p-4 border rounded-lg mb-3 cursor-pointer hover:bg-gray-50 transition-colors flex justify-between ${isSelected ? 'border-blue-500 bg-blue-50' : ''}`}
+      className={`p-4 border rounded-lg mb-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex justify-between ${isSelected ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/10' : ''}`}
       onClick={onSelect}
     >
       <div>
@@ -1192,6 +1574,26 @@ const AnalysisPanel: React.FC<{
     setReportToDelete(reportId);
     setShowDeleteConfirm(true);
   };
+
+  // Check if this is a database file
+  const isDatabaseFile = selectedFile?.fileType === 'db' || 
+                        selectedFile?.fileType === 'sqlite' || 
+                        selectedFile?.fileType === 'sqlite3';
+  
+  // Prepare suggested questions based on file type
+  const suggestedQuestions = isDatabaseFile ? [
+    "Tell me about this database",
+    "List all tables and their schemas",
+    "Show me the top 5 products by price",
+    "How many orders does each user have?",
+    "What is the average rating for each product?"
+  ] : [
+    "Show me a summary of this data",
+    "Create a bar chart of the top 5 items",
+    "What trends do you see in this data?",
+    "Calculate the average values by category",
+    "Show me a correlation matrix of the numeric columns"
+  ];
   
   return (
     <div className="space-y-4">
@@ -1214,7 +1616,9 @@ const AnalysisPanel: React.FC<{
                     id="question"
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
-                    placeholder="e.g., What are the 5 most expensive phones? Show with a barchart"
+                    placeholder={isDatabaseFile ? 
+                      "e.g., Show me the top 5 products by price" : 
+                      "e.g., What are the average values by category?"}
                     disabled={isProcessing}
                     className="flex-1"
                   />
@@ -1231,10 +1635,21 @@ const AnalysisPanel: React.FC<{
                 </div>
               </div>
               
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  Ask any question about your data.
-                </p>
+              {/* Suggested questions */}
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Suggested questions:</Label>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedQuestions.map((sq, i) => (
+                    <Badge 
+                      key={i} 
+                      variant="outline" 
+                      className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                      onClick={() => setQuestion(sq)}
+                    >
+                      {sq}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
@@ -1290,11 +1705,24 @@ const AnalysisPanel: React.FC<{
         
         {/* Current Analysis Tab Content */}
         <TabsContent value="analysis">
+          {isProcessing && (
+            <div className="flex flex-col items-center justify-center p-8 space-y-4 border border-dashed rounded-lg">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <div className="text-center">
+                <h3 className="font-medium mb-1">{config.generateReport ? 'Generating Report' : 'Analyzing Your Data'}</h3>
+                <p className="text-sm text-muted-foreground">This may take a few moments...</p>
+              </div>
+            </div>
+          )}
+        
           {/* Display the ordered agent sections for question responses */}
           {sortedSections.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Analysis Process</CardTitle>
+                <CardTitle className="flex items-center">
+                  <Lightbulb className="h-5 w-5 mr-2 text-amber-500" />
+                  Analysis Process
+                </CardTitle>
                 <CardDescription>
                   See how InsightAI analyzed your data step by step
                 </CardDescription>
@@ -1317,6 +1745,13 @@ const AnalysisPanel: React.FC<{
                     <AgentBox key={`analyst-${index}`} section={section} />
                   ))}
                   
+                  {/* SQL Generator */}
+                  {sortedSections.filter(section => 
+                    section.agentName === "SQL Generator"
+                  ).map((section, index) => (
+                    <AgentBox key={`sql-gen-${index}`} section={section} />
+                  ))}
+                  
                   {/* Code Generator */}
                   {sortedSections.filter(section => 
                     section.agentName === "Code Generator" ||
@@ -1337,7 +1772,14 @@ const AnalysisPanel: React.FC<{
                         </CardHeader>
                         <CardContent>
                           <div className="prose prose-sm max-w-none dark:prose-invert">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            <ReactMarkdown 
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                img: ({ node, ...props }) => (
+                                  <MarkdownImage src={props.src} alt={props.alt} />
+                                )
+                              }}
+                            >
                               {analysisSummary.content}
                             </ReactMarkdown>
                           </div>
@@ -1367,6 +1809,7 @@ const AnalysisPanel: React.FC<{
                     section.agentName !== "Expert Selector Response" &&
                     section.agentName !== "Analyst Selector" &&
                     section.agentName !== "Analyst Selector Response" &&
+                    section.agentName !== "SQL Generator" &&
                     section.agentName !== "Code Generator" &&
                     section.agentName !== "Planner" &&
                     section.agentName !== "Analysis Summary"
@@ -1383,7 +1826,7 @@ const AnalysisPanel: React.FC<{
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <Book className="h-5 w-5 mr-2 text-blue-500" />
+                  <BookOpen className="h-5 w-5 mr-2 text-blue-500" />
                   Analysis Report
                 </CardTitle>
                 <div className="flex justify-between items-center">
@@ -1417,7 +1860,7 @@ const AnalysisPanel: React.FC<{
                 </div>
               </CardHeader>
               <CardContent>
-                <div className={`prose max-w-none ${!showFullReport ? "max-h-[400px] overflow-y-auto" : ""}`}>
+                <div className={`prose prose-sm max-w-none dark:prose-invert ${!showFullReport ? "max-h-[400px] overflow-y-auto" : ""}`}>
                   <ReactMarkdown 
                     remarkPlugins={[remarkGfm]}
                     components={{
@@ -1513,7 +1956,7 @@ const AnalysisPanel: React.FC<{
                             )}
                           </div>
                           
-                          <div className="prose prose-sm max-w-none">
+                          <div className="prose prose-sm max-w-none dark:prose-invert">
                             <ReactMarkdown 
                               remarkPlugins={[remarkGfm]}
                               components={{
@@ -1604,7 +2047,8 @@ export default function InsightAIPage() {
   
   return (
     <div className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold text-center mb-8">
+      <h1 className="text-3xl font-bold text-center mb-8 flex items-center justify-center">
+        <Database className="h-8 w-8 mr-3 text-blue-500" />
         InsightAI Data Analysis
       </h1>
       
@@ -1616,18 +2060,18 @@ export default function InsightAIPage() {
         
         {selectedFile && (
           <>
-            <div className="bg-muted p-4 rounded-lg flex items-center">
-              <div className="mr-2">
+            <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-lg flex items-center">
+              <div className="mr-3">
                 {selectedFile.fileType === 'csv' ? (
-                  <FileText className="h-5 w-5" />
+                  <FileText className="h-5 w-5 text-blue-500" />
                 ) : (
-                  <Database className="h-5 w-5" />
+                  <Database className="h-5 w-5 text-blue-500" />
                 )}
               </div>
               <div>
-                <p className="font-medium">Selected File: {selectedFile.fileName || 'Unknown file'}</p>
+                <p className="font-medium">{selectedFile.fileName || 'Unknown file'}</p>
                 <p className="text-sm text-muted-foreground">
-                  Type: {selectedFile.fileType?.toUpperCase() || 'Unknown'} | 
+                  Type: {selectedFile.fileType?.toUpperCase() || 'Unknown'} • 
                   ID: {selectedFile.fileId || 'New file'}
                 </p>
               </div>
