@@ -453,7 +453,19 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
       return (
         <div className="flex items-center justify-between">
           <span>{column}</span>
-         
+          {/* Column management button moved here */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveColumn(column);
+              setIsColumnManagementOpen(true);
+            }}
+            className="opacity-70 hover:opacity-100"
+          >
+            <FilePlus className="h-4 w-4" />
+          </Button>
         </div>
       );
     },
@@ -476,18 +488,7 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
             <Edit className="h-4 w-4" />
           </Button>
           
-          {/* Column management button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveColumn(column);
-              setIsColumnManagementOpen(true);
-            }}
-          >
-            <FilePlus className="h-4 w-4" />
-          </Button>
+      
         </div>
         </div>
       );

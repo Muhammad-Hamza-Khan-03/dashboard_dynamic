@@ -289,7 +289,9 @@ export function DataTable({
                 </TableHead>
                 {headerGroup.headers.map((header) => {
                   // Get the column accessor key if it exists
-                  const accessorKey = header.column.columnDef.accessorKey as string | undefined;
+                  const accessorKey = 'accessorKey' in header.column.columnDef 
+                    ? (header.column.columnDef.accessorKey as string | undefined) 
+                    : undefined;
 
                   return (
                     <TableHead key={header.id}>
@@ -312,7 +314,7 @@ export function DataTable({
                           </Button>
                           
                           {/* Column management dropdown */}
-                          {accessorKey && (
+                          {/* {accessorKey && (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button
@@ -348,7 +350,7 @@ export function DataTable({
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
-                          )}
+                          )} */}
                         </div>
                       </div>
                     </TableHead>
