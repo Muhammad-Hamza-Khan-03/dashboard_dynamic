@@ -37,9 +37,6 @@ import RenameFileDialog from "./renameFileDialog";
 import { FileEdit } from "lucide-react";
 import StatisticsCalculatorStandalone from "./Calulator";
 import ColumnManagementDialog from "./columnManagementDialog";
-import VersionControlPanel from "./version-control/versionControlPanel";
-import EnhancedVersionControlPanel from "./version-control/EnhancedVersionControlPanel";
-import VersionComparison from "./version-control/versionComparison";
 
 // Update the dynamic import with proper typing
 const DataTable = dynamic<React.ComponentProps<typeof import('@/components/data-table').DataTable>>(() =>
@@ -704,7 +701,6 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
     }, 300); // Match this with your sheet close animation duration
   };
 
-  
 
   const handleSaveItem = async () => {
     // First, validate user authentication and file selection
@@ -868,19 +864,6 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
       setLoading(false);
     }
   };
-
-   // Add this to handle version control functionality
-   const handleVersionReverted = useCallback(() => {
-    // When a version is reverted, we need to refresh the data
-    if (selectedFile) {
-      fetchFileData(selectedFile.file_id, selectedFile.filename, currentPage);
-      toast({
-        title: "Version Reverted",
-        description: "The file has been restored to the selected version.",
-        duration: 3000,
-      });
-    }
-  }, [selectedFile, fetchFileData, currentPage]);
 
   // Add this utility function to help with data validation
 
@@ -1075,28 +1058,6 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
                 }}
               />
             )} */}
-
-            {/* Version Control Panel */}
-     {/* Version Control Components */}
-     {selectedFile && (
-          <>
-            {/* Enhanced Version Control Panel */}
-            <EnhancedVersionControlPanel
-              fileId={selectedFile.file_id}
-              userId={user?.id || ''}
-              onVersionReverted={handleVersionReverted}
-            />
-            
-            {/* Version Comparison Tool */}
-            <VersionComparison
-              fileId={selectedFile.file_id}
-              userId={user?.id || ''}
-            />
-          </>
-        )}
-
-      
-      {/* Statistics Calculator */}
  <StatisticsCalculatorStandalone 
   fileId={selectedFile?.file_id || ''}
   userId={user?.id || ''}

@@ -389,45 +389,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Initialize the version database
-def init_version_db():
-    """Initialize the version control database structure"""
-    conn = sqlite3.connect('version_control.db')
-    c = conn.cursor()
-    
-    # Table for tracking versions
-    c.execute('''CREATE TABLE IF NOT EXISTS version_control (
-        version_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_id TEXT NOT NULL,
-        version_number INTEGER NOT NULL,
-        version_name TEXT,
-        description TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        user_id TEXT NOT NULL,
-        UNIQUE(file_id, version_number)
-    )''')
-    
-    # Table for tracking changes
-    c.execute('''CREATE TABLE IF NOT EXISTS version_changes (
-        change_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        version_id INTEGER NOT NULL,
-        row_number INTEGER,
-        column_name TEXT,
-        old_value TEXT,
-        new_value TEXT,
-        action_type TEXT NOT NULL CHECK(action_type IN ('create', 'update', 'delete')),
-        description TEXT,
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (version_id) REFERENCES version_control(version_id)
-    )''')
-    
-    conn.commit()
-    conn.close()
-    logging.info("Version control database initialized")
-
-# Call this function during app initialization
-init_version_db()
-
 def init_stats_db():
     """Initialize the stats database structure"""
     conn = sqlite3.connect('stats.db')
@@ -1837,10 +1798,79 @@ def cancel_stats_task(task_id):
             ## status updates API ENDPOINTS end
 
 # Columns rotes updates here
+@app.route('/delete-column/<user_id>/<file_id>', methods=['POST'])
+def delete_column(user_id, file_id):
+    """Delete a column from a table"""
+    try:
+        data = request.json
+        column_name = data.get('column')
+        
+        if not column_name:
+            return jsonify({'error': 'Column name is required'}), 400
+        
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get file information
+        c.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
+        
+        # Verify table exists
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not c.fetchone():
+            return jsonify({'error': f'Table {table_name} not found'}), 404
+        
+        # Get current columns
+        c.execute(f'PRAGMA table_info("{table_name}")')
+        columns = [col[1] for col in c.fetchall()]
+        
+        if column_name not in columns:
+            return jsonify({'error': f'Column {column_name} not found in table'}), 404
+        
+        # Create a new table without the specified column
+        columns_to_keep = [col for col in columns if col != column_name]
+        columns_str = ', '.join([f'"{col}"' for col in columns_to_keep])
+        
+        # Create new table without the column - use a safe name without hyphens
+        temp_table_name = f"temp_{uuid.uuid4().hex}"  # Use hex UUID to avoid special characters
+        c.execute(f'CREATE TABLE "{temp_table_name}" AS SELECT {columns_str} FROM "{table_name}"')
+        
+        # Drop old table and rename new one
+        c.execute(f'DROP TABLE "{table_name}"')
+        c.execute(f'ALTER TABLE "{temp_table_name}" RENAME TO "{table_name}"')
+        
+        conn.commit()
+        
+        # Return updated columns
+        return jsonify({
+            'success': True,
+            'message': f'Column {column_name} deleted successfully',
+            'columns': columns_to_keep
+        })
+        
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+        app.logger.error(f"Error deleting column: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 @app.route('/rename-column/<user_id>/<file_id>', methods=['POST'])
 def rename_column(user_id, file_id):
-    """Rename a column in a table with version control"""
+    """Rename a column in a table"""
     try:
         data = request.json
         old_name = data.get('oldName')
@@ -1881,50 +1911,6 @@ def rename_column(user_id, file_id):
         if new_name in columns:
             return jsonify({'error': f'Column {new_name} already exists in table'}), 400
         
-        # Create a version entry for this change
-        # Get the next available version number
-        vc_conn = sqlite3.connect('version_control.db')
-        vc_c = vc_conn.cursor()
-        
-        vc_c.execute("""
-            SELECT MAX(version_number) 
-            FROM version_control
-            WHERE file_id = ?
-        """, (file_id,))
-        
-        result = vc_c.fetchone()
-        version_number = 1
-        if result and result[0] is not None:
-            version_number = result[0] + 1
-        
-        # Create the version
-        version_id = create_version(
-            user_id, 
-            file_id, 
-            version_number, 
-            f"Rename column '{old_name}' to '{new_name}'", 
-            f"Renamed column from {old_name} to {new_name}"
-        )
-        
-        # Record the schema change - we record it as a special type of update
-        # We'll fetch all rows to capture all values before and after
-        c.execute(f'SELECT ROWID, "{old_name}" FROM "{table_name}"')
-        rows = c.fetchall()
-        
-        for row in rows:
-            row_id, old_value = row
-            
-            # Record the change for version control
-            record_change(
-                version_id,
-                'update',
-                row_number=row_id,
-                column_name=old_name,
-                old_value=old_value,
-                new_value=old_value,  # Same value, just different column name
-                description=f"Renamed column '{old_name}' to '{new_name}'"
-            )
-        
         # Rename column by creating a new table with the renamed column
         columns_select = []
         columns_create = []
@@ -1950,7 +1936,6 @@ def rename_column(user_id, file_id):
         c.execute(f'ALTER TABLE "{temp_table_name}" RENAME TO "{table_name}"')
         
         conn.commit()
-        vc_conn.commit()
         
         # Return updated columns
         updated_columns = [new_name if col == old_name else col for col in columns]
@@ -1961,136 +1946,114 @@ def rename_column(user_id, file_id):
         })
         
     except Exception as e:
-        if 'conn' in locals():
-            conn.rollback()
-        if 'vc_conn' in locals():
-            vc_conn.rollback()
+        conn.rollback()
         app.logger.error(f"Error renaming column: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
     finally:
         if 'conn' in locals():
             conn.close()
-        if 'vc_conn' in locals():
-            vc_conn.close()
 
-@app.route('/delete-column/<user_id>/<file_id>', methods=['POST'])
-def delete_column(user_id, file_id):
-    """Delete a column from a table with version control"""
-    try:
-        data = request.json
-        column_name = data.get('column')
+# @app.route('/add-column/<user_id>/<file_id>', methods=['POST'])
+# def add_column(user_id, file_id):
+#     """Add a new column by splitting an existing one"""
+#     try:
+#         data = request.json
+#         source_column = data.get('sourceColumn')
+#         new_column_name = data.get('newColumnName')
+#         delimiter = data.get('delimiter')
+#         split_index = data.get('splitIndex', 0)
         
-        if not column_name:
-            return jsonify({'error': 'Column name is required'}), 400
+#         if not source_column or not new_column_name or not delimiter:
+#             return jsonify({'error': 'Source column, new column name, and delimiter are required'}), 400
         
-        conn = sqlite3.connect('user_files.db')
-        c = conn.cursor()
+#         conn = sqlite3.connect('user_files.db')
+#         c = conn.cursor()
         
-        # Get file information
-        c.execute("""
-            SELECT unique_key
-            FROM user_files
-            WHERE file_id = ? AND user_id = ?
-        """, (file_id, user_id))
+#         # Get file information
+#         c.execute("""
+#             SELECT unique_key
+#             FROM user_files
+#             WHERE file_id = ? AND user_id = ?
+#         """, (file_id, user_id))
         
-        result = c.fetchone()
-        if not result:
-            return jsonify({'error': 'File not found'}), 404
+#         result = c.fetchone()
+#         if not result:
+#             return jsonify({'error': 'File not found'}), 404
             
-        unique_key = result[0]
-        table_name = f"table_{unique_key}"
+#         unique_key = result[0]
+#         table_name = f"table_{unique_key}"
         
-        # Verify table exists
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-        if not c.fetchone():
-            return jsonify({'error': f'Table {table_name} not found'}), 404
+#         # Verify table exists
+#         c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+#         if not c.fetchone():
+#             return jsonify({'error': f'Table {table_name} not found'}), 404
         
-        # Get current columns
-        c.execute(f'PRAGMA table_info("{table_name}")')
-        columns = [col[1] for col in c.fetchall()]
+#         # Get current columns to verify source column exists
+#         c.execute(f"PRAGMA table_info('{table_name}')")
+#         columns = [col[1] for col in c.fetchall()]
         
-        if column_name not in columns:
-            return jsonify({'error': f'Column {column_name} not found in table'}), 404
+#         if source_column not in columns:
+#             return jsonify({'error': f'Column {source_column} not found in table'}), 404
         
-        # Create a version entry for this change
-        # Get the next available version number
-        vc_conn = sqlite3.connect('version_control.db')
-        vc_c = vc_conn.cursor()
+#         if new_column_name in columns:
+#             return jsonify({'error': f'Column {new_column_name} already exists in table'}), 400
         
-        vc_c.execute("""
-            SELECT MAX(version_number) 
-            FROM version_control
-            WHERE file_id = ?
-        """, (file_id,))
+#         # Add new column
+#         try:
+#             c.execute(f'ALTER TABLE "{table_name}" ADD COLUMN "{new_column_name}" TEXT')
+#         except sqlite3.OperationalError as e:
+#             # If it fails with older SQLite versions, use a workaround with temp table
+#             if "duplicate column name" in str(e):
+#                 return jsonify({'error': f'Column {new_column_name} already exists'}), 400
+#             raise
         
-        result = vc_c.fetchone()
-        version_number = 1
-        if result and result[0] is not None:
-            version_number = result[0] + 1
+#         # Update the new column with split values
+#         # For SQLite we use instr and substr functions for string manipulation
+#         if split_index == 0:
+#             # Get first part before delimiter
+#             c.execute(f"""
+#                 UPDATE "{table_name}" 
+#                 SET "{new_column_name}" = 
+#                     CASE 
+#                         WHEN instr("{source_column}", ?) > 0 THEN substr("{source_column}", 1, instr("{source_column}", ?) - 1)
+#                         ELSE "{source_column}"
+#                     END
+#             """, (delimiter, delimiter))
+#         else:
+#             # Get part after delimiter at specific position
+#             # This is a bit complex in SQLite, we'll implement a simplified version
+#             c.execute(f"""
+#                 UPDATE "{table_name}" 
+#                 SET "{new_column_name}" = 
+#                     CASE 
+#                         WHEN instr("{source_column}", ?) > 0 THEN 
+#                             substr(
+#                                 "{source_column}", 
+#                                 instr("{source_column}", ?) + 1
+#                             )
+#                         ELSE NULL
+#                     END
+#             """, (delimiter, delimiter))
         
-        # Create the version
-        version_id = create_version(
-            user_id, 
-            file_id, 
-            version_number, 
-            f"Delete column '{column_name}'", 
-            f"Deleted column {column_name}"
-        )
+#         conn.commit()
         
-        # Get all values from the column before deleting
-        c.execute(f'SELECT ROWID, "{column_name}" FROM "{table_name}"')
-        rows = c.fetchall()
+#         # Return updated columns
+#         updated_columns = columns + [new_column_name]
+#         return jsonify({
+#             'success': True,
+#             'message': f'New column {new_column_name} added successfully',
+#             'columns': updated_columns
+#         })
         
-        # Record each value for version control
-        for row in rows:
-            row_id, value = row
-            
-            record_change(
-                version_id,
-                'delete',
-                row_number=row_id,
-                column_name=column_name,
-                old_value=value,
-                new_value=None,
-                description=f"Deleted column '{column_name}'"
-            )
-        
-        # Create a new table without the specified column
-        columns_to_keep = [col for col in columns if col != column_name]
-        columns_str = ', '.join([f'"{col}"' for col in columns_to_keep])
-        
-        # Create new table without the column - use a safe name without hyphens
-        temp_table_name = f"temp_{uuid.uuid4().hex}"  # Use hex UUID to avoid special characters
-        c.execute(f'CREATE TABLE "{temp_table_name}" AS SELECT {columns_str} FROM "{table_name}"')
-        
-        # Drop old table and rename new one
-        c.execute(f'DROP TABLE "{table_name}"')
-        c.execute(f'ALTER TABLE "{temp_table_name}" RENAME TO "{table_name}"')
-        
-        conn.commit()
-        vc_conn.commit()
-        
-        # Return updated columns
-        return jsonify({
-            'success': True,
-            'message': f'Column {column_name} deleted successfully',
-            'columns': columns_to_keep
-        })
-        
-    except Exception as e:
-        if 'conn' in locals():
-            conn.rollback()
-        if 'vc_conn' in locals():
-            vc_conn.rollback()
-        app.logger.error(f"Error deleting column: {str(e)}")
-        app.logger.error(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if 'conn' in locals():
-            conn.close()
-        if 'vc_conn' in locals():
-            vc_conn.close()
+#     except Exception as e:
+#         conn.rollback()
+#         app.logger.error(f"Error adding column: {str(e)}")
+#         app.logger.error(traceback.format_exc())
+#         return jsonify({'error': str(e)}), 500
+#     finally:
+#         if 'conn' in locals():
+#             conn.close()
 
 @app.route('/rename-file/<user_id>/<file_id>', methods=['POST'])
 def rename_file(user_id, file_id):
@@ -2225,31 +2188,6 @@ def update_row(user_id, file_id):
             
         data = request.json
         
-        # Create a new version for this change
-        version_number = data.get('version_number')
-        version_name = data.get('version_name', f'Update at {datetime.datetime.now().isoformat()}')
-        description = data.get('description', 'Row update operation')
-        
-        # Get the next available version number if not provided
-        if not version_number:
-            vc_conn = sqlite3.connect('version_control.db')
-            vc_c = vc_conn.cursor()
-            
-            vc_c.execute("""
-                SELECT MAX(version_number) 
-                FROM version_control
-                WHERE file_id = ?
-            """, (file_id,))
-            
-            result = vc_c.fetchone()
-            version_number = 1
-            if result and result[0] is not None:
-                version_number = result[0] + 1
-            
-            vc_conn.close()
-        
-        version_id = create_version(user_id, file_id, version_number, version_name, description)
-        
         if is_structured:
             edit_item = data.get('editItem', {})
             # Process empty or null values
@@ -2285,26 +2223,6 @@ def update_row(user_id, file_id):
                     
                     if row_result:
                         row_id = row_result[0]
-                        
-                        # Fetch the old data first for version control
-                        c.execute(f'SELECT * FROM {quoted_table} WHERE ROWID = ?', [row_id])
-                        columns = [description[0] for description in c.description]
-                        old_row = dict(zip(columns, c.fetchone()))
-                        
-                        # Record the change for each modified column
-                        for key, new_value in processed_item.items():
-                            old_value = old_row.get(key)
-                            record_change(
-                                version_id, 
-                                'update', 
-                                row_number=data['editIndex'], 
-                                column_name=key,
-                                old_value=old_value, 
-                                new_value=new_value,
-                                description=f'Updated {key} in row {data["editIndex"]}'
-                            )
-                        
-                        # Proceed with update
                         set_clause = ', '.join([f'"{k}" = ?' for k in processed_item.keys()])
                         values = list(processed_item.values())
                         
@@ -2323,27 +2241,11 @@ def update_row(user_id, file_id):
                     values = list(processed_item.values())
                     placeholders = ','.join(['?' for _ in values])
                     
-                    # Record the creation action
-                    record_change(
-                        version_id,
-                        'create',
-                        row_number=None,  # Will be assigned after insertion
-                        column_name=None,  # Whole row creation
-                        old_value=None,
-                        new_value=processed_item,
-                        description=f'Created new row'
-                    )
-                    
                     insert_query = f'''
                         INSERT INTO {quoted_table} ({','.join(columns)})
                         VALUES ({placeholders})
                     '''
                     c.execute(insert_query, values)
-                    
-                    # Get the row number/index for the newly inserted row
-                    new_row_id = c.lastrowid
-                    # Update the change record with the actual row number
-                    update_change_row_number(version_id, new_row_id)
                     
                     # Fetch the new row
                     c.execute(f'SELECT * FROM {quoted_table} WHERE ROWID = last_insert_rowid()')
@@ -2385,31 +2287,8 @@ def update_row(user_id, file_id):
             new_content = edit_item.get('content', '')
             
             if edit_index is not None and 0 <= edit_index < len(lines):
-                # Record the change for version control
-                old_content = lines[edit_index]
-                record_change(
-                    version_id,
-                    'update',
-                    row_number=edit_index,
-                    column_name='content',
-                    old_value=old_content,
-                    new_value=new_content,
-                    description=f'Updated line {edit_index}'
-                )
-                
                 lines[edit_index] = new_content
             else:
-                # Record the creation for version control
-                record_change(
-                    version_id,
-                    'create',
-                    row_number=len(lines),
-                    column_name='content',
-                    old_value=None,
-                    new_value=new_content,
-                    description=f'Added new line'
-                )
-                
                 lines.append(new_content)
                 
             final_content = '\n'.join(lines)
@@ -2482,7 +2361,6 @@ def search_pdf(user_id, file_id):
 
     finally:
         conn.close()
-
 @app.route('/delete-rows/<user_id>/<file_id>', methods=['POST'])
 def delete_rows(user_id, file_id):
     conn = sqlite3.connect('user_files.db')
@@ -2510,31 +2388,6 @@ def delete_rows(user_id, file_id):
         if not indices:
             return jsonify({'error': 'No indices provided for deletion'}), 400
         
-        # Create a new version for this change
-        data = request.json
-        
-        # Get the next available version number
-        vc_conn = sqlite3.connect('version_control.db')
-        vc_c = vc_conn.cursor()
-        
-        vc_c.execute("""
-            SELECT MAX(version_number) 
-            FROM version_control
-            WHERE file_id = ?
-        """, (file_id,))
-        
-        result = vc_c.fetchone()
-        version_number = 1
-        if result and result[0] is not None:
-            version_number = result[0] + 1
-            
-        vc_conn.close()
-        
-        version_name = data.get('version_name', f'Delete at {datetime.datetime.now().isoformat()}')
-        description = data.get('description', 'Row deletion operation')
-        
-        version_id = create_version(user_id, file_id, version_number, version_name, description)
-        
         if is_structured:
             # Properly quote table name
             quoted_table = f'"{table_name}"'
@@ -2542,31 +2395,10 @@ def delete_rows(user_id, file_id):
             # Delete rows one by one using ROWID
             for index in indices:
                 # First get the ROWID for the index
-                c.execute(f'SELECT ROWID, * FROM {quoted_table} LIMIT 1 OFFSET ?', (index,))
+                c.execute(f'SELECT ROWID FROM {quoted_table} LIMIT 1 OFFSET ?', (index,))
                 row_result = c.fetchone()
-                
                 if row_result:
                     row_id = row_result[0]
-                    
-                    # Get the column names
-                    columns = [description[0] for description in c.description]
-                    # Skip the first column (ROWID)
-                    columns = columns[1:]
-                    
-                    # Create a dictionary of the row data
-                    row_data = dict(zip(columns, row_result[1:]))
-                    
-                    # Record the deletion
-                    record_change(
-                        version_id,
-                        'delete',
-                        row_number=index,
-                        column_name=None,  # Whole row deletion
-                        old_value=row_data,
-                        new_value=None,
-                        description=f'Deleted row at index {index}'
-                    )
-                    
                     c.execute(f'DELETE FROM {quoted_table} WHERE ROWID = ?', (row_id,))
             
         else:
@@ -2585,22 +2417,6 @@ def delete_rows(user_id, file_id):
             try:
                 content_str = content.decode('utf-8') if isinstance(content, bytes) else content
                 lines = content_str.split('\n')
-                
-                # Sort indices in descending order to avoid shifting issues
-                sorted_indices = sorted(indices, reverse=True)
-                
-                for idx in sorted_indices:
-                    if 0 <= idx < len(lines):
-                        # Record the deletion for version control
-                        record_change(
-                            version_id,
-                            'delete',
-                            row_number=idx,
-                            column_name='content',
-                            old_value=lines[idx],
-                            new_value=None,
-                            description=f'Deleted line {idx}'
-                        )
                 
                 # Create new content without deleted lines
                 new_lines = [line for i, line in enumerate(lines) if i not in indices]
@@ -5372,10 +5188,11 @@ def calculate_statistics(user_id, file_id):
         app.logger.error(f"Error calculating statistics: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+
 @app.route('/apply-calculation/<user_id>/<file_id>', methods=['POST'])
 def apply_calculation(user_id, file_id):
     """
-    Apply calculation result as a new column in the file with version tracking
+    Apply calculation result as a new column in the file
     """
     try:
         data = request.json
@@ -5399,34 +5216,6 @@ def apply_calculation(user_id, file_id):
         if new_column_name in df.columns:
             return jsonify({"success": False, "error": f"Column '{new_column_name}' already exists"}), 400
         
-        # Create a version entry for this change
-        version_name = data.get('version_name', f"Add calculated column '{new_column_name}'")
-        version_description = data.get('version_description', f"Added calculated column using formula {data.get('formula', '')}")
-        
-        # Get the next available version number
-        vc_conn = sqlite3.connect('version_control.db')
-        vc_c = vc_conn.cursor()
-        
-        vc_c.execute("""
-            SELECT MAX(version_number) 
-            FROM version_control
-            WHERE file_id = ?
-        """, (file_id,))
-        
-        result = vc_c.fetchone()
-        version_number = 1
-        if result and result[0] is not None:
-            version_number = result[0] + 1
-        
-        # Create the version
-        version_id = create_version(
-            user_id, 
-            file_id, 
-            version_number, 
-            version_name, 
-            version_description
-        )
-        
         # Handle different result formats
         if isinstance(result_data, dict) and 'data' in result_data:
             # Series data from operations like +, -, etc.
@@ -5438,17 +5227,6 @@ def apply_calculation(user_id, file_id):
             
             # Add the new column to each row
             for i, row in enumerate(file_data):
-                # Record the change for version control
-                record_change(
-                    version_id,
-                    'update',
-                    row_number=i,
-                    column_name=new_column_name,
-                    old_value=None,
-                    new_value=new_data.get(str(i), new_data.get(i, None)),
-                    description=f"Added calculated value in column '{new_column_name}'"
-                )
-                
                 # Handle potential missing indices
                 if str(i) in new_data:
                     row[new_column_name] = new_data[str(i)]
@@ -5460,18 +5238,7 @@ def apply_calculation(user_id, file_id):
         elif isinstance(result_data, (int, float)):
             # Scalar result like correlation or stddev
             # Add the same value to all rows
-            for i, row in enumerate(file_data):
-                # Record the change for version control
-                record_change(
-                    version_id,
-                    'update',
-                    row_number=i,
-                    column_name=new_column_name,
-                    old_value=None,
-                    new_value=result_data,
-                    description=f"Added constant value in column '{new_column_name}'"
-                )
-                
+            for row in file_data:
                 row[new_column_name] = result_data
         
         # Save the updated data back to database
@@ -5479,501 +5246,15 @@ def apply_calculation(user_id, file_id):
         
         if not success:
             return jsonify({"success": False, "error": "Failed to update data"}), 500
-        
-        # Commit the version changes    
-        vc_conn.commit()
-        vc_conn.close()
             
         return jsonify({
             "success": True,
-            "message": f"New column '{new_column_name}' created successfully",
-            "version_id": version_id
+            "message": f"New column '{new_column_name}' created successfully"
         })
         
     except Exception as e:
         app.logger.error(f"Error applying calculation: {str(e)}")
-        if 'vc_conn' in locals():
-            vc_conn.rollback()
-            vc_conn.close()
         return jsonify({"success": False, "error": str(e)}), 500
-
 # calculator statistics end
-
-# 
-def create_version(user_id, file_id, version_number, version_name=None, description=None):
-    """Create a new version entry"""
-    conn = sqlite3.connect('version_control.db')
-    c = conn.cursor()
-    
-    try:
-        c.execute("""
-            INSERT INTO version_control 
-            (file_id, version_number, version_name, description, user_id)
-            VALUES (?, ?, ?, ?, ?)
-        """, (file_id, version_number, version_name, description, user_id))
-        
-        version_id = c.lastrowid
-        conn.commit()
-        return version_id
-    except Exception as e:
-        conn.rollback()
-        logging.error(f"Error creating version: {str(e)}")
-        return None
-    finally:
-        conn.close()
-
-def record_change(version_id, action_type, row_number=None, column_name=None, 
-                 old_value=None, new_value=None, description=None):
-    """Record a change in the version control system"""
-    conn = sqlite3.connect('version_control.db')
-    c = conn.cursor()
-    
-    try:
-        # Serialize values if needed
-        old_value_str = json.dumps(old_value) if old_value is not None else None
-        new_value_str = json.dumps(new_value) if new_value is not None else None
-        
-        c.execute("""
-            INSERT INTO version_changes 
-            (version_id, row_number, column_name, old_value, new_value, action_type, description)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (version_id, row_number, column_name, old_value_str, new_value_str, 
-             action_type, description))
-        
-        conn.commit()
-        return True
-    except Exception as e:
-        conn.rollback()
-        logging.error(f"Error recording change: {str(e)}")
-        return False
-    finally:
-        conn.close()
-
-def update_change_row_number(version_id, row_number):
-    """Update the row number for a change after insertion"""
-    conn = sqlite3.connect('version_control.db')
-    c = conn.cursor()
-    
-    try:
-        c.execute("""
-            UPDATE version_changes
-            SET row_number = ?
-            WHERE version_id = ? AND row_number IS NULL
-            ORDER BY change_id DESC
-            LIMIT 1
-        """, (row_number, version_id))
-        
-        conn.commit()
-        return True
-    except Exception as e:
-        conn.rollback()
-        logging.error(f"Error updating change row number: {str(e)}")
-        return False
-    finally:
-        conn.close()
-
-@app.route('/create-version/<user_id>/<file_id>', methods=['POST'])
-def create_version_checkpoint(user_id, file_id):
-    """Create a new version checkpoint without changes"""
-    try:
-        data = request.json
-        version_name = data.get('version_name')
-        description = data.get('description')
-        
-        # Check if file exists and belongs to user
-        conn = sqlite3.connect('user_files.db')
-        c = conn.cursor()
-        
-        c.execute("""
-            SELECT file_id
-            FROM user_files
-            WHERE file_id = ? AND user_id = ?
-        """, (file_id, user_id))
-        
-        if not c.fetchone():
-            return jsonify({'error': 'File not found or access denied'}), 404
-        
-        # Get the next available version number
-        vc_conn = sqlite3.connect('version_control.db')
-        vc_c = vc_conn.cursor()
-        
-        vc_c.execute("""
-            SELECT MAX(version_number) 
-            FROM version_control
-            WHERE file_id = ?
-        """, (file_id,))
-        
-        result = vc_c.fetchone()
-        next_version = 1
-        if result and result[0] is not None:
-            next_version = result[0] + 1
-        
-        # Create the version
-        version_id = create_version(user_id, file_id, next_version, version_name, description)
-        
-        if version_id:
-            return jsonify({
-                'success': True,
-                'version_id': version_id,
-                'version_number': next_version,
-                'message': 'Version checkpoint created successfully'
-            })
-        else:
-            return jsonify({'error': 'Failed to create version checkpoint'}), 500
-            
-    except Exception as e:
-        app.logger.error(f"Error creating version checkpoint: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if 'conn' in locals():
-            conn.close()
-        if 'vc_conn' in locals():
-            vc_conn.close()
-
-@app.route('/get-versions/<user_id>/<file_id>', methods=['GET'])
-def get_versions(user_id, file_id):
-    """Get all versions for a specific file"""
-    try:
-        conn = sqlite3.connect('version_control.db')
-        c = conn.cursor()
-        
-        c.execute("""
-            SELECT version_id, version_number, version_name, description, created_at
-            FROM version_control
-            WHERE file_id = ? AND user_id = ?
-            ORDER BY version_number DESC
-        """, (file_id, user_id))
-        
-        versions = [
-            {
-                'version_id': row[0],
-                'version_number': row[1],
-                'version_name': row[2],
-                'description': row[3],
-                'created_at': row[4]
-            } for row in c.fetchall()
-        ]
-        
-        return jsonify({'versions': versions})
-    except Exception as e:
-        app.logger.error(f"Error getting versions: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if 'conn' in locals():
-            conn.close()
-
-@app.route('/get-version-changes/<user_id>/<version_id>', methods=['GET'])
-def get_version_changes(user_id, version_id):
-    """Get all changes for a specific version"""
-    try:
-        conn = sqlite3.connect('version_control.db')
-        c = conn.cursor()
-        
-        # Verify that the version belongs to the user
-        c.execute("""
-            SELECT file_id FROM version_control
-            WHERE version_id = ? AND user_id = ?
-        """, (version_id, user_id))
-        
-        result = c.fetchone()
-        if not result:
-            return jsonify({'error': 'Version not found or access denied'}), 404
-        
-        # Get the changes
-        c.execute("""
-            SELECT change_id, row_number, column_name, old_value, new_value, 
-                   action_type, description, timestamp
-            FROM version_changes
-            WHERE version_id = ?
-            ORDER BY timestamp DESC
-        """, (version_id,))
-        
-        changes = [
-            {
-                'change_id': row[0],
-                'row_number': row[1],
-                'column_name': row[2],
-                'old_value': json.loads(row[3]) if row[3] else None,
-                'new_value': json.loads(row[4]) if row[4] else None,
-                'action_type': row[5],
-                'description': row[6],
-                'timestamp': row[7]
-            } for row in c.fetchall()
-        ]
-        
-        return jsonify({'changes': changes})
-    except Exception as e:
-        app.logger.error(f"Error getting version changes: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if 'conn' in locals():
-            conn.close()
-
-@app.route('/compare-versions/<user_id>/<file_id>', methods=['POST'])
-def compare_versions(user_id, file_id):
-    """Compare two versions and return the differences"""
-    try:
-        data = request.json
-        from_version_id = data.get('from_version_id')
-        to_version_id = data.get('to_version_id')
-        
-        if not from_version_id or not to_version_id:
-            return jsonify({'error': 'Both from_version_id and to_version_id are required'}), 400
-        
-        # Verify file and version ownership
-        conn = sqlite3.connect('version_control.db')
-        c = conn.cursor()
-        
-        # Check if versions belong to user and file
-        c.execute("""
-            SELECT version_id FROM version_control
-            WHERE version_id IN (?, ?) AND file_id = ? AND user_id = ?
-        """, (from_version_id, to_version_id, file_id, user_id))
-        
-        results = c.fetchall()
-        if len(results) != 2:
-            return jsonify({'error': 'One or both versions not found or access denied'}), 404
-        
-        # Get changes for the 'from' version
-        c.execute("""
-            SELECT change_id, row_number, column_name, old_value, new_value, 
-                   action_type, description, timestamp
-            FROM version_changes
-            WHERE version_id = ?
-        """, (from_version_id,))
-        
-        from_changes = [
-            {
-                'change_id': row[0],
-                'row_number': row[1],
-                'column_name': row[2],
-                'old_value': json.loads(row[3]) if row[3] else None,
-                'new_value': json.loads(row[4]) if row[4] else None,
-                'action_type': row[5],
-                'description': row[6],
-                'timestamp': row[7]
-            } for row in c.fetchall()
-        ]
-        
-        # Get changes for the 'to' version
-        c.execute("""
-            SELECT change_id, row_number, column_name, old_value, new_value, 
-                   action_type, description, timestamp
-            FROM version_changes
-            WHERE version_id = ?
-        """, (to_version_id,))
-        
-        to_changes = [
-            {
-                'change_id': row[0],
-                'row_number': row[1],
-                'column_name': row[2],
-                'old_value': json.loads(row[3]) if row[3] else None,
-                'new_value': json.loads(row[4]) if row[4] else None,
-                'action_type': row[5],
-                'description': row[6],
-                'timestamp': row[7]
-            } for row in c.fetchall()
-        ]
-        
-        # Calculate differences - a basic implementation
-        # In a more sophisticated approach, you would do more detailed analysis
-        # of the differences, potentially tracking row and column-level changes
-        
-        # Find added changes (in to but not in from)
-        added = []
-        for to_change in to_changes:
-            is_added = True
-            for from_change in from_changes:
-                if (to_change['row_number'] == from_change['row_number'] and 
-                    to_change['column_name'] == from_change['column_name'] and
-                    to_change['action_type'] == from_change['action_type']):
-                    is_added = False
-                    break
-            if is_added:
-                added.append(to_change)
-        
-        # Find removed changes (in from but not in to)
-        removed = []
-        for from_change in from_changes:
-            is_removed = True
-            for to_change in to_changes:
-                if (from_change['row_number'] == to_change['row_number'] and 
-                    from_change['column_name'] == to_change['column_name'] and
-                    from_change['action_type'] == to_change['action_type']):
-                    is_removed = False
-                    break
-            if is_removed:
-                removed.append(from_change)
-        
-        # Find modified changes (in both but with different values)
-        modified = []
-        for to_change in to_changes:
-            for from_change in from_changes:
-                if (to_change['row_number'] == from_change['row_number'] and 
-                    to_change['column_name'] == from_change['column_name'] and
-                    to_change['action_type'] == from_change['action_type']):
-                    
-                    # Compare values to detect modifications
-                    if ((to_change['old_value'] != from_change['old_value'] and 
-                         to_change['old_value'] is not None and 
-                         from_change['old_value'] is not None) or 
-                        (to_change['new_value'] != from_change['new_value'] and
-                         to_change['new_value'] is not None and 
-                         from_change['new_value'] is not None)):
-                        modified.append({
-                            'from': from_change,
-                            'to': to_change
-                        })
-        
-        return jsonify({
-            'from_version_id': from_version_id,
-            'to_version_id': to_version_id,
-            'differences': {
-                'added': added,
-                'removed': removed,
-                'modified': modified
-            }
-        })
-        
-    except Exception as e:
-        app.logger.error(f"Error comparing versions: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if 'conn' in locals():
-            conn.close()
-
-@app.route('/revert-to-version/<user_id>/<file_id>/<version_id>', methods=['POST'])
-def revert_to_version(user_id, file_id, version_id):
-    """Revert a file to a specific version"""
-    try:
-        # Verify file and version ownership
-        vc_conn = sqlite3.connect('version_control.db')
-        vc_c = vc_conn.cursor()
-        
-        vc_c.execute("""
-            SELECT version_number, version_name
-            FROM version_control
-            WHERE version_id = ? AND file_id = ? AND user_id = ?
-        """, (version_id, file_id, user_id))
-        
-        version_info = vc_c.fetchone()
-        if not version_info:
-            return jsonify({'error': 'Version not found or access denied'}), 404
-        
-        version_number, version_name = version_info
-        
-        # Get file metadata
-        conn = sqlite3.connect('user_files.db')
-        c = conn.cursor()
-        
-        c.execute("""
-            SELECT f.is_structured, f.unique_key
-            FROM user_files f
-            WHERE f.file_id = ? AND f.user_id = ?
-        """, (file_id, user_id))
-        
-        result = c.fetchone()
-        if not result:
-            return jsonify({'error': 'File not found'}), 404
-            
-        is_structured, unique_key = result
-        table_name = "table_" + unique_key
-        
-        if not is_structured:
-            return jsonify({'error': 'Version control only supported for structured data'}), 400
-        
-        # Get all versions to revert through (newer to older until target version)
-        vc_c.execute("""
-            SELECT version_id
-            FROM version_control
-            WHERE file_id = ? AND user_id = ? AND version_number > ?
-            ORDER BY version_number DESC
-        """, (file_id, user_id, version_number))
-        
-        versions_to_revert = [row[0] for row in vc_c.fetchall()]
-        
-        # Add the target version itself
-        versions_to_revert.append(int(version_id))
-        
-        # For each version, apply its changes in reverse
-        for ver_id in versions_to_revert:
-            # Get all changes for this version
-            vc_c.execute("""
-                SELECT change_id, row_number, column_name, old_value, new_value, 
-                       action_type
-                FROM version_changes
-                WHERE version_id = ?
-                ORDER BY timestamp DESC
-            """, (ver_id,))
-            
-            changes = vc_c.fetchall()
-            
-            # Apply changes in reverse order
-            for change in changes:
-                change_id, row_number, column_name, old_value, new_value, action_type = change
-                
-                # Convert JSON strings back to values
-                old_value = json.loads(old_value) if old_value else None
-                new_value = json.loads(new_value) if new_value else None
-                
-                # Apply the opposite of the original change
-                if action_type == 'create':
-                    # Opposite of create is delete
-                    if row_number is not None:
-                        # Delete the row
-                        c.execute(f'DELETE FROM "{table_name}" WHERE ROWID = ?', (row_number,))
-                
-                elif action_type == 'update':
-                    # Opposite of update is update with old value
-                    if row_number is not None and column_name is not None:
-                        # Update with old value
-                        c.execute(f'UPDATE "{table_name}" SET "{column_name}" = ? WHERE ROWID = ?', 
-                                (old_value, row_number))
-                
-                elif action_type == 'delete':
-                    # Opposite of delete is create
-                    if row_number is not None and old_value is not None:
-                        # Recreate the row
-                        columns = list(old_value.keys())
-                        values = list(old_value.values())
-                        
-                        placeholders = ','.join(['?' for _ in values])
-                        cols_str = ','.join([f'"{col}"' for col in columns])
-                        
-                        c.execute(f'INSERT INTO "{table_name}" ({cols_str}) VALUES ({placeholders})', values)
-        
-        # Create a new version to mark this revert
-        next_version = version_number + 1
-        new_version_id = create_version(
-            user_id, 
-            file_id, 
-            next_version,
-            f"Reverted to v{version_number} ({version_name})", 
-            f"Reverted file to version {version_number}"
-        )
-        
-        conn.commit()
-        vc_conn.commit()
-        
-        return jsonify({
-            'success': True, 
-            'message': f'Successfully reverted to version {version_number}',
-            'new_version_id': new_version_id
-        })
-            
-    except Exception as e:
-        if 'conn' in locals():
-            conn.rollback()
-        if 'vc_conn' in locals():
-            vc_conn.rollback()
-        app.logger.error(f"Error reverting to version: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if 'conn' in locals():
-            conn.close()
-        if 'vc_conn' in locals():
-            vc_conn.close()
-
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
