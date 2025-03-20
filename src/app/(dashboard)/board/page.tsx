@@ -600,7 +600,7 @@ const BoardMain: React.FC = () => {
   }
 
   return (
-    <ThemeProvider defaultTheme="light">
+    <ThemeProvider defaultTheme="azure">
       <div className="h-screen flex flex-col">
         {/* Top Navigation */}
         <div className="bg-white border-b p-4 flex items-center justify-between shadow-sm">

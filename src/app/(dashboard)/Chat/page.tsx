@@ -569,7 +569,7 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
           <div>
             <h3 className="font-medium text-gray-900 dark:text-gray-100">{section.agentName}</h3>
             <div className="flex items-center text-xs text-muted-foreground mt-0.5">
-              <span>{section.modelName}</span>
+              {/* <span>{section.modelName}</span> */}
               {sectionType === 'sql' && (
                 <Badge variant="outline" className="ml-2 py-0 h-5">SQL</Badge>
               )}
