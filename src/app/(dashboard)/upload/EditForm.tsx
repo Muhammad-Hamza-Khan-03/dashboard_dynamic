@@ -623,14 +623,14 @@ const EnhancedEditForm: React.FC<EnhancedEditFormProps> = ({
                 {stats && (
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button 
+                      {/* <Button 
                         variant="outline" 
                         size="icon"
                         className="shrink-0"
                         disabled={loading}
                       >
                         {getTypeIcon(dataType as DataType)}
-                      </Button>
+                      </Button> */}
                     </PopoverTrigger>
                     {renderStatisticsPopover(field, stats)}
                   </Popover>
