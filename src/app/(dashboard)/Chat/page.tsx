@@ -7,6 +7,9 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { nord } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { format } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
@@ -272,12 +275,13 @@ const CollapsibleContent: React.FC<CollapsibleContentProps> = ({
   );
 };
 
-// Custom MarkdownImage component for properly rendering images in reports
+// Enhanced MarkdownImage component with full-screen and zoom capabilities
 const MarkdownImage: React.FC<{
   src?: string;
   alt?: string;
 }> = ({ src, alt }) => {
   const [showFullScreen, setShowFullScreen] = useState(false);
+  const [imageError, setImageError] = useState(false);
   
   // Correct image URL if it's a relative path
   const imageUrl = src?.startsWith('http') ? 
@@ -288,39 +292,63 @@ const MarkdownImage: React.FC<{
 
   return (
     <>
-      <div className="my-4 relative border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+      <div className="my-4 relative border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
         <div className="relative w-full h-64">
-          <Image
-            src={imageUrl || '/placeholder.png'}
-            alt={alt || 'Visualization'}
-            fill
-            className="object-contain"
-          />
-          <button 
-            className="absolute top-2 right-2 p-1 bg-white/80 rounded-full hover:bg-white transition-colors"
-            onClick={() => setShowFullScreen(true)}
-          >
-            <ExternalLink className="h-4 w-4" />
-          </button>
+          {!imageError ? (
+            <Image
+              src={imageUrl || '/placeholder.png'}
+              alt={alt || 'Visualization'}
+              fill
+              className="object-contain transition-transform duration-300 group-hover:scale-[1.02]"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+              <div className="text-center p-4">
+                <ImageIcon className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p className="text-sm text-gray-500">Image could not be loaded</p>
+                <p className="text-xs text-gray-400 mt-1">{imageUrl}</p>
+              </div>
+            </div>
+          )}
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button 
+              className="p-1.5 bg-white/90 rounded-full hover:bg-white shadow-sm transition-colors"
+              onClick={() => setShowFullScreen(true)}
+            >
+              <ExternalLink className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         {alt && (
-          <div className="text-center text-sm text-muted-foreground py-2 px-2">{alt}</div>
+          <div className="text-center text-sm text-muted-foreground py-2 px-2 border-t">{alt}</div>
         )}
       </div>
       
       {showFullScreen && (
         <Dialog open={showFullScreen} onOpenChange={setShowFullScreen}>
-          <DialogContent className="max-w-3xl w-full">
+          <DialogContent className="max-w-5xl w-full max-h-[90vh]">
             <DialogHeader>
               <DialogTitle>{alt || 'Visualization'}</DialogTitle>
             </DialogHeader>
-            <div className="relative w-full h-[60vh]">
-              <Image
-                src={imageUrl || '/placeholder.png'}
-                alt={alt || 'Visualization'}
-                fill
-                className="object-contain"
-              />
+            <div className="relative w-full h-[calc(100vh-200px)] bg-gray-50 dark:bg-gray-900 rounded-md">
+              {!imageError ? (
+                <Image
+                  src={imageUrl || '/placeholder.png'}
+                  alt={alt || 'Visualization'}
+                  fill
+                  className="object-contain"
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="text-center p-4">
+                    <ImageIcon className="h-16 w-16 mx-auto mb-3 text-gray-400" />
+                    <p className="text-gray-500">Image could not be loaded</p>
+                    <p className="text-sm text-gray-400 mt-1">{imageUrl}</p>
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button 
@@ -328,13 +356,173 @@ const MarkdownImage: React.FC<{
                 onClick={() => window.open(imageUrl, '_blank')}
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download Image
+                View Original Image
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
     </>
+  );
+};
+
+// Enhanced custom markdown renderer with better styling and syntax highlighting
+const EnhancedMarkdown: React.FC<{ content: string }> = ({ content }) => {
+  if (!content) return null;
+
+  return (
+    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-md prose-h2:border-b prose-h2:pb-1 prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-img:rounded-md prose-img:shadow-sm">
+      <ReactMarkdown 
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          // Enhanced image component
+          img: ({ node, ...props }) => (
+            <MarkdownImage src={props.src} alt={props.alt} />
+          ),
+          
+          // Enhanced code block rendering
+          code: ({ node, inline, className, children, ...props }) => {
+            const match = /language-(\w+)/.exec(className || '');
+            const language = match ? match[1] : '';
+            
+            if (!inline && language) {
+              return (
+                <div className="relative my-4 rounded-md overflow-hidden">
+                  <div className="bg-gray-100 dark:bg-gray-800 px-4 py-1 text-xs font-mono flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-500 dark:text-gray-400">{language}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(String(children).replace(/\n$/, ''));
+                      }}
+                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <rect
+                          x="9"
+                          y="9"
+                          width="13"
+                          height="13"
+                          rx="2"
+                          ry="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                        />
+                        <path
+                          d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                  <SyntaxHighlighter 
+                    language={language} 
+                    style={nord}
+                    customStyle={{ margin: 0, borderRadius: 0 }}
+                    showLineNumbers={language === 'python' || language === 'javascript' || language === 'typescript'}
+                  >
+                    {String(children).replace(/\n$/, '')}
+                  </SyntaxHighlighter>
+                </div>
+              );
+            } else if (inline) {
+              return (
+                <code className="px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 font-mono text-sm" {...props}>
+                  {children}
+                </code>
+              );
+            } else {
+              // For code blocks without specified language
+              return (
+                <div className="relative my-4 bg-gray-100 dark:bg-gray-800 p-4 rounded-md font-mono text-sm overflow-x-auto">
+                  <pre>{children}</pre>
+                </div>
+              );
+            }
+          },
+          
+          // Enhanced table rendering
+          table: ({ node, ...props }) => (
+            <div className="overflow-x-auto my-4 border rounded-md">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700" {...props} />
+            </div>
+          ),
+          
+          // Style table headers
+          th: ({ node, ...props }) => (
+            <th 
+              className="px-4 py-2 bg-gray-50 dark:bg-gray-800 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700" 
+              {...props} 
+            />
+          ),
+          
+          // Style table cells
+          td: ({ node, ...props }) => (
+            <td className="px-4 py-2 text-sm whitespace-nowrap border-b border-gray-100 dark:border-gray-800" {...props} />
+          ),
+          
+          // Style paragraphs with proper spacing
+          p: ({ node, ...props }) => (
+            <p className="leading-relaxed mb-4" {...props} />
+          ),
+          
+          // Style links with proper color and underline
+          a: ({ node, ...props }) => (
+            <a 
+              className="text-blue-600 dark:text-blue-400 hover:underline" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              {...props} 
+            />
+          ),
+          
+          // Style blockquotes
+          blockquote: ({ node, ...props }) => (
+            <blockquote 
+              className="border-l-4 border-blue-200 dark:border-blue-800 pl-4 italic text-gray-600 dark:text-gray-300 my-4" 
+              {...props} 
+            />
+          ),
+          
+          // Style headings with proper spacing and sizes
+          h1: ({ node, ...props }) => (
+            <h1 className="text-2xl font-bold mt-6 mb-4 pb-1 border-b border-gray-200 dark:border-gray-700" {...props} />
+          ),
+          h2: ({ node, ...props }) => (
+            <h2 className="text-xl font-bold mt-6 mb-3 pb-1 border-b border-gray-200 dark:border-gray-700" {...props} />
+          ),
+          h3: ({ node, ...props }) => (
+            <h3 className="text-lg font-semibold mt-5 mb-3" {...props} />
+          ),
+          h4: ({ node, ...props }) => (
+            <h4 className="text-base font-medium mt-4 mb-2" {...props} />
+          ),
+          
+          // Style lists
+          ul: ({ node, ...props }) => (
+            <ul className="list-disc pl-6 mb-4 space-y-1" {...props} />
+          ),
+          ol: ({ node, ...props }) => (
+            <ol className="list-decimal pl-6 mb-4 space-y-1" {...props} />
+          ),
+          li: ({ node, ...props }) => (
+            <li className="mb-1" {...props} />
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 };
 
@@ -415,13 +603,7 @@ const DatabaseSchemaExplanation: React.FC<{ content: string }> = ({ content }) =
                               (content.includes('table') && content.includes('column'));
 
   if (!isSchemaExplanation) {
-    return (
-      <div className="prose prose-sm max-w-none dark:prose-invert">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {content}
-        </ReactMarkdown>
-      </div>
-    );
+    return <EnhancedMarkdown content={content} />;
   }
 
   return (
@@ -431,33 +613,7 @@ const DatabaseSchemaExplanation: React.FC<{ content: string }> = ({ content }) =
           <Server className="h-5 w-5 text-blue-500" />
           <h3 className="font-medium text-blue-700 dark:text-blue-300">Database Structure</h3>
         </div>
-        <div className="prose prose-sm max-w-none dark:prose-invert">
-          <ReactMarkdown 
-            remarkPlugins={[remarkGfm]}
-            components={{
-              // Enhance table rendering for schema tables
-              table: ({ node, ...props }) => (
-                <div className="overflow-x-auto">
-                  <table className="border-collapse w-full" {...props} />
-                </div>
-              ),
-              // Style table headers
-              th: ({ node, ...props }) => (
-                <th className="border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 px-4 py-2 text-left" {...props} />
-              ),
-              // Style table cells
-              td: ({ node, ...props }) => (
-                <td className="border border-gray-300 dark:border-gray-700 px-4 py-2" {...props} />
-              ),
-              // Highlight table names and column names
-              strong: ({ node, ...props }) => (
-                <strong className="text-blue-600 dark:text-blue-400" {...props} />
-              )
-            }}
-          >
-            {content}
-          </ReactMarkdown>
-        </div>
+        <EnhancedMarkdown content={content} />
       </div>
     </div>
   );
@@ -596,31 +752,56 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
           <div className="space-y-4">
             {/* Main content without code blocks */}
             {cleanContent && (
-              <div className="prose prose-sm max-w-none dark:prose-invert">
-                <ReactMarkdown 
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    img: ({ node, ...props }) => (
-                      <MarkdownImage src={props.src} alt={props.alt} />
-                    )
-                  }}
-                >
-                  {cleanContent}
-                </ReactMarkdown>
-              </div>
+              <EnhancedMarkdown content={cleanContent} />
             )}
             
             {/* Code blocks */}
             {codeBlocks.length > 0 && (
               <div className="space-y-3">
                 {codeBlocks.map((block, index) => (
-                  <div key={index} className="rounded-md overflow-hidden">
-                    <div className="bg-gray-100 dark:bg-gray-800 px-4 py-1 text-xs font-mono text-gray-500">
-                      {block.language || 'code'}
+                  <div key={index} className="rounded-md overflow-hidden border border-gray-200 dark:border-gray-700">
+                    <div className="bg-gray-100 dark:bg-gray-800 px-4 py-1 text-xs font-mono flex justify-between items-center">
+                      <span className="text-gray-500 dark:text-gray-400">
+                        {block.language || 'code'}
+                      </span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(block.code);
+                        }}
+                        className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <rect
+                            x="9"
+                            y="9"
+                            width="13"
+                            height="13"
+                            rx="2"
+                            ry="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                          />
+                          <path
+                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                          />
+                        </svg>
+                      </button>
                     </div>
                     <SyntaxHighlighter 
                       language={block.language || 'plaintext'} 
                       style={nord}
+                      showLineNumbers={block.language === 'python' || block.language === 'javascript' || block.language === 'typescript'}
                       customStyle={{ margin: 0 }}
                     >
                       {block.code}
@@ -900,12 +1081,30 @@ const fixMarkdownImagePaths = (content: string): string => {
   if (!content) return '';
   
   // Replace relative image paths with absolute URLs
-  return content.replace(
+  let fixedContent = content.replace(
     /!\[(.*?)\]\((visualization\/[^)]+)\)/g,
     (match, alt, path) => {
       return `![${alt}](/visualization/${path.replace('visualization/', '')})`;
     }
   );
+  
+  // Also fix paths starting with /visualization/
+  fixedContent = fixedContent.replace(
+    /!\[(.*?)\]\((\/visualization\/[^)]+)\)/g,
+    (match, alt, path) => {
+      return `![${alt}](${path})`;
+    }
+  );
+  
+  // Fix any paths that don't start with http or /
+  fixedContent = fixedContent.replace(
+    /!\[(.*?)\]\((?!http|\/)(.*?\.(?:png|jpg|jpeg|gif|svg))\)/g,
+    (match, alt, path) => {
+      return `![${alt}](/${path})`;
+    }
+  );
+  
+  return fixedContent;
 };
 
 // File Selection Component
@@ -1397,7 +1596,8 @@ const AnalysisPanel: React.FC<{
       try {
         const response = await axios.get(`http://localhost:5000/get_report/${userId}/${selectedReportId}`);
         if (response.data.success) {
-          setSelectedReportContent(response.data.content);
+          const fixedContent = fixMarkdownImagePaths(response.data.content);
+          setSelectedReportContent(fixedContent);
         }
       } catch (err) {
         console.error('Error fetching report content:', err);
@@ -1771,18 +1971,7 @@ const AnalysisPanel: React.FC<{
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="prose prose-sm max-w-none dark:prose-invert">
-                            <ReactMarkdown 
-                              remarkPlugins={[remarkGfm]}
-                              components={{
-                                img: ({ node, ...props }) => (
-                                  <MarkdownImage src={props.src} alt={props.alt} />
-                                )
-                              }}
-                            >
-                              {analysisSummary.content}
-                            </ReactMarkdown>
-                          </div>
+                          <EnhancedMarkdown content={analysisSummary.content} />
                         </CardContent>
                       </Card>
                       
@@ -1860,17 +2049,8 @@ const AnalysisPanel: React.FC<{
                 </div>
               </CardHeader>
               <CardContent>
-                <div className={`prose prose-sm max-w-none dark:prose-invert ${!showFullReport ? "max-h-[400px] overflow-y-auto" : ""}`}>
-                  <ReactMarkdown 
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      img: ({ node, ...props }) => (
-                        <MarkdownImage src={props.src} alt={props.alt} />
-                      )
-                    }}
-                  >
-                    {reportContent}
-                  </ReactMarkdown>
+                <div className={`${!showFullReport ? "max-h-[600px] overflow-y-auto pr-2" : ""}`}>
+                  <EnhancedMarkdown content={reportContent} />
                 </div>
                 
                 {/* Download options */}
@@ -1956,23 +2136,17 @@ const AnalysisPanel: React.FC<{
                             )}
                           </div>
                           
-                          <div className="prose prose-sm max-w-none dark:prose-invert">
-                            <ReactMarkdown 
-                              remarkPlugins={[remarkGfm]}
-                              components={{
-                                img: ({ node, ...props }) => (
-                                  <MarkdownImage src={props.src} alt={props.alt} />
-                                )
-                              }}
-                            >
-                              {selectedReportContent}
-                            </ReactMarkdown>
+                          <div className="max-h-[700px] overflow-y-auto px-2">
+                            <EnhancedMarkdown content={selectedReportContent} />
                           </div>
                           
                           {/* Visualizations section */}
-                          {selectedReportId && (
-                            <div className="space-y-2">
-                              <h4 className="font-medium">Visualizations</h4>
+                          {selectedReportId && savedReports.find(r => r.id === selectedReportId)?.visualizations?.length > 0 && (
+                            <div className="space-y-2 border-t pt-4 mt-4">
+                              <h4 className="font-medium flex items-center">
+                                <ImageIcon className="h-4 w-4 mr-2 text-blue-500" />
+                                Visualizations
+                              </h4>
                               <VisualizationGallery 
                                 visualizations={savedReports.find(r => r.id === selectedReportId)?.visualizations || []} 
                               />
