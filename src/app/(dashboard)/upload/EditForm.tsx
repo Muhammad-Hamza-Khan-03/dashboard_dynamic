@@ -12,7 +12,11 @@ import {
   AlignJustify,
   Check,
   List,
-  Timer
+  Timer,
+  X,
+  ArrowRight,
+  BarChart,
+  Info
 } from 'lucide-react';
 import {
   Tooltip,
@@ -20,11 +24,23 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Card, CardContent } from "@/components/ui/card";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "@/components/ui/use-toast";
 
 // Define all possible data types
 type DataType = 
@@ -38,6 +54,8 @@ type DataType =
   | 'Time' 
   | 'DateTime' 
   | 'Timestamp';
+
+type StatType = 'mean' | 'median' | 'mode' | 'mostCommon' | 'earliest' | 'latest';
 
 // Helper function to detect if a string is a valid date
 const isValidDate = (d: any): boolean => {
@@ -280,12 +298,18 @@ const formatValue = (value: any, type: DataType): string => {
     case 'Boolean':
       return value.toString();
     case 'Date':
-      return new Date(value).toLocaleDateString();
+      return value instanceof Date 
+        ? value.toLocaleDateString() 
+        : new Date(value).toLocaleDateString();
     case 'Time':
-      return new Date(value).toLocaleTimeString();
+      return value instanceof Date 
+        ? value.toLocaleTimeString() 
+        : new Date(value).toLocaleTimeString();
     case 'DateTime':
     case 'Timestamp':
-      return new Date(value).toLocaleString();
+      return value instanceof Date 
+        ? value.toLocaleString() 
+        : new Date(value).toLocaleString();
     default:
       return String(value);
   }
@@ -307,12 +331,20 @@ const EnhancedEditForm: React.FC<EnhancedEditFormProps> = ({
   loading = false,
 }) => {
   const [fieldStats, setFieldStats] = useState<Record<string, any>>({});
+  // Track which field's statistics are currently being shown
+  const [activeStatField, setActiveStatField] = useState<string | null>(null);
+  // State for bulk update dialog
+  const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
+  const [bulkStatType, setBulkStatType] = useState<StatType>('mean');
+  const [updatedFieldsCount, setUpdatedFieldsCount] = useState<number>(0);
 
   useEffect(() => {
     // Calculate statistics for each field
     if (data && data.length > 0) {
       const stats: Record<string, any> = {};
       Object.keys(data[0]).forEach(field => {
+        if (field === 'id' || field === 'rowId') return; // Skip these fields
+        
         const values = data.map(row => row[field]);
         const sampleValue = values.find(v => v !== null && v !== undefined);
         const dataType = getDataType(sampleValue);
@@ -332,123 +364,210 @@ const EnhancedEditForm: React.FC<EnhancedEditFormProps> = ({
         [field]: value
       }
     });
+    
+    // Close stats after selection
+    setActiveStatField(null);
+  };
+  
+  // Toggle showing statistics for a field
+  const toggleFieldStats = (field: string) => {
+    setActiveStatField(activeStatField === field ? null : field);
   };
 
-  // Render statistics popover content based on data type
-  const renderStatisticsPopover = (field: string, stats: any) => {
+  // Apply bulk update to all columns based on their statistical value type
+  const applyBulkUpdate = () => {
+    const updatedData = { ...activeRow.data };
+    let updateCount = 0;
+    
+    Object.entries(fieldStats).forEach(([field, stats]) => {
+      // Skip non-data fields
+      if (field === 'id' || field === 'rowId') return;
+      
+      const type = stats.type;
+      const fieldStats = stats.stats;
+      
+      // Skip fields that don't have appropriate stats
+      if (!fieldStats) return;
+      
+      // Apply the selected statistic based on data type
+      switch (type) {
+        case 'Integer':
+        case 'Float':
+          // For numeric fields, apply mean, median, or mode
+          if (bulkStatType === 'mean' && fieldStats.mean !== undefined) {
+            updatedData[field] = fieldStats.mean;
+            updateCount++;
+          } else if (bulkStatType === 'median' && fieldStats.median !== undefined) {
+            updatedData[field] = fieldStats.median;
+            updateCount++;
+          } else if ((bulkStatType === 'mode' || bulkStatType === 'mostCommon') && fieldStats.mode !== undefined) {
+            updatedData[field] = fieldStats.mode;
+            updateCount++;
+          }
+          break;
+          
+        case 'Boolean':
+          // For boolean fields, apply most common value
+          if (bulkStatType === 'mostCommon' || bulkStatType === 'mode') {
+            updatedData[field] = fieldStats.mostCommon;
+            updateCount++;
+          }
+          break;
+          
+        case 'Date':
+        case 'DateTime':
+        case 'Timestamp':
+          // For date fields, apply earliest or latest date
+          if (bulkStatType === 'earliest' && fieldStats.earliest) {
+            updatedData[field] = fieldStats.earliest;
+            updateCount++;
+          } else if (bulkStatType === 'latest' && fieldStats.latest) {
+            updatedData[field] = fieldStats.latest;
+            updateCount++;
+          } else if (bulkStatType === 'mostCommon' && fieldStats.mostFrequent && fieldStats.mostFrequent.length > 0) {
+            // If most common is selected for dates, use the most frequent date
+            updatedData[field] = fieldStats.mostFrequent[0].date;
+            updateCount++;
+          }
+          break;
+          
+        case 'Time':
+          // For time fields, apply most common time
+          if (bulkStatType === 'mostCommon' && fieldStats.mostFrequent && fieldStats.mostFrequent.length > 0) {
+            updatedData[field] = fieldStats.mostFrequent[0].value;
+            updateCount++;
+          }
+          break;
+          
+        case 'String':
+        case 'Character':
+          // For string fields, apply most common value
+          if ((bulkStatType === 'mostCommon' || bulkStatType === 'mode') && 
+              fieldStats.mostFrequent && fieldStats.mostFrequent.length > 0) {
+            updatedData[field] = fieldStats.mostFrequent[0].value;
+            updateCount++;
+          }
+          break;
+          
+        // For arrays, we don't apply bulk updates as it's not typically meaningful
+        case 'Array':
+        default:
+          // No applicable statistical value for this field type and selected statistic
+          break;
+      }
+    });
+    
+    // Update the form with the new values
+    setActiveRow({
+      ...activeRow,
+      data: updatedData
+    });
+    
+    // Store updated fields count for toast message
+    setUpdatedFieldsCount(updateCount);
+    
+    // Close the dialog
+    setIsBulkDialogOpen(false);
+    
+    // Show a toast notification about the update
+    toast({
+      title: "Bulk Update Applied",
+      description: `Updated ${updateCount} field${updateCount !== 1 ? 's' : ''} with ${bulkStatType} values`,
+    });
+  };
+
+  // Function to render the compact statistics UI for a field
+  const renderCompactStatsUI = (field: string, stats: any) => {
     const type = stats.type;
     const fieldStats = stats.stats;
 
-    switch (type) {
-      case 'Integer':
-      case 'Float':
-        return (
-          <PopoverContent className="w-72 p-4">
-            <div className="space-y-2">
-              <h4 className="font-medium text-sm">Statistical Values</h4>
-              <div className="grid grid-cols-1 gap-2">
-                {Object.entries(fieldStats).map(([key, value]) => (
-                  <Button
-                    key={key}
-                    variant="outline"
-                    size="sm"
-                    className="justify-between"
-                    onClick={() => handleValueSelect(field, value)}
-                  >
-                    <span className="capitalize">{key}</span>
-                    <Badge variant="secondary">{formatValue(value, type)}</Badge>
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </PopoverContent>
-        );
-
-      case 'Boolean':
-        return (
-          <PopoverContent className="w-72 p-4">
-            <div className="space-y-2">
-              <h4 className="font-medium text-sm">Distribution</h4>
-              <div className="grid grid-cols-1 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="justify-between"
-                  onClick={() => handleValueSelect(field, fieldStats.mostCommon)}
-                >
-                  <span>Most Common</span>
-                  <Badge variant="secondary">
-                    {fieldStats.mostCommon.toString()}
-                  </Badge>
-                </Button>
-                <div className="text-sm text-gray-500">
-                  True: {fieldStats.truePercentage.toFixed(1)}%
-                  <br />
-                  False: {fieldStats.falsePercentage.toFixed(1)}%
-                </div>
-              </div>
-            </div>
-          </PopoverContent>
-        );
-
-      case 'Date':
-      case 'DateTime':
-      case 'Timestamp':
-        return (
-          <PopoverContent className="w-72 p-4">
-            <div className="space-y-2">
-              <h4 className="font-medium text-sm">Date Range</h4>
-              <div className="grid grid-cols-1 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="justify-between"
+    return (
+      <div className="py-1">
+        {type === 'Integer' || type === 'Float' ? (
+          <div className="grid grid-cols-3 gap-1 mb-1">
+            <button
+              className="px-2 py-1 text-xs bg-green-50 border border-green-200 rounded hover:bg-green-100 text-center"
+              onClick={() => handleValueSelect(field, fieldStats.mean)}
+            >
+              <div className="text-xs text-green-800 mb-0.5">Mean</div>
+              <div className="font-mono">{formatValue(fieldStats.mean, type)}</div>
+            </button>
+            <button
+              className="px-2 py-1 text-xs bg-green-50 border border-green-200 rounded hover:bg-green-100 text-center"
+              onClick={() => handleValueSelect(field, fieldStats.median)}
+            >
+              <div className="text-xs text-green-800 mb-0.5">Median</div>
+              <div className="font-mono">{formatValue(fieldStats.median, type)}</div>
+            </button>
+            <button
+              className="px-2 py-1 text-xs bg-green-50 border border-green-200 rounded hover:bg-green-100 text-center"
+              onClick={() => handleValueSelect(field, fieldStats.mode)}
+            >
+              <div className="text-xs text-green-800 mb-0.5">Mode</div>
+              <div className="font-mono">{formatValue(fieldStats.mode, type)}</div>
+            </button>
+          </div>
+        ) : type === 'Boolean' ? (
+          <button
+            className="w-full px-2 py-1 text-xs flex justify-between items-center bg-green-50 border border-green-200 rounded hover:bg-green-100"
+            onClick={() => handleValueSelect(field, fieldStats.mostCommon)}
+          >
+            <span className="text-green-800">Most Common:</span>
+            <Badge className="bg-green-600 text-white ml-1">
+              {fieldStats.mostCommon.toString()}
+            </Badge>
+          </button>
+        ) : type === 'Date' || type === 'DateTime' || type === 'Timestamp' ? (
+          <div className="space-y-1">
+            {fieldStats.earliest && (
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  className="px-2 py-1 text-xs bg-green-50 border border-green-200 rounded hover:bg-green-100"
                   onClick={() => handleValueSelect(field, fieldStats.earliest)}
                 >
-                  <span>Earliest</span>
-                  <Badge variant="secondary">
+                  <span className="text-green-800 block mb-0.5">Earliest</span>
+                  <span className="font-mono text-xs truncate block">
                     {formatValue(fieldStats.earliest, type)}
-                  </Badge>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="justify-between"
+                  </span>
+                </button>
+                <button
+                  className="px-2 py-1 text-xs bg-green-50 border border-green-200 rounded hover:bg-green-100"
                   onClick={() => handleValueSelect(field, fieldStats.latest)}
                 >
-                  <span>Latest</span>
-                  <Badge variant="secondary">
+                  <span className="text-green-800 block mb-0.5">Latest</span>
+                  <span className="font-mono text-xs truncate block">
                     {formatValue(fieldStats.latest, type)}
-                  </Badge>
-                </Button>
+                  </span>
+                </button>
               </div>
-            </div>
-          </PopoverContent>
-        );
-
-      default:
-        return (
-          <PopoverContent className="w-72 p-4">
-            <div className="space-y-2">
-              <h4 className="font-medium text-sm">Most Frequent Values</h4>
-              <div className="grid grid-cols-1 gap-2">
-                {fieldStats.mostFrequent?.map((item: any, index: number) => (
-                  <Button
+            )}
+          </div>
+        ) : type === 'String' || type === 'Character' ? (
+          <div>
+            {fieldStats.mostFrequent && fieldStats.mostFrequent.length > 0 ? (
+              <div className="grid grid-cols-1 gap-1">
+                {fieldStats.mostFrequent.slice(0, 2).map((item: any, index: number) => (
+                  <button
                     key={index}
-                    variant="outline"
-                    size="sm"
-                    className="justify-between"
+                    className="w-full px-2 py-1 text-xs text-left bg-green-50 border border-green-200 rounded hover:bg-green-100 flex justify-between items-center"
                     onClick={() => handleValueSelect(field, item.value)}
                   >
-                    <span>#{index + 1} Most Common</span>
-                    <Badge variant="secondary">{item.value}</Badge>
-                  </Button>
+                    <span className="truncate max-w-[140px] text-green-800">{item.value}</span>
+                    <Badge variant="outline" className="ml-1 text-xs">
+                      {item.count}×
+                    </Badge>
+                  </button>
                 ))}
               </div>
-            </div>
-          </PopoverContent>
-        );
-    }
+            ) : (
+              <div className="text-xs text-gray-500 p-1">No common values</div>
+            )}
+          </div>
+        ) : (
+          <div className="text-xs text-gray-500 p-1">No applicable stats</div>
+        )}
+      </div>
+    );
   };
 
   const sortedFields = Object.entries(activeRow.data)
@@ -532,127 +651,214 @@ const EnhancedEditForm: React.FC<EnhancedEditFormProps> = ({
     }
   };
 
+  // Get explanatory text for the selected bulk update type
+  const getBulkUpdateDescription = (statType: StatType) => {
+    switch (statType) {
+      case 'mean':
+        return "Will set numeric fields to their average value";
+      case 'median':
+        return "Will set numeric fields to their middle value";
+      case 'mode':
+        return "Will set numeric fields to their most frequent value";
+      case 'mostCommon':
+        return "Will set all fields to their most frequently occurring value";
+      case 'earliest':
+        return "Will set date fields to their earliest date";
+      case 'latest':
+        return "Will set date fields to their latest date";
+      default:
+        return "Will apply statistical values to compatible fields";
+    }
+  };
+
   return (
-    <div className="grid gap-4 py-4">
-      {sortedFields.map(([field, value]) => {
-        const stats = fieldStats[field];
-        const dataType = stats?.type || 'String';
-        
-        return (
-          <div key={field} className="grid grid-cols-4 items-center gap-4">
-            <div className="text-right space-y-1">
-              <Label htmlFor={field} className="text-gray-700">
-                {field}
-              </Label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge 
-                      variant="outline" 
-                      className="text-xs cursor-help"
-                    >
-                      {dataType}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" align="center">
-                    <div className="text-sm">
-                      <p className="font-semibold">{dataType}</p>
-                      {stats?.stats && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          Click icon for statistics
-                        </p>
-                      )}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
+    <div className="py-4">
+      {/* Bulk Update Button */}
+      <div className="mb-4 flex justify-end">
+        <Button
+          onClick={() => setIsBulkDialogOpen(true)}
+          className="bg-green-600 hover:bg-green-700 text-white"
+          size="sm"
+        >
+          <BarChart className="h-4 w-4 mr-1" />
+          Bulk Update with Statistics
+        </Button>
+      </div>
+      
+      <div className="grid gap-4">
+        {sortedFields.map(([field, value]) => {
+          const stats = fieldStats[field];
+          const dataType = stats?.type || 'String';
+          const isStatsActive = activeStatField === field;
+          
+          return (
+            <div key={field}>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <div className="text-right space-y-1">
+                  <Label htmlFor={field} className="text-gray-700">
+                    {field}
+                  </Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge 
+                          variant="outline" 
+                          className="text-xs cursor-help"
+                        >
+                          {dataType}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" align="center">
+                        <div className="text-sm">
+                          <p className="font-semibold">{dataType}</p>
+                          {stats?.stats && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              Click calculator icon for statistics
+                            </p>
+                          )}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
 
-            <div className="col-span-3 space-y-2">
-              <div className="flex gap-2">
-                {dataType === 'Boolean' ? (
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id={field}
-                      checked={value === true || value === 'true'}
-                      onChange={(e) => handleValueSelect(field, e.target.checked)}
-                      className={getInputStyle('Boolean')}
-                      disabled={loading}
-                    />
-                    <Label htmlFor={field} className="text-sm text-gray-600">
-                      {value === true || value === 'true' ? 'True' : 'False'}
-                    </Label>
-                  </div>
-                ) : dataType === 'Array' ? (
-                  <div className="flex-1">
-                    <Input
-                      id={field}
-                      value={getDisplayValue(value, dataType)}
-                      onChange={(e) => {
-                        try {
-                          const parsedValue = JSON.parse(e.target.value);
-                          handleValueSelect(field, parsedValue);
-                        } catch {
-                          handleValueSelect(field, e.target.value);
-                        }
-                      }}
-                      className={getInputStyle('Array')}
-                      placeholder="[ ]"
-                      disabled={loading}
-                    />
-                    {value && !Array.isArray(value) && (
-                      <p className="text-xs text-yellow-600 mt-1">
-                        Invalid array format
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <Input
-                    id={field}
-                    type={getInputType(dataType as DataType)}
-                    value={getDisplayValue(value, dataType as DataType)}
-                    onChange={(e) => handleValueSelect(field, e.target.value)}
-                    className={getInputStyle(dataType as DataType)}
-                    disabled={loading}
-                    step={getInputStep(dataType as DataType)}
-                    min={dataType === 'Integer' || dataType === 'Float' ? '0' : undefined}
-                  />
-                )}
-
-                {stats && (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      {/* <Button 
-                        variant="outline" 
-                        size="icon"
-                        className="shrink-0"
+                <div className="col-span-3 space-y-1">
+                  <div className="flex gap-2">
+                    {dataType === 'Boolean' ? (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id={field}
+                          checked={value === true || value === 'true'}
+                          onChange={(e) => handleValueSelect(field, e.target.checked)}
+                          className={getInputStyle('Boolean')}
+                          disabled={loading}
+                        />
+                        <Label htmlFor={field} className="text-sm text-gray-600">
+                          {value === true || value === 'true' ? 'True' : 'False'}
+                        </Label>
+                      </div>
+                    ) : dataType === 'Array' ? (
+                      <div className="flex-1">
+                        <Input
+                          id={field}
+                          value={getDisplayValue(value, dataType)}
+                          onChange={(e) => {
+                            try {
+                              const parsedValue = JSON.parse(e.target.value);
+                              handleValueSelect(field, parsedValue);
+                            } catch {
+                              handleValueSelect(field, e.target.value);
+                            }
+                          }}
+                          className={getInputStyle('Array')}
+                          placeholder="[ ]"
+                          disabled={loading}
+                        />
+                        
+                      </div>
+                    ) : (
+                      <Input
+                        id={field}
+                        type={getInputType(dataType as DataType)}
+                        value={getDisplayValue(value, dataType as DataType)}
+                        onChange={(e) => handleValueSelect(field, e.target.value)}
+                        className={getInputStyle(dataType as DataType)}
                         disabled={loading}
+                        step={getInputStep(dataType as DataType)}
+                        min={dataType === 'Integer' || dataType === 'Float' ? '0' : undefined}
+                      />
+                    )}
+
+                    {stats && (
+                      <Button 
+                        variant={isStatsActive ? "secondary" : "outline"}
+                        size="icon"
+                        className={`shrink-0 transition-colors ${isStatsActive ? 'bg-green-100 text-green-800 border-green-300' : 'hover:bg-green-50 hover:text-green-700'}`}
+                        disabled={loading}
+                        onClick={() => toggleFieldStats(field)}
+                        title="Show statistical values"
                       >
                         {getTypeIcon(dataType as DataType)}
-                      </Button> */}
-                    </PopoverTrigger>
-                    {renderStatisticsPopover(field, stats)}
-                  </Popover>
-                )}
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {dataType === 'Array' && !isStatsActive && (
+                    <p className="text-xs text-gray-500">
+                      Enter valid JSON array format: [item1, item2, ...]
+                    </p>
+                  )}
+                </div>
               </div>
-
-              {/* Field-specific guidance */}
-              {value === '' && (
-                <p className="text-xs text-gray-500">
-                  Click the {getTypeIcon(dataType as DataType)} icon to see suggested values
-                </p>
-              )}
-              
-              {dataType === 'Array' && (
-                <p className="text-xs text-gray-500">
-                  Enter valid JSON array format: [item1, item2, ...]
-                </p>
+            {/* Render statistics UI when this field is active */}
+             {/* Render compact statistics UI when this field is active */}
+             {isStatsActive && stats && (
+                <Card className="mt-1 mb-2 border-green-200 shadow-sm ml-[25%] w-[75%]">
+                  <CardContent className="pt-2 pb-2 px-3">
+                    <div className="flex justify-between items-center border-b border-green-100 pb-1 mb-1">
+                      <h4 className="text-xs font-medium text-green-800">Statistical values for {field}</h4>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="text-green-800 hover:bg-green-50"
+                        onClick={() => toggleFieldStats(field)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {renderCompactStatsUI(field, stats)}
+                  </CardContent>
+                </Card>
               )}
             </div>
+          );
+        })}
+      </div>
+
+      {/* Bulk Update Dialog */}
+      <Dialog open={isBulkDialogOpen} onOpenChange={setIsBulkDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Update Fields</DialogTitle>
+            <DialogDescription>
+              {getBulkUpdateDescription(bulkStatType)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Select
+              value={bulkStatType}
+              onValueChange={(value) => setBulkStatType(value as StatType)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a statistical value" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mean">Mean</SelectItem>
+                <SelectItem value="median">Median</SelectItem>
+                <SelectItem value="mode">Mode</SelectItem>
+                <SelectItem value="mostCommon">Most Common</SelectItem>
+                <SelectItem value="earliest">Earliest</SelectItem>
+                <SelectItem value="latest">Latest</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        );
-      })}
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setIsBulkDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              onClick={applyBulkUpdate}
+            >
+              Apply
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

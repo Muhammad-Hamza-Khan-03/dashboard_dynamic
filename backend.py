@@ -54,7 +54,7 @@ from reportlab.lib.utils import ImageReader
 import base64
 from io import BytesIO
 from PIL import Image
-from celery_worker import process_statistics_task, stats_task_queue, update_task_status
+# from celery_worker import process_statistics_task, stats_task_queue, update_task_status
 import os
 import matplotlib
 matplotlib.use('Agg')
@@ -1464,24 +1464,130 @@ def upload_file(user_id):
 
 @app.route('/get-column-statistics/<user_id>/<file_id>/<column_name>', methods=['GET'])
 def get_column_statistics_from_db(user_id, file_id, column_name):
-    """Get pre-computed statistics for a specific column"""
+    """
+    Enhanced version to better handle parent-child relationships and table naming
+    """
     try:
         conn_user = sqlite3.connect('user_files.db')
         conn_stats = sqlite3.connect('stats.db')
         c_user = conn_user.cursor()
         
-        # Get file information to find the table_id
+        # Get file information including parent relationship
         c_user.execute("""
-            SELECT unique_key
+            SELECT unique_key, file_type, parent_file_id
             FROM user_files
             WHERE file_id = ? AND user_id = ?
         """, (file_id, user_id))
         
         result = c_user.fetchone()
         if not result:
-            return jsonify({'error': 'File not found'}), 404
+            return jsonify({
+                'error': 'File not found',
+                'ready': False,
+                'message': 'The requested file was not found in the database.'
+            }), 404
             
-        table_id = result[0]
+        unique_key, file_type, parent_file_id = result
+        
+        # If this is a parent file (like Excel or DB), return suggestion to select a child
+        if parent_file_id is None and file_type in ['xlsx', 'xls', 'db', 'sqlite', 'sqlite3']:
+            # Check if this has child tables/sheets
+            c_user.execute("""
+                SELECT COUNT(*) 
+                FROM user_files
+                WHERE parent_file_id = ?
+            """, (file_id,))
+            
+            child_count = c_user.fetchone()[0]
+            
+            if child_count > 0:
+                # This is a parent file, get the children
+                c_user.execute("""
+                    SELECT file_id, filename, sheet_table
+                    FROM user_files
+                    WHERE parent_file_id = ?
+                    LIMIT 5
+                """, (file_id,))
+                
+                children = c_user.fetchall()
+                child_info = [{"id": c[0], "name": c[2] or c[1]} for c in children]
+                
+                return jsonify({
+                    'ready': False,
+                    'is_parent': True,
+                    'child_count': child_count,
+                    'child_tables': child_info,
+                    'message': 'This is a parent file. Please select a specific table/sheet for analysis.'
+                })
+        
+        # For regular files or child tables/sheets
+        table_id = unique_key
+        
+        # Get the actual table name from structured_file_storage
+        c_user.execute("""
+            SELECT table_name 
+            FROM structured_file_storage 
+            WHERE unique_key = ? OR file_id = ?
+        """, (table_id, file_id))
+        
+        storage_result = c_user.fetchone()
+        
+        # Determine the correct table name
+        if storage_result and storage_result[0]:
+            table_name = storage_result[0]
+            # Check if this is a full path for DB files
+            if os.path.isfile(table_name):
+                # Use the ID without table_ prefix
+                actual_table_name = table_id
+            else:
+                actual_table_name = table_name
+        else:
+            # Try both formats - with or without table_ prefix
+            c_user.execute("SELECT name FROM sqlite_master WHERE type='table' AND (name=? OR name=?)", 
+                           (table_id, f"table_{table_id}"))
+            table_result = c_user.fetchone()
+            
+            if table_result:
+                actual_table_name = table_result[0]
+            else:
+                # Last resort - try different formats
+                potential_names = [
+                    table_id,
+                    f"table_{table_id}",
+                    unique_key,
+                    f"table_{unique_key}"
+                ]
+                
+                for name in potential_names:
+                    c_user.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,))
+                    if c_user.fetchone():
+                        actual_table_name = name
+                        break
+                else:
+                    return jsonify({
+                        'ready': False,
+                        'error': 'Table not found',
+                        'file_id': file_id,
+                        'unique_key': unique_key,
+                        'message': f'Could not find a table for ID {table_id}. This may be a parent file requiring sheet/table selection.'
+                    })
+        
+        # Verify column exists in the table
+        try:
+            c_user.execute(f"PRAGMA table_info('{actual_table_name}')")
+            columns = [col[1] for col in c_user.fetchall()]
+            
+            if column_name not in columns:
+                return jsonify({
+                    'ready': False,
+                    'error': 'Column not found',
+                    'message': f'Column {column_name} not found in table {actual_table_name}',
+                    'available_columns': columns
+                })
+        except Exception as column_error:
+            # If table_info fails, handle gracefully
+            logging.error(f"Error checking columns: {str(column_error)}")
+            pass
         
         # Get the column statistics
         c_stats = conn_stats.cursor()
@@ -1494,11 +1600,33 @@ def get_column_statistics_from_db(user_id, file_id, column_name):
         stats_result = c_stats.fetchone()
         
         if not stats_result:
-            # Statistics not yet calculated, return empty response
-            return jsonify({
-                'message': 'Statistics are being calculated',
-                'ready': False
-            })
+            # Check if statistics calculation is in progress
+            c_stats.execute("""
+                SELECT status, progress, message
+                FROM stats_tasks
+                WHERE table_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (table_id,))
+            
+            task_info = c_stats.fetchone()
+            
+            if task_info:
+                status, progress, message = task_info
+                return jsonify({
+                    'ready': False,
+                    'calculating': True,
+                    'status': status,
+                    'progress': progress,
+                    'message': message or 'Statistics calculation in progress'
+                })
+            else:
+                # No statistics and no task in progress
+                return jsonify({
+                    'ready': False,
+                    'calculating': False,
+                    'message': 'Statistics have not been calculated yet'
+                })
             
         data_type, basic_stats, distribution, shape_stats, outlier_stats = stats_result
         
@@ -1516,7 +1644,11 @@ def get_column_statistics_from_db(user_id, file_id, column_name):
     except Exception as e:
         logging.error(f"Error retrieving column statistics: {str(e)}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'ready': False,
+            'error': str(e),
+            'message': 'An error occurred while retrieving column statistics'
+        }), 500
     finally:
         if 'conn_user' in locals():
             conn_user.close()
@@ -1525,24 +1657,113 @@ def get_column_statistics_from_db(user_id, file_id, column_name):
 
 @app.route('/get-dataset-statistics/<user_id>/<file_id>', methods=['GET'])
 def get_dataset_statistics(user_id, file_id):
-    """Get pre-computed statistics for an entire dataset"""
+    """
+    Enhanced version to better handle parent-child relationships and table naming
+    """
     try:
         conn_user = sqlite3.connect('user_files.db')
         conn_stats = sqlite3.connect('stats.db')
         c_user = conn_user.cursor()
         
-        # Get file information to find the table_id
+        # Get file information including parent relationship
         c_user.execute("""
-            SELECT unique_key
+            SELECT unique_key, file_type, parent_file_id
             FROM user_files
             WHERE file_id = ? AND user_id = ?
         """, (file_id, user_id))
         
         result = c_user.fetchone()
         if not result:
-            return jsonify({'error': 'File not found'}), 404
+            return jsonify({
+                'error': 'File not found',
+                'ready': False,
+                'message': 'The requested file was not found in the database.'
+            }), 404
             
-        table_id = result[0]
+        unique_key, file_type, parent_file_id = result
+        
+        # If this is a parent file (like Excel or DB), return suggestion to select a child
+        if parent_file_id is None and file_type in ['xlsx', 'xls', 'db', 'sqlite', 'sqlite3']:
+            # Check if this has child tables/sheets
+            c_user.execute("""
+                SELECT COUNT(*) 
+                FROM user_files
+                WHERE parent_file_id = ?
+            """, (file_id,))
+            
+            child_count = c_user.fetchone()[0]
+            
+            if child_count > 0:
+                # This is a parent file, get the children
+                c_user.execute("""
+                    SELECT file_id, filename, sheet_table
+                    FROM user_files
+                    WHERE parent_file_id = ?
+                    LIMIT 5
+                """, (file_id,))
+                
+                children = c_user.fetchall()
+                child_info = [{"id": c[0], "name": c[2] or c[1]} for c in children]
+                
+                return jsonify({
+                    'ready': False,
+                    'is_parent': True,
+                    'child_count': child_count,
+                    'child_tables': child_info,
+                    'message': 'This is a parent file. Please select a specific table/sheet for analysis.'
+                })
+            
+        # For regular files or child tables, proceed with dataset stats retrieval
+        table_id = unique_key
+        
+        # Get the actual table name from structured_file_storage
+        c_user.execute("""
+            SELECT table_name 
+            FROM structured_file_storage 
+            WHERE unique_key = ? OR file_id = ?
+        """, (table_id, file_id))
+        
+        storage_result = c_user.fetchone()
+        
+        # Determine the correct table name
+        if storage_result and storage_result[0]:
+            table_name = storage_result[0]
+            # Check if this is a full path for DB files
+            if os.path.isfile(table_name):
+                # Use the ID without table_ prefix
+                actual_table_name = table_id
+            else:
+                actual_table_name = table_name
+        else:
+            # Try both formats - with or without table_ prefix
+            c_user.execute("SELECT name FROM sqlite_master WHERE type='table' AND (name=? OR name=?)", 
+                           (table_id, f"table_{table_id}"))
+            table_result = c_user.fetchone()
+            
+            if table_result:
+                actual_table_name = table_result[0]
+            else:
+                # Last resort - try different formats
+                potential_names = [
+                    table_id,
+                    f"table_{table_id}",
+                    unique_key,
+                    f"table_{unique_key}"
+                ]
+                
+                for name in potential_names:
+                    c_user.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,))
+                    if c_user.fetchone():
+                        actual_table_name = name
+                        break
+                else:
+                    return jsonify({
+                        'ready': False,
+                        'error': 'Table not found',
+                        'file_id': file_id,
+                        'unique_key': unique_key,
+                        'message': f'Could not find a table for ID {table_id}. This may be a parent file requiring sheet/table selection.'
+                    })
         
         # Get the dataset statistics
         c_stats = conn_stats.cursor()
@@ -1556,11 +1777,33 @@ def get_dataset_statistics(user_id, file_id):
         stats_result = c_stats.fetchone()
         
         if not stats_result:
-            # Statistics not yet calculated, return empty response
-            return jsonify({
-                'message': 'Dataset statistics are being calculated',
-                'ready': False
-            })
+            # Check if statistics calculation is in progress
+            c_stats.execute("""
+                SELECT status, progress, message
+                FROM stats_tasks
+                WHERE table_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (table_id,))
+            
+            task_info = c_stats.fetchone()
+            
+            if task_info:
+                status, progress, message = task_info
+                return jsonify({
+                    'ready': False,
+                    'calculating': True,
+                    'status': status,
+                    'progress': progress,
+                    'message': message or 'Dataset statistics calculation in progress'
+                })
+            else:
+                # No statistics and no task in progress
+                return jsonify({
+                    'ready': False,
+                    'calculating': False,
+                    'message': 'Dataset statistics have not been calculated yet'
+                })
             
         correlation_matrix, parallel_coords, violin_data, heatmap_data, scatter_matrix = stats_result
         
@@ -1578,7 +1821,11 @@ def get_dataset_statistics(user_id, file_id):
     except Exception as e:
         logging.error(f"Error retrieving dataset statistics: {str(e)}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'ready': False,
+            'error': str(e),
+            'message': 'An error occurred while retrieving dataset statistics'
+        }), 500
     finally:
         if 'conn_user' in locals():
             conn_user.close()
@@ -1587,24 +1834,80 @@ def get_dataset_statistics(user_id, file_id):
 
 @app.route('/get-stats-status/<user_id>/<file_id>', methods=['GET'])
 def get_stats_status(user_id, file_id):
-    """Check if statistics have been calculated for a file"""
+    """
+    Enhanced version that properly handles parent files with child tables/sheets
+    and properly handles table naming conventions
+    """
     try:
         conn_user = sqlite3.connect('user_files.db')
         conn_stats = sqlite3.connect('stats.db')
         c_user = conn_user.cursor()
         
-        # Get file information and table ID
+        # First, check if this is a parent file with child tables/sheets
         c_user.execute("""
-            SELECT unique_key
+            SELECT file_type, is_structured, parent_file_id, unique_key
             FROM user_files
             WHERE file_id = ? AND user_id = ?
         """, (file_id, user_id))
         
-        result = c_user.fetchone()
-        if not result:
+        file_info = c_user.fetchone()
+        if not file_info:
             return jsonify({'error': 'File not found'}), 404
             
-        table_id = result[0]
+        file_type, is_structured, parent_file_id, unique_key = file_info
+        
+        # If this is a parent with child tables/sheets (like Excel or DB)
+        if parent_file_id is None and file_type in ['xlsx', 'xls', 'db', 'sqlite', 'sqlite3']:
+            # Check if this has child tables/sheets
+            c_user.execute("""
+                SELECT COUNT(*) 
+                FROM user_files
+                WHERE parent_file_id = ?
+            """, (file_id,))
+            
+            child_count = c_user.fetchone()[0]
+            
+            if child_count > 0:
+                # Return a special status indicating this is a parent file
+                # The frontend should then select one of the child tables/sheets
+                return jsonify({
+                    'is_parent': True,
+                    'child_count': child_count,
+                    'message': 'This is a parent file with multiple tables/sheets. Please select a specific table/sheet.'
+                })
+        
+        # For regular files or child tables, proceed with normal stats check
+        table_id = unique_key
+        
+        # Get the actual table name from structured_file_storage
+        c_user.execute("""
+            SELECT table_name 
+            FROM structured_file_storage 
+            WHERE unique_key = ? OR file_id = ?
+        """, (table_id, file_id))
+        
+        storage_result = c_user.fetchone()
+        
+        # If we found a table name in structured_file_storage, use it
+        # Otherwise, try both formats to handle possible inconsistencies
+        if storage_result and storage_result[0]:
+            table_name = storage_result[0]
+            # Check if this is a full path for DB files
+            if os.path.isfile(table_name):
+                # For DB files, the table_name might be a path, not an actual table name
+                # In this case, we should still use the unique_key for stats
+                table_name = table_id
+        else:
+            # Try both formats - with or without table_ prefix
+            c_user.execute("SELECT name FROM sqlite_master WHERE type='table' AND (name=? OR name=?)", 
+                           (table_id, f"table_{table_id}"))
+            table_result = c_user.fetchone()
+            
+            if table_result:
+                table_name = table_result[0]
+            else:
+                # Last resort - use the ID as is
+                table_name = table_id
         
         # Check if column statistics exist
         c_stats = conn_stats.cursor()
@@ -1625,21 +1928,47 @@ def get_stats_status(user_id, file_id):
         
         dataset_stats_exist = c_stats.fetchone()[0] > 0
         
+        # If we don't have stats, check for tasks
+        if column_stats_count == 0 or not dataset_stats_exist:
+            c_stats.execute("""
+                SELECT status, progress, message
+                FROM stats_tasks
+                WHERE table_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (table_id,))
+            
+            task_info = c_stats.fetchone()
+            
+            task_status = task_info[0] if task_info else None
+            task_progress = task_info[1] if task_info else 0
+            task_message = task_info[2] if task_info else "No task found"
+        else:
+            task_status = "completed"
+            task_progress = 1.0
+            task_message = "Statistics calculation completed"
+        
         return jsonify({
+            'file_id': file_id,
+            'unique_key': unique_key,
+            'table_name': table_name,
             'column_stats_count': column_stats_count,
             'dataset_stats_exist': dataset_stats_exist,
-            'stats_complete': column_stats_count > 0 and dataset_stats_exist
+            'stats_complete': column_stats_count > 0 and dataset_stats_exist,
+            'task_status': task_status,
+            'task_progress': task_progress,
+            'task_message': task_message
         })
         
     except Exception as e:
         logging.error(f"Error checking statistics status: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         if 'conn_user' in locals():
             conn_user.close()
         if 'conn_stats' in locals():
             conn_stats.close()
-
 # Task status starts
 def create_stats_task(table_id, table_name):
     """Create a new statistics calculation task with Celery"""
@@ -1771,14 +2100,17 @@ def get_task_status(task_id):
 ## status updates API ENDPOINTS start
 @app.route('/start-stats-calculation/<user_id>/<file_id>', methods=['POST'])
 def start_stats_calculation(user_id, file_id):
-    """Start a new statistics calculation task for a file"""
+    """
+    Enhanced version that properly handles table naming
+    for starting a new statistics calculation task
+    """
     try:
         conn = sqlite3.connect('user_files.db')
         c = conn.cursor()
         
         # Get file information
         c.execute("""
-            SELECT unique_key
+            SELECT unique_key, file_type, parent_file_id
             FROM user_files
             WHERE file_id = ? AND user_id = ?
         """, (file_id, user_id))
@@ -1787,27 +2119,95 @@ def start_stats_calculation(user_id, file_id):
         if not result:
             return jsonify({'error': 'File not found'}), 404
             
-        table_id = result[0]
-        table_name = f"table_{table_id}"
+        unique_key, file_type, parent_file_id = result
+        
+        # If this is a parent file, we need to find the first child
+        if parent_file_id is None and file_type in ['xlsx', 'xls', 'db', 'sqlite', 'sqlite3']:
+            c.execute("""
+                SELECT file_id, unique_key
+                FROM user_files
+                WHERE parent_file_id = ?
+                LIMIT 1
+            """, (file_id,))
+            
+            child_result = c.fetchone()
+            if child_result:
+                file_id = child_result[0]
+                unique_key = child_result[1]
+                logging.info(f"Using child file {file_id} with unique_key {unique_key}")
+        
+        table_id = unique_key
+        
+        # Get the actual table name from structured_file_storage
+        c.execute("""
+            SELECT table_name 
+            FROM structured_file_storage 
+            WHERE unique_key = ? OR file_id = ?
+        """, (table_id, file_id))
+        
+        storage_result = c.fetchone()
+        
+        if storage_result and storage_result[0]:
+            table_name = storage_result[0]
+            # Check if this is a full path for DB files
+            if os.path.isfile(table_name):
+                # For DB files stored as paths, use the ID directly
+                table_name = table_id
+        else:
+            # Try without table_ prefix first (based on your actual tables)
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_id,))
+            table_result = c.fetchone()
+            
+            if table_result:
+                table_name = table_result[0]
+            else:
+                # Try with table_ prefix as fallback
+                c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (f"table_{table_id}",))
+                table_result = c.fetchone()
+                
+                if table_result:
+                    table_name = table_result[0]
+                else:
+                    return jsonify({'error': f'Table not found for ID {table_id}'}), 404
         
         # Create a new task
-        task_id = create_stats_task(table_id, table_name)
+        task_id = f"stats_{table_id}_{int(time.time())}"
         
-        if not task_id:
-            return jsonify({'error': 'Failed to create task'}), 500
-            
+        conn_stats = sqlite3.connect('stats.db')
+        c_stats = conn_stats.cursor()
+        
+        c_stats.execute("""
+            INSERT INTO stats_tasks (task_id, table_id, status, message)
+            VALUES (?, ?, ?, ?)
+        """, (task_id, table_id, 'pending', 'Task created'))
+        
+        conn_stats.commit()
+        
+        # Queue the task for background processing
+        stats_task_queue.put({
+            'task_id': task_id,
+            'table_id': table_id,
+            'table_name': table_name
+        })
+        
+        logging.info(f"Created statistics task: {task_id} for table {table_name}")
+        
         return jsonify({
             'task_id': task_id,
             'status': 'pending',
-            'message': 'Statistics calculation has been queued'
+            'message': 'Statistics calculation has been queued',
+            'table_name': table_name
         })
         
     except Exception as e:
-        logger.error(f"Error starting statistics calculation: {str(e)}")
+        logging.error(f"Error starting statistics calculation: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         if 'conn' in locals():
             conn.close()
+        if 'conn_stats' in locals():
+            conn_stats.close()
 
 @app.route('/check-stats-task/<task_id>', methods=['GET'])
 def check_stats_task(task_id):
@@ -2245,9 +2645,9 @@ def update_row(user_id, file_id):
     c = conn.cursor()
     
     try:
-        # Get file metadata
+        # Get file metadata - with enhanced handling for parent-child relationships
         c.execute("""
-            SELECT f.is_structured, f.unique_key
+            SELECT f.is_structured, f.unique_key, f.file_type, f.parent_file_id
             FROM user_files f
             WHERE f.file_id = ? AND f.user_id = ?
         """, (file_id, user_id))
@@ -2256,20 +2656,62 @@ def update_row(user_id, file_id):
         if not result:
             return jsonify({'error': 'File not found'}), 404
             
-        is_structured, unique_key = result
-        table_name = "table_" + unique_key
-        if not table_name:
-            return jsonify({'error': 'Table name not found'}), 404
+        is_structured, unique_key, file_type, parent_file_id = result
+        
+        # For child files (Excel sheets or DB tables), we should already have the correct unique_key
+        # For parent files, we need to find the first child's unique_key
+        if parent_file_id is None and file_type in ['xlsx', 'xls', 'db', 'sqlite', 'sqlite3']:
+            # This is a parent file - we need to find a child to update
+            c.execute("""
+                SELECT file_id, unique_key
+                FROM user_files
+                WHERE parent_file_id = ?
+                LIMIT 1
+            """, (file_id,))
             
+            child_result = c.fetchone()
+            if child_result:
+                # Update file_id and unique_key to use the child's values
+                child_file_id, child_unique_key = child_result
+                file_id = child_file_id
+                unique_key = child_unique_key
+                app.logger.info(f"Switched to child file: {file_id} with unique_key: {unique_key}")
+            else:
+                return jsonify({'error': 'No child tables/sheets found for this file'}), 400
+        
+        table_name = f"table_{unique_key}"
+        app.logger.info(f"Using table: {table_name}")
+        
+        # Verify the table exists
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not c.fetchone():
+            # If table doesn't exist, try to locate it via structured_file_storage
+            c.execute("""
+                SELECT table_name 
+                FROM structured_file_storage 
+                WHERE unique_key = ? OR file_id = ?
+            """, (unique_key, file_id))
+            
+            storage_result = c.fetchone()
+            if storage_result and storage_result[0]:
+                table_name = storage_result[0]
+                app.logger.info(f"Found table name in storage: {table_name}")
+            else:
+                return jsonify({'error': f'Table not found: {table_name}'}), 404
+            
+        # Continue with the row operation
         data = request.json
         
         if is_structured:
+            # Properly quote table name
+            quoted_table = f'"{table_name}"'
+            
             edit_item = data.get('editItem', {})
             # Process empty or null values
             processed_item = {}
             
             # Get column types from the table
-            c.execute(f'PRAGMA table_info("{table_name}")')
+            c.execute(f'PRAGMA table_info({quoted_table})')
             columns_info = {col[1]: col[2] for col in c.fetchall()}
             
             for key, value in edit_item.items():
@@ -2289,8 +2731,6 @@ def update_row(user_id, file_id):
                         processed_item[key] = value
             
             if processed_item:
-                quoted_table = f'"{table_name}"'
-                
                 if data.get('editIndex') is not None:  # Update existing row
                     row_query = f'SELECT ROWID FROM {quoted_table} LIMIT 1 OFFSET ?'
                     c.execute(row_query, (data['editIndex'],))
@@ -2338,7 +2778,7 @@ def update_row(user_id, file_id):
                     raise Exception("Failed to retrieve updated row")
             else:
                 return jsonify({'error': 'No valid data provided for update'}), 400            
-        else:  # Unstructured data handling remains the same
+        else:  # Unstructured data handling
             c.execute("""
                 SELECT content 
                 FROM unstructured_file_storage 
@@ -2383,6 +2823,7 @@ def update_row(user_id, file_id):
     except Exception as e:
         conn.rollback()
         app.logger.error(f"Error in row operation: {str(e)}")
+        app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
@@ -3310,17 +3751,17 @@ def delete_file(user_id, file_id):
     try:
         # Verify file ownership and get metadata
         c.execute("""
-            SELECT f.is_structured, f.unique_key, f.file_type, f.sheet_table, s.table_name
+            SELECT f.is_structured, f.unique_key, f.file_type, f.sheet_table
             FROM user_files f
-            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
             WHERE f.file_id = ? AND f.user_id = ?
         """, (file_id, user_id))
         
         result = c.fetchone()
         if not result:
             return jsonify({'error': 'File not found or access denied'}), 404
-            
-        is_structured, unique_key, file_type, sheet_table, table_name = result
+        unique_key = result[1]
+        table_name = f"table_{unique_key}"    
+        is_structured, unique_key, file_type, sheet_table= result
         
         if is_structured:
             if file_type in ['xlsx', 'xls'] and sheet_table:
@@ -3666,7 +4107,6 @@ def analyze_data(user_id: str, file_id: str):
         cursor.execute("""
             SELECT f.unique_key, s.table_name
             FROM user_files f
-            LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
             WHERE f.file_id = ? AND f.user_id = ?
         """, (file_id, user_id))
         
@@ -3674,8 +4114,7 @@ def analyze_data(user_id: str, file_id: str):
         if not result:
             return jsonify({'error': 'File not found'}), 404
 
-        _, table_name = result
-
+        table_name = f"table_{result[0]}"
         # Read data in chunks if it's a large dataset
         chunk_size = 100000  # Adjust based on memory constraints
 
@@ -5492,6 +5931,7 @@ def update_file_data(user_id, file_id, data):
 def calculate_statistics(user_id, file_id):
     """
     Perform statistical calculations on columns in a file
+    Enhanced to properly handle parent-child relationships
     """
     try:
         data = request.json
@@ -5507,14 +5947,68 @@ def calculate_statistics(user_id, file_id):
         if not new_column_name:
             return jsonify({"success": False, "error": "Output column name is required"}), 400
 
-        # Get file data from database
-        file_data = get_file_data(user_id, file_id)
+        # Get file metadata - with enhanced handling for parent-child relationships
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
         
-        if not file_data:
+        c.execute("""
+            SELECT f.unique_key, f.file_type, f.parent_file_id
+            FROM user_files f
+            WHERE f.file_id = ? AND f.user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
             return jsonify({"success": False, "error": "File not found"}), 404
+            
+        unique_key, file_type, parent_file_id = result
         
-        # Convert to pandas DataFrame for easier manipulation
-        df = pd.DataFrame(file_data)
+        # For child files (Excel sheets or DB tables), we should already have the correct unique_key
+        # For parent files, we need to find the first child's unique_key
+        actual_file_id = file_id
+        if parent_file_id is None and file_type in ['xlsx', 'xls', 'db', 'sqlite', 'sqlite3']:
+            # This is a parent file - we need to find a child to use
+            c.execute("""
+                SELECT file_id, unique_key
+                FROM user_files
+                WHERE parent_file_id = ?
+                LIMIT 1
+            """, (file_id,))
+            
+            child_result = c.fetchone()
+            if child_result:
+                # Update file_id and unique_key to use the child's values
+                actual_file_id, unique_key = child_result
+                app.logger.info(f"Switched to child file: {actual_file_id} with unique_key: {unique_key}")
+            else:
+                return jsonify({"success": False, "error": "No child tables/sheets found for this file"}), 400
+        
+        # Get the proper table name
+        table_name = f"table_{unique_key}"
+        
+        # Verify the table exists
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not c.fetchone():
+            # If table doesn't exist, try to locate it via structured_file_storage
+            c.execute("""
+                SELECT table_name 
+                FROM structured_file_storage 
+                WHERE unique_key = ? OR file_id = ?
+            """, (unique_key, actual_file_id))
+            
+            storage_result = c.fetchone()
+            if storage_result and storage_result[0]:
+                table_name = storage_result[0]
+                app.logger.info(f"Found table name in storage: {table_name}")
+            else:
+                return jsonify({"success": False, "error": f"Table not found: {table_name}"}), 404
+        
+        # Read the data
+        try:
+            query = f'SELECT * FROM "{table_name}"'
+            df = pd.read_sql_query(query, conn)
+        except Exception as e:
+            return jsonify({"success": False, "error": f"Error reading table: {str(e)}"}), 500
         
         # Check if columns exist
         if first_column not in df.columns:
@@ -5531,7 +6025,7 @@ def calculate_statistics(user_id, file_id):
         except Exception as e:
             return jsonify({"success": False, "error": f"Columns must contain numeric data: {str(e)}"}), 400
 
-        # Calculate based on operator
+        # Calculate based on operator - this part remains the same
         result = None
         message = ""
         
@@ -5618,7 +6112,9 @@ def calculate_statistics(user_id, file_id):
                 "result": {
                     "data": result_data,
                     "stats": stats_data,
-                    "sample": sample_data
+                    "sample": sample_data,
+                    "file_id": actual_file_id,  # Return the actual file_id used
+                    "table_name": table_name    # Return the actual table name used
                 },
                 "message": message
             })
@@ -5627,25 +6123,33 @@ def calculate_statistics(user_id, file_id):
             return jsonify({
                 "success": True,
                 "result": float(result) if result is not None else None,
+                "file_id": actual_file_id,  # Return the actual file_id used
+                "table_name": table_name,   # Return the actual table name used
                 "message": message
             })
             
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         app.logger.error(f"Error calculating statistics: {str(e)}")
+        app.logger.error(traceback.format_exc())
         return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 
 @app.route('/apply-calculation/<user_id>/<file_id>', methods=['POST'])
 def apply_calculation(user_id, file_id):
     """
     Apply calculation result as a new column in the file
+    Enhanced to properly handle parent-child relationships
     """
     try:
         data = request.json
         new_column_name = data.get('new_column_name')
         result_data = data.get('result_data')
+        
+        # Target file_id from the result (might be a child file_id)
+        target_file_id = data.get('file_id', file_id)
         
         if not new_column_name:
             return jsonify({"success": False, "error": "New column name is required"}), 400
@@ -5653,56 +6157,376 @@ def apply_calculation(user_id, file_id):
         if not result_data:
             return jsonify({"success": False, "error": "Result data is required"}), 400
 
-        # Get file data
-        file_data = get_file_data(user_id, file_id)
+        # Connect to database
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
         
-        if not file_data:
+        # Get file metadata
+        c.execute("""
+            SELECT f.unique_key, f.file_type, f.parent_file_id
+            FROM user_files f
+            WHERE f.file_id = ? AND f.user_id = ?
+        """, (target_file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
             return jsonify({"success": False, "error": "File not found"}), 404
+            
+        unique_key, file_type, parent_file_id = result
+        
+        # Get the proper table name
+        table_name = f"table_{unique_key}"
+        
+        # Verify the table exists
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not c.fetchone():
+            # If table doesn't exist, try to locate it via structured_file_storage or use from result_data
+            table_name_from_result = data.get('table_name')
+            
+            if table_name_from_result:
+                table_name = table_name_from_result
+            else:
+                c.execute("""
+                    SELECT table_name 
+                    FROM structured_file_storage 
+                    WHERE unique_key = ? OR file_id = ?
+                """, (unique_key, target_file_id))
+                
+                storage_result = c.fetchone()
+                if storage_result and storage_result[0]:
+                    table_name = storage_result[0]
+                else:
+                    return jsonify({"success": False, "error": f"Table not found: {table_name}"}), 404
+        
+        # Read the current data
+        try:
+            query = f'SELECT * FROM "{table_name}"'
+            df = pd.read_sql_query(query, conn)
+        except Exception as e:
+            return jsonify({"success": False, "error": f"Error reading table: {str(e)}"}), 500
         
         # Check if column already exists
-        df = pd.DataFrame(file_data)
         if new_column_name in df.columns:
             return jsonify({"success": False, "error": f"Column '{new_column_name}' already exists"}), 400
         
         # Handle different result formats
         if isinstance(result_data, dict) and 'data' in result_data:
             # Series data from operations like +, -, etc.
-            new_data = result_data['data']
+            result_series = pd.Series(result_data['data'])
             
-            # Convert string indices to integers if needed
-            if all(k.isdigit() for k in new_data.keys()):
-                new_data = {int(k): v for k, v in new_data.items()}
+            # Ensure indexes are properly converted
+            if result_series.index.dtype != df.index.dtype:
+                # Convert string indices to integers if needed
+                if all(str(i).isdigit() for i in result_series.index):
+                    result_series.index = result_series.index.map(int)
             
-            # Add the new column to each row
-            for i, row in enumerate(file_data):
-                # Handle potential missing indices
-                if str(i) in new_data:
-                    row[new_column_name] = new_data[str(i)]
-                elif i in new_data:
-                    row[new_column_name] = new_data[i]
-                else:
-                    row[new_column_name] = None
-        
+            # Add the new column
+            df[new_column_name] = np.nan
+            for idx in result_series.index:
+                if idx < len(df):
+                    df.loc[idx, new_column_name] = result_series[idx]
+                    
         elif isinstance(result_data, (int, float)):
             # Scalar result like correlation or stddev
             # Add the same value to all rows
-            for row in file_data:
-                row[new_column_name] = result_data
+            df[new_column_name] = result_data
+        else:
+            # Try to handle the data directly
+            try:
+                df[new_column_name] = result_data
+            except Exception as e:
+                return jsonify({"success": False, "error": f"Could not add data as column: {str(e)}"}), 400
         
         # Save the updated data back to database
-        success = update_file_data(user_id, file_id, file_data)
-        
-        if not success:
-            return jsonify({"success": False, "error": "Failed to update data"}), 500
+        try:
+            # Create temporary table and swap
+            temp_table_name = f"temp_{uuid.uuid4().hex}"
+            df.to_sql(temp_table_name, conn, index=False, if_exists='replace')
             
-        return jsonify({
-            "success": True,
-            "message": f"New column '{new_column_name}' created successfully"
-        })
-        
+            # Drop original and rename
+            c.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+            c.execute(f'ALTER TABLE "{temp_table_name}" RENAME TO "{table_name}"')
+            conn.commit()
+            
+            return jsonify({
+                "success": True,
+                "message": f"New column '{new_column_name}' created successfully",
+                "file_id": target_file_id,
+                "table_name": table_name
+            })
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"success": False, "error": f"Error updating table: {str(e)}"}), 500
+            
     except Exception as e:
         app.logger.error(f"Error applying calculation: {str(e)}")
+        app.logger.error(traceback.format_exc())
         return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 # calculator statistics end
+
+import threading
+import queue
+import sqlite3  
+import pandas as pd
+import logging
+import traceback
+
+
+## Background worker implementation starts
+def process_statistics_task(task):
+    """
+    Enhanced version of process_statistics_task that handles the table naming correctly
+    """
+    task_id = task['task_id']
+    table_id = task['table_id']
+    table_name = task['table_name']
+    
+    try:
+        update_task_status(task_id, 'processing', 0.0, 'Starting statistics calculation')
+        
+        conn_user = sqlite3.connect('user_files.db')
+        conn_stats = sqlite3.connect('stats.db')
+        
+        # Verify table exists
+        c_user = conn_user.cursor()
+        c_user.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        
+        if not c_user.fetchone():
+            logging.error(f"Table {table_name} does not exist in the database")
+            update_task_status(task_id, 'failed', None, f'Error: Table {table_name} not found')
+            return False
+        
+        # Load the data
+        query = f'SELECT * FROM "{table_name}"'
+        
+        # For large tables, check row count first
+        row_count_query = f'SELECT COUNT(*) FROM "{table_name}"'
+        try:
+            row_count = pd.read_sql_query(row_count_query, conn_user).iloc[0, 0]
+        except Exception as count_error:
+            logging.error(f"Error counting rows: {str(count_error)}")
+            # Fallback to estimate
+            row_count = 10000
+        
+        # Proceed with processing based on table size
+        update_task_status(task_id, 'processing', 0.1, f'Processing table with approximately {row_count} rows')
+        
+        # If table is very large, use chunking
+        if row_count > 100000:
+            chunk_size = 50000
+            # Just get the column names first
+            col_query = f'SELECT * FROM "{table_name}" LIMIT 1'
+            df_schema = pd.read_sql_query(col_query, conn_user)
+            columns = df_schema.columns.tolist()
+            
+            # Update status
+            update_task_status(task_id, 'processing', 0.2, f'Processing large table with {len(columns)} columns')
+            
+            # Process prioritized columns first
+            numeric_cols = []
+            categorical_cols = []
+            other_cols = []
+            
+            # Load a sample to determine column types
+            sample_query = f'SELECT * FROM "{table_name}" LIMIT 1000'
+            sample_df = pd.read_sql_query(sample_query, conn_user)
+            
+            # Categorize columns by type
+            for col in columns:
+                try:
+                    if pd.api.types.is_numeric_dtype(sample_df[col]):
+                        numeric_cols.append(col)
+                    elif pd.api.types.is_categorical_dtype(sample_df[col]) or pd.api.types.is_object_dtype(sample_df[col]):
+                        categorical_cols.append(col)
+                    else:
+                        other_cols.append(col)
+                except Exception as col_error:
+                    logging.error(f"Error processing column {col}: {str(col_error)}")
+                    other_cols.append(col)
+            
+            # Prioritize columns
+            prioritized_cols = numeric_cols + categorical_cols + other_cols
+            
+            # Calculate column statistics for each column with chunking
+            for i, column in enumerate(prioritized_cols):
+                # Update progress
+                progress = 0.2 + (0.6 * (i / len(prioritized_cols)))
+                update_task_status(
+                    task_id, 
+                    'processing', 
+                    progress, 
+                    f'Processing column {i+1}/{len(prioritized_cols)}: {column}'
+                )
+                
+                try:
+                    # Read column data in chunks
+                    column_data = []
+                    for chunk_df in pd.read_sql_query(query, conn_user, chunksize=chunk_size):
+                        column_data.append(chunk_df[column])
+                    
+                    # Combine chunks
+                    full_column = pd.concat(column_data)
+                    
+                    # Calculate statistics for this column
+                    column_stats = calculate_column_statistics_chunked(
+                        pd.DataFrame({column: full_column}), 
+                        column
+                    )
+                    
+                    # Store or update column statistics
+                    c_stats = conn_stats.cursor()
+                    c_stats.execute("""
+                        INSERT OR REPLACE INTO column_stats 
+                        (table_id, column_name, data_type, basic_stats, distribution, 
+                         shape_stats, outlier_stats)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        table_id, 
+                        column, 
+                        column_stats['data_type'],
+                        column_stats['basic_stats'],
+                        column_stats['distribution'],
+                        column_stats['shape_stats'],
+                        column_stats['outlier_stats']
+                    ))
+                    conn_stats.commit()
+                    
+                except Exception as col_error:
+                    logging.error(f"Error processing column {column}: {str(col_error)}")
+                    update_task_status(
+                        task_id, 
+                        'processing', 
+                        progress, 
+                        f'Error processing column {column}, skipping: {str(col_error)}'
+                    )
+            
+            # Update progress
+            update_task_status(task_id, 'processing', 0.8, 'Calculating dataset statistics')
+            
+            # For dataset statistics, use a sample for very large tables
+            if row_count > 10000:
+                sample_size = min(10000, row_count)
+                sample_query = f'SELECT * FROM "{table_name}" ORDER BY RANDOM() LIMIT {sample_size}'
+                sample_df = pd.read_sql_query(sample_query, conn_user)
+                dataset_stats = calculate_dataset_statistics_optimized(sample_df)
+            else:
+                # For smaller tables, process everything at once
+                full_df = pd.concat([chunk for chunk in pd.read_sql_query(query, conn_user, chunksize=chunk_size)])
+                dataset_stats = calculate_dataset_statistics_optimized(full_df)
+        else:
+            # For smaller tables, process everything at once
+            try:
+                df = pd.read_sql_query(query, conn_user)
+                update_task_status(task_id, 'processing', 0.2, f'Processing {len(df.columns)} columns')
+                
+                # Calculate statistics for each column
+                for i, column in enumerate(df.columns):
+                    progress = 0.2 + (0.6 * (i / len(df.columns)))
+                    update_task_status(
+                        task_id, 
+                        'processing', 
+                        progress, 
+                        f'Processing column {i+1}/{len(df.columns)}: {column}'
+                    )
+                    
+                    try:
+                        column_stats = calculate_column_statistics_chunked(df, column)
+                        
+                        c_stats = conn_stats.cursor()
+                        c_stats.execute("""
+                            INSERT OR REPLACE INTO column_stats 
+                            (table_id, column_name, data_type, basic_stats, distribution, 
+                             shape_stats, outlier_stats)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            table_id, 
+                            column, 
+                            column_stats['data_type'],
+                            column_stats['basic_stats'],
+                            column_stats['distribution'],
+                            column_stats['shape_stats'],
+                            column_stats['outlier_stats']
+                        ))
+                        conn_stats.commit()
+                    except Exception as col_error:
+                        logging.error(f"Error processing column {column}: {str(col_error)}")
+                
+                update_task_status(task_id, 'processing', 0.8, 'Calculating dataset statistics')
+                dataset_stats = calculate_dataset_statistics_optimized(df)
+            except Exception as df_error:
+                logging.error(f"Error processing dataframe: {str(df_error)}")
+                update_task_status(task_id, 'failed', None, f'Error processing data: {str(df_error)}')
+                return False
+        
+        # Store or update dataset statistics
+        try:
+            c_stats = conn_stats.cursor()
+            c_stats.execute("""
+                INSERT OR REPLACE INTO dataset_stats 
+                (table_id, correlation_matrix, parallel_coords, 
+                 violin_data, heatmap_data, scatter_matrix)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                table_id,
+                dataset_stats['correlation_matrix'],
+                dataset_stats['parallel_coords'],
+                dataset_stats['violin_data'],
+                dataset_stats['heatmap_data'],
+                dataset_stats['scatter_matrix']
+            ))
+            conn_stats.commit()
+        except Exception as stats_error:
+            logging.error(f"Error storing dataset statistics: {str(stats_error)}")
+            update_task_status(task_id, 'failed', None, f'Error storing dataset statistics: {str(stats_error)}')
+            return False
+        
+        # Update task status to completed
+        update_task_status(task_id, 'completed', 1.0, 'Statistics calculation completed')
+        
+        return True
+    except Exception as e:
+        logging.error(f"Error processing statistics task: {str(e)}")
+        traceback.print_exc()
+        update_task_status(task_id, 'failed', None, f'Error: {str(e)}')
+        return False
+    finally:
+        if 'conn_user' in locals():
+            conn_user.close()
+        if 'conn_stats' in locals():
+            conn_stats.close()
+def background_worker():
+    """Background worker function to process statistics tasks"""
+    logging.info("Starting background worker for statistics calculation")
+    while True:
+        try:
+            # Get a task from the queue with a timeout
+            task = stats_task_queue.get(timeout=5)
+            logging.info(f"Processing task: {task['task_id']}")
+            
+            # Process the task
+            process_statistics_task(task)
+            
+            # Mark the task as done
+            stats_task_queue.task_done()
+        except queue.Empty:
+            # No tasks in queue, just continue polling
+            pass
+        except Exception as e:
+            logging.error(f"Error in background worker: {str(e)}")
+            traceback.print_exc()
+
+def start_background_worker():
+    """Start the background worker thread"""
+    worker_thread = threading.Thread(target=background_worker)
+    worker_thread.daemon = True  # Thread will exit when main thread exits
+    worker_thread.start()
+    logging.info("Background worker started")
+## Background worker implementation ends
+
+
+
 if __name__ == '__main__':
     app.run(debug=False, port=5000)

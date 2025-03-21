@@ -222,69 +222,94 @@ const [activeColumn, setActiveColumn] = useState<string>('');
   }, [selectedFile, refetchFileList]);
 
   // Modify the fetchFileData function
-  const fetchFileData = useCallback(async (fileId: string, filename: string, page: number = 1) => {
-    if (!user?.id) {
-      setError("User ID not available");
-      return;
+// Modify the fetchFileData function to handle sheet_name
+const fetchFileData = useCallback(async (fileId: string, filename: string, page: number = 1, sheetName?: string) => {
+  if (!user?.id) {
+    setError("User ID not available");
+    return;
+  }
+
+  setLoading(true);
+  setError(null);
+
+  try {
+    // Create request URL with sheet name as query parameter if provided
+    let url = `http://localhost:5000/get-file/${user.id}/${fileId}`;
+    const params = new URLSearchParams({
+      page: page.toString(),
+      page_size: '50'
+    });
+    
+    // Add sheet_name parameter if provided
+    if (sheetName) {
+      params.append('sheet_name', sheetName);
+    }
+    
+    // Append parameters to URL
+    url = `${url}?${params.toString()}`;
+    
+    console.log("Fetching file data from:", url);
+    const response = await axios.get<FileContent>(url);
+
+    if (!response.data) {
+      throw new Error('No data received from server');
     }
 
-    setLoading(true);
-    setError(null);
+    const fileData = response.data;
 
-    try {
-      const response = await axios.get<FileContent>(
-        `http://localhost:5000/get-file/${user.id}/${fileId}`,
-        {
-          params: {
-            page: page,
-            page_size: 50
+    if (fileData.type === 'structured') {
+      if (fileData.tables && fileData.tables.length > 0) {
+        // This is a parent file with multiple tables/sheets
+        setTablesList(fileData.tables);
+        
+        // If a specific sheet name was requested, find its ID
+        let targetTableId = fileData.tables[0].id;
+        if (sheetName) {
+          const matchingTable = fileData.tables.find(
+            table => table.name === sheetName || table.full_name.endsWith(`:${sheetName}`)
+          );
+          if (matchingTable) {
+            targetTableId = matchingTable.id;
           }
         }
-      );
-
-      if (!response.data) {
-        throw new Error('No data received from server');
-      }
-
-      const fileData = response.data;
-
-      if (fileData.type === 'structured') {
-        if (fileData.tables && fileData.tables.length > 0) {
-          setTablesList(fileData.tables);
-          if (!selectedTable) {
-            setSelectedTable(fileData.tables[0].id);
-            const tableResponse = await axios.get<FileContent>(
-              `http://localhost:5000/get-file/${user.id}/${fileData.tables[0].id}`,
-              { params: { page: 1, page_size: 50 } }
-            );
-            if (tableResponse.data.data && tableResponse.data.columns) {
-              updateData(tableResponse.data.data); // Use updateData instead of setData
-              setColumns(generateColumns(tableResponse.data.columns));
-              setPaginationInfo(tableResponse.data.pagination || null);
-            }
-          }
-        } else if (fileData.data && fileData.columns) {
-          updateData(fileData.data); // Use updateData instead of setData
-          setColumns(generateColumns(fileData.columns));
-          setPaginationInfo(fileData.pagination || null);
+        
+        setSelectedTable(targetTableId);
+        
+        // Fetch data for the selected table/sheet
+        const tableResponse = await axios.get<FileContent>(
+          `http://localhost:5000/get-file/${user.id}/${targetTableId}`,
+          { params: { page: 1, page_size: 50 } }
+        );
+        
+        if (tableResponse.data.data && tableResponse.data.columns) {
+          updateData(tableResponse.data.data);
+          setColumns(generateColumns(tableResponse.data.columns));
+          setPaginationInfo(tableResponse.data.pagination || null);
         }
-        setUnstructuredContent('');
-        setIsEditing(false);
-      } else {
-        updateData([]); // Use updateData instead of setData
-        setColumns([]);
-        setPaginationInfo(null);
-        setUnstructuredContent(fileData.content || '');
-        setIsEditing(fileData.editable || false);
+      } else if (fileData.data && fileData.columns) {
+        // This is a regular structured file or a single table/sheet
+        updateData(fileData.data);
+        setColumns(generateColumns(fileData.columns));
+        setPaginationInfo(fileData.pagination || null);
       }
-    } catch (err) {
-      console.error("Error in fetchFileData:", err);
-      setError(err instanceof Error ? err.message : "Failed to process file data");
-      resetState();
-    } finally {
-      setLoading(false);
+      setUnstructuredContent('');
+      setIsEditing(false);
+    } else {
+      // Unstructured file handling (unchanged)
+      updateData([]);
+      setColumns([]);
+      setPaginationInfo(null);
+      setUnstructuredContent(fileData.content || '');
+      setIsEditing(fileData.editable || false);
     }
-  }, [user?.id, selectedTable]);
+  } catch (err) {
+    console.error("Error in fetchFileData:", err);
+    setError(err instanceof Error ? err.message : "Failed to process file data");
+    resetState();
+  } finally {
+    setLoading(false);
+  }
+}, [user?.id, selectedTable]);
 
   useEffect(() => {
     const loadTableData = async () => {
