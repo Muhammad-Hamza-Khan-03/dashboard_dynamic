@@ -528,23 +528,23 @@ const EnhancedMarkdown: React.FC<{ content: string }> = ({ content }) => {
 
 // SQL Code Component - Enhanced for SQL-specific formatting
 const SqlCode: React.FC<{ sql: string }> = ({ sql }) => {
-  // Process SQL for display
+  // Process SQL for display - clean and format
   const processedSql = sql
     .split(';')
     .filter(statement => statement.trim())
     .map(statement => statement.trim())
     .join(';\n\n');
 
-  // Check if it's a query or a schema explanation
+  // Determine if it's a schema query
   const isSchemaQuery = sql.toLowerCase().includes('sqlite_master');
   
   return (
     <div className="relative">
-      <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-4 overflow-x-auto">
-        <div className="flex items-center justify-between mb-2">
+      <div className="bg-gray-100 dark:bg-gray-800 rounded-md overflow-x-auto">
+        <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-2">
             <Database className="h-4 w-4 text-blue-500" />
-            <span className="text-sm font-medium text-blue-500">
+            <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
               {isSchemaQuery ? 'Schema Query' : 'SQL Query'}
             </span>
           </div>
@@ -585,11 +585,115 @@ const SqlCode: React.FC<{ sql: string }> = ({ sql }) => {
             </svg>
           </Button>
         </div>
-        <pre className="text-sm font-mono p-0 overflow-auto">
-          <SyntaxHighlighter language="sql" style={nord} customStyle={{ margin: 0, background: 'transparent' }}>
+        <div className="p-4">
+          <SyntaxHighlighter 
+            language="sql" 
+            style={nord} 
+            customStyle={{ 
+              margin: 0, 
+              background: 'transparent',
+              fontSize: '0.9rem',
+              color: '#333333',
+              fontWeight: 500
+            }}
+            showLineNumbers={true}
+          >
             {processedSql}
           </SyntaxHighlighter>
-        </pre>
+        </div>
+      </div>
+    </div>
+  );
+};
+// SQL Results Component - New component to better display SQL query results
+const SqlResults: React.FC<{ content: string }> = ({ content }) => {
+  // Extract the table output from SQL results
+  const extractTableResults = (text: string) => {
+    const resultsPattern = /Results for query:([\s\S]*?)(?=>>|$)/;
+    const match = text.match(resultsPattern);
+    return match ? match[1].trim() : null;
+  };
+
+  const tableResults = extractTableResults(content);
+  
+  if (!tableResults) {
+    return <EnhancedMarkdown content={content} />;
+  }
+
+  // Format the table data for better display
+  const formatSqlResults = (results: string) => {
+    // Check if it's in a pandas-like table format
+    if (results.includes('table_name') && results.includes('schema')) {
+      try {
+        // Split by lines to parse the table
+        const lines = results.split('\n').filter(line => line.trim());
+        
+        // Extract header row (assuming first line after "Results for query:")
+        const headerLine = lines.find(line => line.includes('table_name') && line.includes('schema'));
+        if (!headerLine) return results;
+        
+        const headers = ['Table Name', 'Schema'];
+        
+        // Extract table rows - assuming format is index, table_name, schema
+        const rows = lines.filter(line => 
+          line.match(/^\d+\s+\S+\s+/)  // Starts with digit followed by whitespace and text
+        ).map(line => {
+          // Split by first two occurrences of multiple whitespace
+          const parts = line.split(/\s{2,}/, 3);
+          if (parts.length < 3) return ['', '']; // Skip malformed lines
+          
+          // Skip the first element (index) and return table_name and schema
+          return [parts[1].trim(), parts[2].trim()];
+        });
+        
+        return (
+          <div className="overflow-x-auto border rounded-md my-4">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                  {headers.map((header, i) => (
+                    <th 
+                      key={i} 
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                    >
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
+                {rows.map((row, i) => (
+                  <tr key={i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
+                    <td className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200 font-medium">
+                      {row[0]}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap">
+                      {row[1].replace(/\\n/g, '\n')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      } catch (error) {
+        console.error("Error formatting SQL results:", error);
+        return <pre className="p-4 bg-gray-50 dark:bg-gray-800 rounded-md overflow-x-auto">{results}</pre>;
+      }
+    }
+    
+    // Default formatting if not a table
+    return <pre className="p-4 bg-gray-50 dark:bg-gray-800 rounded-md overflow-x-auto text-gray-800 dark:text-gray-200">{results}</pre>;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+        <div className="flex items-center space-x-2 mb-3">
+          <Table className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <h3 className="font-medium text-blue-700 dark:text-blue-300">SQL Query Results</h3>
+        </div>
+        {formatSqlResults(tableResults)}
       </div>
     </div>
   );
@@ -608,12 +712,14 @@ const DatabaseSchemaExplanation: React.FC<{ content: string }> = ({ content }) =
 
   return (
     <div className="space-y-4">
-      <div className="bg-blue-50 dark:bg-blue-900/10 rounded-lg p-4">
+      <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
         <div className="flex items-center space-x-2 mb-3">
-          <Server className="h-5 w-5 text-blue-500" />
-          <h3 className="font-medium text-blue-700 dark:text-blue-300">Database Structure</h3>
+          <Server className="h-5 w-5 text-green-600 dark:text-green-400" />
+          <h3 className="font-medium text-green-700 dark:text-green-300">Database Structure</h3>
         </div>
-        <EnhancedMarkdown content={content} />
+        <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold text-gray-800 dark:text-gray-200">
+          <EnhancedMarkdown content={content} />
+        </div>
       </div>
     </div>
   );
@@ -684,30 +790,35 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
   const { mainContent, thinking } = extractContent(section.content);
   const { cleanContent, codeBlocks } = extractCodeBlocks(mainContent);
   
-  const isSqlContent = section.content.includes('SELECT') || section.content.includes('sqlite_master');
+  // Determine if content contains SQL-related information
+  const isSqlQuery = section.content.includes('SELECT') && section.content.includes('FROM');
+  const isSqlResults = section.content.includes('Results for query:');
   const isDatabaseExplanation = section.agentName === "SQL Generator" || 
-                                section.content.includes('database schema') || 
-                                (section.content.includes('table') && section.content.includes('column'));
+                               section.content.includes('database schema') || 
+                               (section.content.includes('table') && section.content.includes('column'));
 
   // Assign type if not already specified
   const sectionType = section.type || 
-                      (isSqlContent ? 'sql' : 
-                       isDatabaseExplanation ? 'explanation' : 
-                       section.agentName === "Analysis Summary" ? 'summary' : 
-                       section.agentName === "Generated Code" ? 'code' : 
-                       'default');
+                     (isSqlQuery ? 'sql' : 
+                      isSqlResults ? 'sql-results' :
+                      isDatabaseExplanation ? 'explanation' : 
+                      section.agentName === "Analysis Summary" ? 'summary' : 
+                      section.agentName === "Generated Code" ? 'code' : 
+                      'default');
 
   // Get background color based on section type
   const getBgColor = () => {
     switch(sectionType) {
       case 'sql':
-        return 'bg-blue-50 dark:bg-blue-900/10';
+        return 'bg-blue-50 dark:bg-blue-900/20';
+      case 'sql-results':
+        return 'bg-blue-50 dark:bg-blue-900/20';
       case 'explanation':
-        return 'bg-green-50 dark:bg-green-900/10';
+        return 'bg-green-50 dark:bg-green-900/20';
       case 'summary':
-        return 'bg-purple-50 dark:bg-purple-900/10';
+        return 'bg-purple-50 dark:bg-purple-900/20';
       case 'code':
-        return 'bg-amber-50 dark:bg-amber-900/10';
+        return 'bg-amber-50 dark:bg-amber-900/20';
       default:
         return 'bg-gray-50 dark:bg-gray-800';
     }
@@ -727,10 +838,13 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
             <div className="flex items-center text-xs text-muted-foreground mt-0.5">
               {/* <span>{section.modelName}</span> */}
               {sectionType === 'sql' && (
-                <Badge variant="outline" className="ml-2 py-0 h-5">SQL</Badge>
+                <Badge variant="outline" className="ml-2 py-0 h-5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">SQL</Badge>
+              )}
+              {sectionType === 'sql-results' && (
+                <Badge variant="outline" className="ml-2 py-0 h-5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">Results</Badge>
               )}
               {sectionType === 'explanation' && (
-                <Badge variant="outline" className="ml-2 py-0 h-5 bg-green-50">Schema</Badge>
+                <Badge variant="outline" className="ml-2 py-0 h-5 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300">Schema</Badge>
               )}
               {thinking && (
                 <Badge variant="outline" className="ml-2 py-0 h-5">
@@ -745,7 +859,9 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
       </CollapsibleTrigger>
       <CollapsibleContent className={`p-4 ${getBgColor()} border-t`}>
         {sectionType === 'sql' ? (
-          <SqlCode sql={mainContent} />
+          <SqlCode sql={isSqlQuery ? extractSqlQuery(mainContent) : mainContent} />
+        ) : sectionType === 'sql-results' ? (
+          <SqlResults content={mainContent} />
         ) : sectionType === 'explanation' ? (
           <DatabaseSchemaExplanation content={mainContent} />
         ) : (
@@ -760,8 +876,8 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
               <div className="space-y-3">
                 {codeBlocks.map((block, index) => (
                   <div key={index} className="rounded-md overflow-hidden border border-gray-200 dark:border-gray-700">
-                    <div className="bg-gray-100 dark:bg-gray-800 px-4 py-1 text-xs font-mono flex justify-between items-center">
-                      <span className="text-gray-500 dark:text-gray-400">
+                    <div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 text-xs font-mono flex justify-between items-center">
+                      <span className="text-gray-700 dark:text-gray-300 font-medium">
                         {block.language || 'code'}
                       </span>
                       <button
@@ -801,8 +917,13 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
                     <SyntaxHighlighter 
                       language={block.language || 'plaintext'} 
                       style={nord}
-                      showLineNumbers={block.language === 'python' || block.language === 'javascript' || block.language === 'typescript'}
-                      customStyle={{ margin: 0 }}
+                      showLineNumbers={block.language === 'python' || block.language === 'javascript' || block.language === 'typescript' || block.language === 'sql'}
+                      customStyle={{ 
+                        margin: 0, 
+                        fontSize: '0.9rem',
+                        color: '#333333',
+                        fontWeight: 500
+                      }}
                     >
                       {block.code}
                     </SyntaxHighlighter>
@@ -818,6 +939,30 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
       </CollapsibleContent>
     </Collapsible>
   );
+};
+
+// Extract SQL query from content
+const extractSqlQuery = (content: string): string => {
+  // Try to extract SQL query from SELECT statement
+  const selectMatch = content.match(/SELECT[\s\S]*?FROM[\s\S]*?(;|$)/i);
+  if (selectMatch) {
+    return selectMatch[0].trim();
+  }
+  
+  // Try to extract from code block
+  const codeBlockMatch = content.match(/```sql\s*([\s\S]*?)\s*```/);
+  if (codeBlockMatch) {
+    return codeBlockMatch[1].trim();
+  }
+  
+  // Try to extract generated code section
+  const generatedCodeMatch = content.match(/Generated Code:([\s\S]*?)(?=>>|$)/);
+  if (generatedCodeMatch) {
+    return generatedCodeMatch[1].trim();
+  }
+  
+  // Fallback to the original content
+  return content;
 };
 
 // Visualization Gallery Component
@@ -914,29 +1059,6 @@ const parseAgentSections = (output: string): {
   const visualizationPaths: string[] = [];
   let match;
   
-  // Extract visualization paths from code more comprehensively
-  // Check for plt.savefig calls
-  const vizPathRegex = /plt\.savefig\(['"](\[visualization\][\/\\][^'"]+)['"]\)/g;
-  let vizMatch;
-  while ((vizMatch = vizPathRegex.exec(output)) !== null) {
-    const path = vizMatch[1].replace('[visualization]/', 'visualization/');
-    visualizationPaths.push(path);
-  }
-  
-  // Also look for file paths mentioned in the output
-  const vizFilePathRegex = /saved (?:to|as) ['"]?([^'"\s]+\.(?:png|jpg|jpeg|svg))['"]?/gi;
-  while ((vizMatch = vizFilePathRegex.exec(output)) !== null) {
-    const path = vizMatch[1];
-    const formattedPath = path.includes('visualization/') ? path : `visualization/${path.split('/').pop()}`;
-    visualizationPaths.push(formattedPath);
-  }
-  
-  // Check for explicit mentions of visualization files
-  const explicitVizRegex = /visualization\/[^'")\s]+\.(?:png|jpg|jpeg|svg)/g;
-  while ((vizMatch = explicitVizRegex.exec(output)) !== null) {
-    visualizationPaths.push(vizMatch[0]);
-  }
-  
   // Find all agent sections
   while ((match = agentRegex.exec(output)) !== null) {
     const modelName = match[1].trim();
@@ -944,7 +1066,7 @@ const parseAgentSections = (output: string): {
     let content = match[2].trim();
     let icon = <Bot className="h-5 w-5" />;
     let order = 100; // Default order (will be sorted later)
-    let type: 'sql' | 'code' | 'summary' | 'explanation' | 'default' = 'default';
+    let type: 'sql' | 'sql-results' | 'code' | 'summary' | 'explanation' | 'default' = 'default';
     
     // Extract agent name from the content and assign order
     if (content.includes("Selecting the expert")) {
@@ -963,7 +1085,13 @@ const parseAgentSections = (output: string): {
       agentName = "Code Generator";
       icon = <Code className="h-5 w-5 text-green-500" />;
       order = 5;
-      type = 'code';
+      
+      // Check if this is SQL code generator
+      if (content.includes("SELECT") && content.includes("FROM")) {
+        type = 'sql';
+      } else {
+        type = 'code';
+      }
     } else if (content.includes("reviewing and debugging")) {
       agentName = "Code Debugger";
       icon = <Terminal className="h-5 w-5 text-red-500" />;
@@ -978,22 +1106,18 @@ const parseAgentSections = (output: string): {
       icon = <Database className="h-5 w-5 text-blue-500" />;
       type = 'explanation';
       order = 2;
-    } else if (content.startsWith("{")) {
-      // JSON response - could be Expert or Analyst selector
-      if (content.includes("expert")) {
-        agentName = "Expert Selector Response";
-        icon = <Search className="h-5 w-5 text-blue-500" />;
-        order = 1;
-      } else if (content.includes("analyst")) {
-        agentName = "Analyst Selector Response";
-        icon = <Zap className="h-5 w-5 text-yellow-500" />;
-        order = 2;
-      }
     }
     
-    // Handle SQL content
-    if (content.includes("SELECT") && content.includes("FROM")) {
-      type = 'sql';
+    // Handle SQL-specific content
+    if (content.includes("Results for query:")) {
+      type = 'sql-results';
+      agentName = "SQL Results";
+      icon = <Table className="h-5 w-5 text-blue-500" />;
+      order = 6;
+    } else if (content.includes("SELECT") && content.includes("FROM")) {
+      if (type !== 'explanation') {  // Don't override explanation type
+        type = 'sql';
+      }
     }
     
     sections.push({
@@ -1007,53 +1131,59 @@ const parseAgentSections = (output: string): {
   }
   
   // Look for summary section
-  const summaryRegex = /I now have the final answer:([\s\S]*?)(?=Here is the final code|$)/;
+  const summaryRegex = /I now have the final answer:([\s\S]*?)(?=Here is the final code|Chain Summary|$)/;
   const summaryMatch = summaryRegex.exec(output);
   if (summaryMatch) {
-    sections.push({
-      agentName: "Analysis Summary",
-      modelName: "InsightAI",
-      content: summaryMatch[1].trim(),
-      icon: <Sparkles className="h-5 w-5 text-purple-500" />,
-      order: 4,
-      type: 'summary'
-    });
+    // Check if it's a SQL result
+    const summaryContent = summaryMatch[1].trim();
+    
+    if (summaryContent.includes("Results for query:")) {
+      sections.push({
+        agentName: "SQL Results",
+        modelName: "Database",
+        content: summaryContent,
+        icon: <Table className="h-5 w-5 text-blue-500" />,
+        order: 6,
+        type: 'sql-results'
+      });
+    } else {
+      sections.push({
+        agentName: "Analysis Summary",
+        modelName: "InsightAI",
+        content: summaryContent,
+        icon: <Sparkles className="h-5 w-5 text-purple-500" />,
+        order: 6,
+        type: 'summary'
+      });
+    }
   }
   
-  // Look for final code section
+  // Look for final code section - special handling for SQL
   const codeRegex = /Here is the final code that accomplishes the task:([\s\S]*?)(?=Chain Summary|$)/;
   const codeMatch = codeRegex.exec(output);
   if (codeMatch) {
     const codeContent = codeMatch[1].trim();
-    sections.push({
-      agentName: "Generated Code",
-      modelName: "InsightAI",
-      content: "```python\n" + codeContent + "\n```",
-      icon: <Code className="h-5 w-5 text-green-500" />,
-      order: 8,
-      type: 'code'
-    });
     
-    // Extract additional visualization paths from the code section
-    const vizPathRegex = /['"](visualization\/[^'"]+)['"]/g;
-    let vizMatch;
-    while ((vizMatch = vizPathRegex.exec(codeContent)) !== null) {
-      visualizationPaths.push(vizMatch[1]);
+    // Check if this is SQL code
+    if (codeContent.includes("SELECT") && codeContent.includes("FROM")) {
+      sections.push({
+        agentName: "SQL Query",
+        modelName: "InsightAI",
+        content: codeContent,
+        icon: <Database className="h-5 w-5 text-blue-500" />,
+        order: 4,
+        type: 'sql'
+      });
+    } else {
+      sections.push({
+        agentName: "Generated Code",
+        modelName: "InsightAI",
+        content: "```python\n" + codeContent + "\n```",
+        icon: <Code className="h-5 w-5 text-green-500" />,
+        order: 8,
+        type: 'code'
+      });
     }
-  }
-  
-  // Look for SQL result section
-  const sqlResultRegex = /Results for query:([\s\S]*?)(?=Chain Summary|$)/;
-  const sqlResultMatch = sqlResultRegex.exec(output);
-  if (sqlResultMatch) {
-    sections.push({
-      agentName: "SQL Results",
-      modelName: "Database",
-      content: sqlResultMatch[1].trim(),
-      icon: <Table className="h-5 w-5 text-green-500" />,
-      order: 5,
-      type: 'explanation'
-    });
   }
   
   // Look for chain summary
@@ -1070,10 +1200,7 @@ const parseAgentSections = (output: string): {
     });
   }
   
-  // Remove duplicate visualization paths
-  const uniqueVisualizationPaths = [...new Set(visualizationPaths)];
-  
-  return { sections, visualizationPaths: uniqueVisualizationPaths };
+  return { sections, visualizationPaths: visualizationPaths };
 };
 
 // Function to fix image paths in markdown content
