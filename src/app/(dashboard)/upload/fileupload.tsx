@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import axios from 'axios';
-import { X, Upload, Loader2 } from 'lucide-react';
+import { X, Upload, Loader2, FileJson, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
@@ -127,7 +127,26 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
     }
   };
 
-  const allowedFileTypes = ".csv,.xlsx,.xls,.db,.txt,.tsv,.pdf,.xml,.docx,.doc";
+  // Updated to include JSON and XML
+  const allowedFileTypes = ".csv,.xlsx,.xls,.db,.txt,.tsv,.pdf,.xml,.docx,.doc,.json";
+  
+  // Helper function to get the appropriate icon for each file type
+  const getFileIcon = (fileName: string) => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    
+    switch (extension) {
+      case 'json':
+        return <FileJson className="w-5 h-5 text-blue-500" />;
+      case 'xml':
+        return <FileText className="w-5 h-5 text-orange-500" />;
+      default:
+        return (
+          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+            <span className="text-green-600 text-xl">✓</span>
+          </div>
+        );
+    }
+  };
 
   const uploadContent = (
     <div className="p-4 bg-white rounded-lg">
@@ -146,7 +165,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
             <div className="flex flex-col items-center">
               <Upload className="w-12 h-12 text-gray-400 mb-2" />
               <p className="text-sm text-gray-600">Drag & Drop or Choose files to upload</p>
-              <p className="text-xs text-gray-400 mt-1">CSV, XLSX, DB, TXT, TSV, PDF, XML</p>
+              <p className="text-xs text-gray-400 mt-1">CSV, XLSX, DB, TXT, TSV, PDF, XML, JSON</p>
             </div>
           </label>
         </div>
@@ -156,10 +175,8 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, triggerButton 
             <div key={index} className="bg-gray-100 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                    <span className="text-green-600 text-xl">✓</span>
-                  </div>
-                  <span className="text-sm font-medium">{file.name}</span>
+                  {getFileIcon(file.name)}
+                  <span className="text-sm font-medium ml-3">{file.name}</span>
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => handleFileRemove(index)}>
                   <X className="w-4 h-4" />

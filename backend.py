@@ -71,6 +71,312 @@ load_dotenv()
 DB_STORAGE_DIR = os.path.join('static', 'databases')
 os.makedirs(DB_STORAGE_DIR, exist_ok=True)
 
+def handle_json_upload(file, user_id, filename, c, conn):
+    """
+    Handle JSON file upload by:
+    1. Saving the file to a json_file folder
+    2. Reading using pd.read_json
+    3. Normalizing nested structures
+    4. Storing in structured database tables
+    
+    Returns the file_id of the new entry.
+    """
+    try:
+        # Create json_file directory if it doesn't exist
+        json_file_dir = os.path.join('json_file')
+        os.makedirs(json_file_dir, exist_ok=True)
+        
+        # Generate a unique key for this file
+        unique_key = str(uuid.uuid4())
+        
+        # Create unique filename to avoid collisions
+        file_extension = os.path.splitext(filename)[1]
+        if not file_extension:
+            file_extension = '.json'  # Default to .json if no extension
+        unique_filename = f"{unique_key}{file_extension}"
+        file_path = os.path.join(json_file_dir, unique_filename)
+        
+        # Save the uploaded file to disk
+        file_content = file.read()
+        try:
+            # Try to decode as UTF-8 to check if it's text content
+            content_str = file_content.decode('utf-8')
+            # If it's text, write it as text
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content_str)
+        except UnicodeDecodeError:
+            # If it's binary, write it as binary
+            with open(file_path, 'wb') as f:
+                f.write(file_content)
+        
+        # Reset file pointer for potential fallback use
+        file.seek(0)
+        
+        # Try to parse the JSON to validate it
+        df = None
+        try:
+            # Try multiple approaches for reading the JSON file
+            
+            # Approach 1: Use pandas read_json directly
+            try:
+                df = pd.read_json(file_path)
+                app.logger.info(f"Successfully read JSON file with pd.read_json: {filename}")
+            except Exception as pd_error:
+                app.logger.warning(f"pd.read_json failed: {str(pd_error)}")
+                
+                # Approach 2: Load file with json.load and normalize
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as json_file:
+                        json_data = json.load(json_file)
+                    
+                    # Check JSON structure and normalize accordingly
+                    if isinstance(json_data, list) and len(json_data) > 0 and isinstance(json_data[0], dict):
+                        app.logger.info(f"Processing JSON array with {len(json_data)} items")
+                        # Array of objects - normalize directly
+                        df = pd.json_normalize(json_data)
+                        app.logger.info(f"Successfully normalized JSON array of {len(json_data)} objects")
+                    
+                    elif isinstance(json_data, dict):
+                        app.logger.info(f"Processing JSON object with {len(json_data.keys())} keys")
+                        
+                        # Look for nested arrays of objects to normalize
+                        array_found = False
+                        for key, value in json_data.items():
+                            if isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
+                                app.logger.info(f"Found array of objects in key: {key} with {len(value)} items")
+                                # Normalize with record_path for nested array
+                                df = pd.json_normalize(json_data, record_path=key)
+                                array_found = True
+                                app.logger.info(f"Successfully normalized nested array in key: {key}")
+                                break
+                        
+                        # If no nested arrays or normalization failed, normalize the whole object
+                        if not array_found:
+                            app.logger.info("Normalizing single JSON object")
+                            df = pd.json_normalize([json_data])
+                            app.logger.info("Successfully normalized single JSON object")
+                    
+                    else:
+                        app.logger.warning(f"Unsupported JSON structure for normalization")
+                        df = None
+                
+                except Exception as json_error:
+                    app.logger.error(f"Error parsing JSON file with json.load: {str(json_error)}")
+                    df = None
+            
+            # If all approaches failed, fall back to unstructured storage
+            if df is None or df.empty:
+                app.logger.warning("Could not convert JSON to structured DataFrame")
+                return handle_unstructured_upload(file, user_id, filename, c, conn, 'json', content=file_content)
+            
+            # Log successful data frame creation
+            app.logger.info(f"Successfully created DataFrame with {len(df)} rows and {len(df.columns)} columns")
+            
+            # Clean up column names by replacing dots and special characters
+            df.columns = [col.replace('.', '_').replace('[', '_').replace(']', '_') for col in df.columns]
+            
+            # Create a table name for this data
+            table_name = f"table_{unique_key}"
+            
+            # Store data in the table (handle potential SQLite limitations with large JSON)
+            try:
+                app.logger.info(f"Saving DataFrame to SQL table: {table_name}")
+                df.to_sql(table_name, conn, if_exists='replace', index=False)
+                app.logger.info(f"Successfully saved DataFrame to SQL table: {table_name}")
+            except Exception as sql_error:
+                app.logger.error(f"Error saving to SQL: {str(sql_error)}")
+                # If to_sql fails, try to handle common issues (like NaN values)
+                app.logger.info("Handling potential data type issues")
+                df = df.fillna('')
+                # Convert all columns to string to avoid type issues
+                df = df.astype(str)
+                app.logger.info("Saving DataFrame with string conversion")
+                df.to_sql(table_name, conn, if_exists='replace', index=False)
+            
+            # Insert metadata into 'user_files'
+            app.logger.info(f"Inserting metadata into user_files table")
+            c.execute("""
+                INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, filename, 'json', True, unique_key))
+            file_id = c.lastrowid
+            
+            # Insert mapping into 'structured_file_storage' including file path
+            app.logger.info(f"Inserting mapping into structured_file_storage table")
+            c.execute("""
+                INSERT INTO structured_file_storage (unique_key, file_id, table_name)
+                VALUES (?, ?, ?)
+            """, (unique_key, file_id, table_name))
+            
+            # Create and update json_file_paths table to track physical files
+            try:
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS json_file_paths (
+                        file_id INTEGER PRIMARY KEY,
+                        unique_key TEXT,
+                        file_path TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                c.execute("""
+                    INSERT INTO json_file_paths (file_id, unique_key, file_path)
+                    VALUES (?, ?, ?)
+                """, (file_id, unique_key, file_path))
+                app.logger.info(f"Saved file path in json_file_paths table: {file_path}")
+            except Exception as table_error:
+                app.logger.error(f"Error with json_file_paths table: {str(table_error)}")
+            
+            conn.commit()
+            app.logger.info(f"Successfully processed JSON file: {filename}")
+            return file_id, unique_key, table_name
+            
+        except Exception as e:
+            app.logger.error(f"Failed to process JSON file: {str(e)}")
+            traceback.print_exc()
+            # If structured handling fails, try unstructured
+            return handle_unstructured_upload(file, user_id, filename, c, conn, 'json', content=file_content)
+        
+    except Exception as e:
+        app.logger.error(f"Error handling JSON upload: {str(e)}")
+        traceback.print_exc()
+        # If overall processing fails, try unstructured
+        return handle_unstructured_upload(file, user_id, filename, c, conn, 'json')
+        
+def handle_xml_upload(file, user_id, filename, c, conn):
+    """
+    Handle XML file upload, trying to convert to structured data if possible.
+    If conversion fails, stores as unstructured text.
+    Returns the file_id of the new entry.
+    """
+    try:
+        import xml.etree.ElementTree as ET
+        
+        # Try to parse the XML
+        file_content = file.read()
+        
+        # Make a copy of the content for potential unstructured storage
+        content_copy = file_content
+        
+        # Reset file pointer to beginning
+        file.seek(0)
+        
+        # Parse the XML
+        tree = ET.parse(file)
+        root = tree.getroot()
+        
+        # Check if XML is regular and can be converted to DataFrame
+        # Look for repeating elements with similar structure
+        children = list(root)
+        
+        # If there are no children or only one child, treat as unstructured
+        if len(children) <= 1:
+            return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml', content=content_copy)
+        
+        # Check if children have similar structure (same tag or similar attributes)
+        first_child_tag = children[0].tag
+        if not all(child.tag == first_child_tag for child in children):
+            # Children have different tags, treat as unstructured
+            return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml', content=content_copy)
+        
+        # Try to convert to structured data
+        try:
+            # Extract data from similar elements
+            data = []
+            
+            for child in children:
+                item = {}
+                # Add attributes
+                for key, value in child.attrib.items():
+                    item[key] = value
+                
+                # Add text content if element has no children
+                if len(list(child)) == 0 and child.text and child.text.strip():
+                    item['text'] = child.text.strip()
+                
+                # Add child elements
+                for subchild in child:
+                    # Use tag as key, text as value
+                    if subchild.text and subchild.text.strip():
+                        item[subchild.tag] = subchild.text.strip()
+                    # If subchild has attributes but no text, use attributes
+                    elif subchild.attrib:
+                        for attr_key, attr_val in subchild.attrib.items():
+                            item[f"{subchild.tag}_{attr_key}"] = attr_val
+                
+                data.append(item)
+            
+            # Convert to DataFrame
+            df = pd.DataFrame(data)
+            
+            # If DataFrame is empty or has no columns, treat as unstructured
+            if df.empty or len(df.columns) == 0:
+                return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml', content=content_copy)
+            
+            # Generate a unique key for this file
+            unique_key = str(uuid.uuid4())
+            
+            # Create a table name for this data
+            table_name = f"table_{unique_key}"
+            
+            # Store data in the table
+            df.to_sql(table_name, conn, if_exists='replace', index=False)
+            
+            # Insert metadata into 'user_files'
+            c.execute("""
+                INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, filename, 'xml', True, unique_key))
+            file_id = c.lastrowid
+            
+            # Insert mapping into 'structured_file_storage'
+            c.execute("""
+                INSERT INTO structured_file_storage (unique_key, file_id, table_name)
+                VALUES (?, ?, ?)
+            """, (unique_key, file_id, table_name))
+            
+            conn.commit()
+            return file_id, unique_key, table_name
+            
+        except Exception as e:
+            app.logger.error(f"Failed to convert XML to DataFrame: {str(e)}")
+            return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml', content=content_copy)
+            
+    except Exception as e:
+        app.logger.error(f"Error handling XML upload: {str(e)}")
+        traceback.print_exc()
+        return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml')
+
+def handle_unstructured_upload(file, user_id, filename, c, conn, file_type, content=None):
+    """Helper function to handle unstructured file storage"""
+    try:
+        unique_key = str(uuid.uuid4())
+        
+        # Read content if not provided
+        if content is None:
+            content = file.read()
+        
+        # Insert metadata into 'user_files'
+        c.execute("""
+            INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, filename, file_type, False, unique_key))
+        file_id = c.lastrowid
+
+        # Insert the content into 'unstructured_file_storage'
+        c.execute("""
+            INSERT INTO unstructured_file_storage (file_id, unique_key, content)
+            VALUES (?, ?, ?)
+        """, (file_id, unique_key, content))
+        
+        conn.commit()
+        app.logger.info(f"Stored {file_type} as unstructured content")
+        return file_id, unique_key, None
+    except Exception as e:
+        app.logger.error(f"Error in handle_unstructured_upload: {str(e)}")
+        traceback.print_exc()
+        raise
+
 ## Background worker implementation starts
 def process_statistics_task(task):
     """Process a statistics calculation task"""
@@ -1350,9 +1656,9 @@ def upload_file(user_id):
 
     filename = secure_filename(file.filename)# was not in earlier one
     extension = filename.split('.')[-1].lower()
-    
-    allowed_extensions = {'csv', 'xlsx', 'xls', 'db', 'txt', 'tsv', 'pdf', 'xml', 'docx', 'doc'}
-    structured_extensions = {'csv', 'xlsx', 'xls', 'db', 'tsv','sqlite','sqlite3'}
+
+    allowed_extensions = {'csv', 'xlsx', 'xls', 'db', 'txt', 'tsv', 'pdf', 'xml', 'docx', 'doc', 'json', 'sqlite', 'sqlite3'}
+    structured_extensions = {'csv', 'xlsx', 'xls', 'db', 'tsv', 'sqlite', 'sqlite3', 'json'}
     unstructured_extensions = {'txt', 'pdf', 'xml', 'docx', 'doc'}
     
     if extension not in allowed_extensions:
@@ -1402,6 +1708,13 @@ def upload_file(user_id):
                 #backgroud process
                 # process_table_statistics_background(unique_key, table_name)
                 task_id = create_stats_task(unique_key, table_name) # create bg task
+            elif extension == 'json':
+                # New handler for JSON files
+                file_id, unique_key, table_name = handle_json_upload(file, user_id, filename, c, conn)
+                if table_name:  # If successfully processed as structured
+                    task_id = create_stats_task(unique_key, table_name)
+                else:
+                    task_id = None
 
             conn.commit()
             
@@ -1409,7 +1722,7 @@ def upload_file(user_id):
                 'success': True,
                 'file_id': file_id,
                 'message': 'File uploaded successfully',
-                'status_task_id': task_id
+                'status_task_id': task_id 
             }), 200
         elif extension in unstructured_extensions:
             if extension =='pdf':
@@ -1435,6 +1748,11 @@ def upload_file(user_id):
                    (file_id, unique_key, content)
                    VALUES (?, ?, ?)
                """, (file_id, unique_key, processed_text))
+            elif extension == 'xml':
+                # Handle XML - try structured first, fall back to unstructured
+                file_id, unique_key, table_name = handle_xml_upload(file, user_id, filename, c, conn)
+                if table_name:  # If successfully processed as structured
+                    task_id = create_stats_task(unique_key, table_name)
             else:   
                 content = file.read()
                 unique_key = str(uuid.uuid4())
@@ -3407,11 +3725,9 @@ def handle_excel_upload(file, user_id, filename, c, conn):
     except Exception as e:
         app.logger.error(f"Error in handle_excel_upload: {str(e)}")
         raise
-
 @app.route('/get-file/<user_id>/<file_id>', methods=['GET'])
 def get_file(user_id, file_id):
-    
-    page = request.args.get('page',1,type=int)
+    page = request.args.get('page', 1, type=int)
     page_size = request.args.get('page_size', 50, type=int)
     conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
@@ -3419,7 +3735,7 @@ def get_file(user_id, file_id):
     try:
         # Get file metadata
         c.execute("""
-            SELECT filename, file_type, is_structured, unique_key, sheet_table,parent_file_id
+            SELECT filename, file_type, is_structured, unique_key, sheet_table, parent_file_id
             FROM user_files
             WHERE file_id = ? AND user_id = ?
         """, (file_id, user_id))
@@ -3430,10 +3746,10 @@ def get_file(user_id, file_id):
         if not file_info:
             return jsonify({'error': 'File not found'}), 404
             
-        filename, file_type, is_structured, unique_key,sheet_table, parent_file_id = file_info
-
+        filename, file_type, is_structured, unique_key, sheet_table, parent_file_id = file_info
+        
+        # Handle parent files (Excel workbooks or DB files)
         if is_structured:
-            # Handle parent files (Excel workbooks or DB files)
             if parent_file_id is None and file_type in ['xlsx', 'xls', 'db', 'sqlite', 'sqlite3']:
                 c.execute("""
                     SELECT file_id, sheet_table, filename
@@ -3441,10 +3757,10 @@ def get_file(user_id, file_id):
                     WHERE parent_file_id = ? AND user_id = ?
                     ORDER BY sheet_table
                 """, (file_id, user_id))
-
+                
                 sheets = c.fetchall()
                 app.logger.debug(f"Found child entries: {sheets}")
-
+                
                 return jsonify({
                     'type': 'structured',
                     'file_type': file_type,
@@ -3454,47 +3770,60 @@ def get_file(user_id, file_id):
                         'full_name': row[2]
                     } for row in sheets]
                 })
-
-
+                
             # Get the table name for this sheet/table
             table_name = f"table_{unique_key}"
             app.logger.debug(f"Looking for table: {table_name}")
-
+            
             # Verify table exists
             c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
             if not c.fetchone():
-                return jsonify({'error': f'Table not found: {table_name}'}), 404
-
+                # Try to locate via structured_file_storage if not found by naming convention
+                c.execute("""
+                    SELECT table_name 
+                    FROM structured_file_storage 
+                    WHERE unique_key = ? OR file_id = ?
+                """, (unique_key, file_id))
+                
+                storage_result = c.fetchone()
+                if storage_result and storage_result[0]:
+                    table_name = storage_result[0]
+                    app.logger.info(f"Found table name in storage: {table_name}")
+                else:
+                    return jsonify({'error': f'Table not found: {table_name}'}), 404
+            
             # Get pagination parameters
-            page = request.args.get('page', 1, type=int)
-            page_size = request.args.get('page_size', 50, type=int)
             offset = (page - 1) * page_size
-
+            
             # Get total rows
             c.execute(f"SELECT COUNT(*) FROM '{table_name}'")
             total_rows = c.fetchone()[0]
-
+            
             # Get columns
             c.execute(f"PRAGMA table_info('{table_name}')")
             columns = [col[1] for col in c.fetchall()]
-
+            
             # Get paginated data
             c.execute(f"""
                 SELECT * FROM '{table_name}'
                 LIMIT ? OFFSET ?
             """, (page_size, offset))
-
+            
             rows = c.fetchall()
             app.logger.debug(f"Retrieved {len(rows)} rows from {table_name}")
-
+            
             # Convert to list of dictionaries
             data = []
             for row in rows:
                 row_dict = {}
                 for i, value in enumerate(row):
-                    row_dict[columns[i]] = value
+                    # Convert None to empty string for better display
+                    if value is None:
+                        row_dict[columns[i]] = ""
+                    else:
+                        row_dict[columns[i]] = value
                 data.append(row_dict)
-
+            
             return jsonify({
                 'type': 'structured',
                 'file_type': file_type,
@@ -3507,20 +3836,57 @@ def get_file(user_id, file_id):
                     'total_pages': (total_rows + page_size - 1) // page_size
                 }
             })
-
-        else: #unstructered data
+        else:  # unstructured data
             c.execute("""
-                 SELECT content FROM unstructured_file_storage
-                 WHERE file_id = ? AND unique_key = ?
-             """, (file_id, unique_key))
-            result = c.fetchone()
+                SELECT content FROM unstructured_file_storage
+                WHERE file_id = ? AND unique_key = ?
+            """, (file_id, unique_key))
             
+            result = c.fetchone()
             if not result:
                 return jsonify({'error': 'Unstructured data not found'}), 404
                 
             content = result[0]
-
-            if file_type in ['txt', 'docx', 'doc']:
+            
+            # Special handling for JSON files
+            if file_type == 'json':
+                try:
+                    # Try to parse and pretty-print the JSON
+                    if isinstance(content, bytes):
+                        content_str = content.decode('utf-8')
+                    else:
+                        content_str = content
+                    
+                    # Parse and pretty-print
+                    json_obj = json.loads(content_str)
+                    formatted_content = json.dumps(json_obj, indent=2)
+                    
+                    return jsonify({
+                        'type': 'unstructured',
+                        'file_type': file_type,
+                        'content': formatted_content,
+                        'editable': True,
+                        'is_valid_json': True
+                    })
+                except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                    app.logger.warning(f"Invalid JSON content: {str(e)}")
+                    # Return original content with warning flag
+                    if isinstance(content, bytes):
+                        try:
+                            decoded_content = content.decode('utf-8')
+                        except UnicodeDecodeError:
+                            decoded_content = content.decode('latin1')
+                    else:
+                        decoded_content = content
+                    
+                    return jsonify({
+                        'type': 'unstructured',
+                        'file_type': file_type,
+                        'content': decoded_content,
+                        'editable': True,
+                        'is_valid_json': False
+                    })
+            elif file_type in ['txt', 'docx', 'doc']:
                 try:
                     decoded_content = content.decode('utf-8')
                 except UnicodeDecodeError:
@@ -3533,31 +3899,40 @@ def get_file(user_id, file_id):
                     'editable': True
                 }
             elif file_type == 'pdf':
-                c.execute("""
-                SELECT content FROM unstructured_file_storage
-                WHERE file_id = ? AND unique_key = ?
-                """, (file_id, unique_key))
-            
-                result = c.fetchone()
-                if not result:
-                    return jsonify({'error': 'PDF content not found'}), 404
-
-                content = result[0]
-
-                # Content is already processed text, return directly
                 response_data = {
                     'type': 'unstructured',
                     'file_type': file_type,
                     'content': content,
                     'editable': True
                 }
-
-                return jsonify(response_data)
+            else:
+                # Default handler for other unstructured types
+                try:
+                    if isinstance(content, bytes):
+                        decoded_content = content.decode('utf-8')
+                    else:
+                        decoded_content = content
+                        
+                    response_data = {
+                        'type': 'unstructured',
+                        'file_type': file_type,
+                        'content': decoded_content,
+                        'editable': True
+                    }
+                except UnicodeDecodeError:
+                    # If text decoding fails, return a placeholder message
+                    response_data = {
+                        'type': 'unstructured',
+                        'file_type': file_type,
+                        'content': "Binary content cannot be displayed directly",
+                        'editable': False
+                    }
+            
+            return jsonify(response_data)
     except Exception as e:
         app.logger.error(f"Error retrieving file: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
-
     finally:
         conn.close()
 

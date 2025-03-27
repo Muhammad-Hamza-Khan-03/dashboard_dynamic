@@ -12,6 +12,7 @@ import { Loader2, PlusCircle, Edit, Save, Trash2, FileIcon, BarChart, RefreshCw,
 import axios from 'axios';
 import { FileData } from "@/features/sqlite/api/file-content";
 import useFilesList from "@/features/sqlite/api/file-list";
+import { FileJson, FileText } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -124,7 +125,7 @@ const DataTablePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<{ file_id: string, filename: string } | null>(null);
   const dataRef = useRef<DataItem[]>([]);
-  const { user, isLoaded: isUserLoaded } = useUser();
+  const { user, } = useUser();
   const { fileList, error: fileListError, loading: fileListLoading, refetch: refetchFileList } = useFilesList(user?.id);
   const [filterkey, setFilterkey] = useState<string>(Date.now().toString());
  
@@ -156,13 +157,16 @@ const [activeColumn, setActiveColumn] = useState<string>('');
     value: any;
   } | null>(null);
 
-  
+  const updateData = useCallback((newData: DataItem[]) => {
+    setData(newData);
+    dataRef.current = newData;
+  },[]);
 
   useEffect(() => {
-    if (isUserLoaded && user && fileList && fileList.length > 0 && !selectedFile) {
+    if ( user && fileList && fileList.length > 0 && !selectedFile) {
       setSelectedFile({ file_id: fileList[0].file_id, filename: fileList[0].filename });
     }
-  }, [isUserLoaded, user, fileList, selectedFile]);
+  }, [user, fileList, selectedFile]);
 
   // Clear analysis modal state when file changes
   useEffect(() => {
@@ -200,10 +204,6 @@ const [activeColumn, setActiveColumn] = useState<string>('');
     setSelectedTable(null);
   };
 
-  const handleColumnAction = useCallback((column: string) => {
-    setActiveColumn(column);
-    setIsColumnManagementOpen(true);
-  }, []);
   
   const handleColumnsChange = useCallback((newColumns: ColumnDef<DataItem, any>[]) => {
     setColumns(newColumns);
@@ -220,6 +220,69 @@ const [activeColumn, setActiveColumn] = useState<string>('');
       refetchFileList();
     }
   }, [selectedFile, refetchFileList]);
+
+  // Update your generateColumns function to restore the row editing functionality
+  const generateColumns = useRef((columns: string[]): ColumnDef<DataItem, any>[] =>{
+  // Create column order if it doesn't exist
+  if (Object.keys(columnOrder).length === 0) {
+    const order: ColumnOrder = {};
+    columns.forEach((col, index) => {
+      order[col] = index;
+    });
+    setColumnOrder(order);
+  }
+
+  return columns.map(column => ({
+    accessorKey: column,
+    header: () => {
+      return (
+        <div className="flex items-center justify-between">
+          <span>{column}</span>
+          {/* Column management button moved here */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveColumn(column);
+              setIsColumnManagementOpen(true);
+            }}
+            className="opacity-70 hover:opacity-100"
+          >
+            <FilePlus className="h-4 w-4" />
+          </Button>
+        </div>
+      );
+    },
+    cell: ({ row }) => {
+      const value = row.getValue(column);
+      return (
+        <div className="flex items-center justify-between">
+          <span>{formatCellValue(value)}</span>
+          {/* Restore the original row editing functionality */}
+          <div className="flex space-x-1">
+          {/* Row editing button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEdit(row.index, column, formatCellValue(value));
+            }}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          
+      
+        </div>
+        </div>
+      );
+    }
+  }));
+  });
+  
+
+
 
   // Modify the fetchFileData function
 // Modify the fetchFileData function to handle sheet_name
@@ -240,7 +303,6 @@ const fetchFileData = useCallback(async (fileId: string, filename: string, page:
       page_size: '50'
     });
     
-    // Add sheet_name parameter if provided
     if (sheetName) {
       params.append('sheet_name', sheetName);
     }
@@ -256,6 +318,7 @@ const fetchFileData = useCallback(async (fileId: string, filename: string, page:
     }
 
     const fileData = response.data;
+    const isJsonFile = filename.toLowerCase().endsWith('.json');
 
     if (fileData.type === 'structured') {
       if (fileData.tables && fileData.tables.length > 0) {
@@ -283,19 +346,51 @@ const fetchFileData = useCallback(async (fileId: string, filename: string, page:
         
         if (tableResponse.data.data && tableResponse.data.columns) {
           updateData(tableResponse.data.data);
-          setColumns(generateColumns(tableResponse.data.columns));
+          setColumns(generateColumns.current(tableResponse.data.columns));
           setPaginationInfo(tableResponse.data.pagination || null);
         }
       } else if (fileData.data && fileData.columns) {
         // This is a regular structured file or a single table/sheet
+        console.log("Received structured data with", fileData.data.length, "rows");
         updateData(fileData.data);
-        setColumns(generateColumns(fileData.columns));
+        
+        // For JSON files, apply special styling to the columns if needed
+        const cols = generateColumns.current(fileData.columns);
+        setColumns(cols);
+        
         setPaginationInfo(fileData.pagination || null);
       }
       setUnstructuredContent('');
       setIsEditing(false);
+    }
+    else if (fileData.type === 'unstructured') {
+      // Unstructured file handling
+      updateData([]);
+      setColumns([]);
+      setPaginationInfo(null);
+      
+      if (isJsonFile) {
+        console.log("Received unstructured JSON content");
+        // JSON formatting is now handled by the backend
+        setUnstructuredContent(fileData.content || '');
+        setIsEditing(fileData.editable || false);
+        
+        // Add JSON/XML validation warnings
+        if ('is_valid_json' in fileData && !fileData.is_valid_json) {
+          toast({
+            title: "Warning",
+            description: "The JSON content appears to be invalid or malformed.",
+            variant: "destructive",
+            duration: 5000,
+          });
+        }
+      } else {
+        // Other unstructured file types
+        setUnstructuredContent(fileData.content || '');
+        setIsEditing(fileData.editable || false);
+      }
     } else {
-      // Unstructured file handling (unchanged)
+      // Fallback for unexpected file types
       updateData([]);
       setColumns([]);
       setPaginationInfo(null);
@@ -309,7 +404,7 @@ const fetchFileData = useCallback(async (fileId: string, filename: string, page:
   } finally {
     setLoading(false);
   }
-}, [user?.id, selectedTable]);
+}, [user?.id, updateData, toast]);
 
   useEffect(() => {
     const loadTableData = async () => {
@@ -408,13 +503,13 @@ const handleColumnChange = useCallback((
       description: `New column "${newColumn}" added successfully`,
     });
   }
-}, [columns, handleColumnsChange, selectedFile, fetchFileData, currentPage]);
+}, [columns, selectedFile, fetchFileData, currentPage,toast]);
 
   useEffect(() => {
-    if (isUserLoaded && user && selectedFile) {
+    if (user && selectedFile) {
       fetchFileData(selectedFile.file_id, selectedFile.filename);
     }
-  }, [isUserLoaded, user, selectedFile, fetchFileData]);
+  }, [user, selectedFile, fetchFileData]);
   useEffect(() => {
     if (selectedFile) {
       // Reset states when file selection changes
@@ -427,6 +522,7 @@ const handleColumnChange = useCallback((
       fetchFileData(selectedFile.file_id, selectedFile.filename);
     }
   }, [selectedFile, fetchFileData]);
+
   const fetchTableNames = useCallback(async (filename: string) => {
     if (!user?.id) {
       console.error("User ID not available");
@@ -461,71 +557,8 @@ const handleColumnChange = useCallback((
     }
   }, [selectedFile, fetchTableNames]);
 
-// Update your generateColumns function to restore the row editing functionality
-const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
-  // Create column order if it doesn't exist
-  if (Object.keys(columnOrder).length === 0) {
-    const order: ColumnOrder = {};
-    columns.forEach((col, index) => {
-      order[col] = index;
-    });
-    setColumnOrder(order);
-  }
 
-  return columns.map(column => ({
-    accessorKey: column,
-    header: () => {
-      return (
-        <div className="flex items-center justify-between">
-          <span>{column}</span>
-          {/* Column management button moved here */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveColumn(column);
-              setIsColumnManagementOpen(true);
-            }}
-            className="opacity-70 hover:opacity-100"
-          >
-            <FilePlus className="h-4 w-4" />
-          </Button>
-        </div>
-      );
-    },
-    cell: ({ row }) => {
-      const value = row.getValue(column);
-      return (
-        <div className="flex items-center justify-between">
-          <span>{formatCellValue(value)}</span>
-          {/* Restore the original row editing functionality */}
-          <div className="flex space-x-1">
-          {/* Row editing button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleEdit(row.index, column, formatCellValue(value));
-            }}
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-          
-      
-        </div>
-        </div>
-      );
-    }
-  }));
-};
   
-  const updateData = (newData: DataItem[]) => {
-    setData(newData);
-    dataRef.current = newData;
-  };
-
   const formatCellValue = (value: any): string => {
     if (value === null || value === undefined) {
       return '';
@@ -544,17 +577,39 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
         variant: "destructive",
       });
       return;
-    } setLoading(true);
+    }
+    
+    // Validate JSON content if it's a JSON file
+    if (selectedFile.filename.toLowerCase().endsWith('.json')) {
+      try {
+        JSON.parse(unstructuredContent);
+      } catch (error) {
+        toast({
+          title: "Invalid JSON",
+          description: "The content is not valid JSON. Please correct the syntax before saving.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    setLoading(true);
     try {
-      await axios.post(
+      const response = await axios.post(
         `http://localhost:5000/save-unstructured/${user.id}/${selectedFile.file_id}`,
         { content: unstructuredContent }
       );
-
+      
+      if (response.data.success === false) {
+        throw new Error(response.data.error || "Failed to save content");
+      }
+  
       toast({
         title: "Success",
         description: "File content updated successfully",
       });
+      
+      
     } catch (error) {
       console.error("Error saving unstructured content:", error);
       toast({
@@ -567,24 +622,122 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
     }
   };
 
+  //JSON and xml formatting
+  
+  // Function to format XML data for display
+  const formatXmlDisplay = (xmlContent: string): string => {
+    try {
+      // Basic indentation for XML - this is a simple approach
+      // A more complete formatter would use a proper XML parser
+      let formatted = '';
+      let indent = 0;
+      const lines = xmlContent.replace(/>\s*</g, '>\n<').split('\n');
+      
+      for (let line of lines) {
+        line = line.trim();
+        
+        if (line.match(/<\/[^>]+>/)) {
+          // Closing tag - decrease indent before printing
+          indent--;
+          formatted += ' '.repeat(indent * 2) + line + '\n';
+        } else if (line.match(/<[^>]+\/>/)) {
+          // Self-closing tag - no indent change
+          formatted += ' '.repeat(indent * 2) + line + '\n';
+        } else if (line.match(/<[^>]+>/)) {
+          // Opening tag - print then increase indent
+          formatted += ' '.repeat(indent * 2) + line + '\n';
+          if (!line.match(/<[^>]+><\/[^>]+>/)) {
+            indent++;
+          }
+        } else {
+          // Content - just print with current indent
+          formatted += ' '.repeat(indent * 2) + line + '\n';
+        }
+      }
+      
+      return formatted;
+    } catch (error) {
+      console.error("Error formatting XML:", error);
+      return xmlContent; // Return original content if formatting fails
+    }
+  };
+
   // Update the UI to include table selection when needed
 
   // Add this JSX for rendering unstructured content editor
   const renderUnstructuredContent = () => {
-    if (!isEditing) return null;
-
+    if (!unstructuredContent) return null;
+  
+    let contentClass = '';
+    let contentTitle = 'Edit Content';
+    let titleIcon = null;
+    let formattedContent = unstructuredContent;
+  
+    // Determine content type for styling and formatting
+    if (selectedFile?.filename.toLowerCase().endsWith('.json')) {
+      contentClass = 'font-mono text-sm bg-gray-50';
+      contentTitle = 'Edit JSON Content';
+      titleIcon = <FileJson className="h-5 w-5 text-blue-500 mr-2" />;
+      
+      // The backend should already have formatted the JSON,
+      // but we can try to format it again if it looks unformatted
+      if (!unstructuredContent.includes('\n')) {
+        try {
+          const jsonObj = JSON.parse(unstructuredContent);
+          formattedContent = JSON.stringify(jsonObj, null, 2);
+        } catch (e) {
+          console.warn("Failed to parse JSON for formatting:", e);
+          formattedContent = unstructuredContent;
+        }
+      }
+    } else if (selectedFile?.filename.toLowerCase().endsWith('.xml')) {
+      contentClass = 'font-mono text-sm bg-gray-50';
+      contentTitle = 'Edit XML Content';
+      titleIcon = <FileText className="h-5 w-5 text-orange-500 mr-2" />;
+      formattedContent = formatXmlDisplay(unstructuredContent);
+    }
+  
     return (
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Edit Content</CardTitle>
+          <CardTitle className="flex items-center">
+            {titleIcon}
+            {contentTitle}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <textarea
-            className="w-full h-96 p-4 border rounded-md"
-            value={unstructuredContent}
+            className={`w-full h-96 p-4 border rounded-md ${contentClass}`}
+            value={formattedContent}
             onChange={(e) => setUnstructuredContent(e.target.value)}
+            spellCheck={false}
+            wrap="off" // Better for code/JSON viewing
           />
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex justify-end space-x-2">
+            {selectedFile?.filename.toLowerCase().endsWith('.json') && (
+              <Button
+                onClick={() => {
+                  try {
+                    const parsed = JSON.parse(unstructuredContent);
+                    setUnstructuredContent(JSON.stringify(parsed, null, 2));
+                    toast({
+                      title: "Success",
+                      description: "JSON formatted successfully",
+                    });
+                  } catch (e) {
+                    toast({
+                      title: "Error",
+                      description: "Invalid JSON: Cannot format",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                variant="outline"
+                className="text-blue-600"
+              >
+                Format JSON
+              </Button>
+            )}
             <Button
               onClick={handleSaveUnstructured}
               disabled={loading}
@@ -639,12 +792,12 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
 
 
   // Add pagination handling function
-  const handlePageChange = (newPage: number) => {
+  const handlePageChange = useCallback((newPage: number) => {
     setCurrentPage(newPage);
     if (selectedFile) {
       fetchFileData(selectedFile.file_id, selectedFile.filename, newPage);
     }
-  };
+  }, [selectedFile, fetchFileData]);
   // Update these functions in your page.tsx
 
   useEffect(() => {
@@ -921,15 +1074,7 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
       setSelectedFile(null);
     }
   }, [refetchFileList, selectedFile]);
-// Show loading state while authenticating
-  if (!isUserLoaded) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">Loading user data...</span>
-      </div>
-    );
-  }
+
 
   if (!user) {
     return (
@@ -980,7 +1125,9 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
               fileList={fileList || []}
               onDeleteSuccess={handleDeleteSuccess}
             />
+            
           </div>
+          
         </CardHeader>
 
         <CardContent className="p-6 bg-white">
@@ -1046,7 +1193,8 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
                 </div>
               )}
             </div>
-          ) : (
+          ) :(
+            
             <div className="flex flex-col items-center justify-center py-12 text-gray-500">
               <FileIcon className="h-12 w-12 mb-4 text-gray-400" />
               <p className="text-sm font-medium mb-2">No files available</p>
@@ -1068,6 +1216,7 @@ const generateColumns = (columns: string[]): ColumnDef<DataItem, any>[] => {
               Create New
             </Button>
 
+           
             {/* Action Buttons - Consistent black theme */}
             {/* {columns.length > 0 && (
               <SplitDialog
