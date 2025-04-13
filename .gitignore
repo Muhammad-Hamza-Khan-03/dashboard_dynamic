@@ -85,3 +85,4 @@ static/
 visualization/
 data_analysis*.md
 stats.db
+backend-util-files/.env
