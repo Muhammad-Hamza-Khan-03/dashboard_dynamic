@@ -50,7 +50,9 @@ import {
   Lightbulb,
   Info,
   Server,
-  Brain
+  Brain,
+  FileJson,
+  FileCode
 } from 'lucide-react';
 
 // UI components
@@ -161,7 +163,7 @@ interface AgentSection {
   content: string;
   icon: React.ReactNode;
   order: number;
-  type?: 'sql' | 'code' | 'summary' | 'explanation' | 'default';
+  type?: 'sql' | 'code' | 'summary' | 'explanation' | 'default' | 'sql-results';
   thinking?: string;
 }
 
@@ -382,7 +384,7 @@ const EnhancedMarkdown: React.FC<{ content: string }> = ({ content }) => {
           ),
           
           // Enhanced code block rendering
-          code: ({ node, inline, className, children, ...props }) => {
+          code: ({ node, inline, className, children, ...props }: any) => {
             const match = /language-(\w+)/.exec(className || '');
             const language = match ? match[1] : '';
             
@@ -1257,7 +1259,8 @@ const FileSelector: React.FC<{
         const response = await axios.get(`http://localhost:5000/list_files/${userId}`);
         setFiles(response.data.files.filter((f: ExistingFile) => 
           f.file_type === 'csv' || f.file_type === 'db' || 
-          f.file_type === 'sqlite' || f.file_type === 'sqlite3'
+          f.file_type === 'sqlite' || f.file_type === 'sqlite3' || 
+          f.file_type === 'json' || f.file_type === 'xml'
         ));
       } catch (err: any) {
         console.error('Error fetching files:', err);
@@ -1279,8 +1282,8 @@ const FileSelector: React.FC<{
     const fileType = file.name.split('.').pop()?.toLowerCase();
     
     // Check if file type is supported
-    if (!['csv', 'db', 'sqlite', 'sqlite3'].includes(fileType || '')) {
-      setError('Unsupported file type. Please upload CSV or SQLite database files.');
+    if (!['csv', 'db', 'sqlite', 'sqlite3', 'json', 'xml'].includes(fileType || '')) {
+      setError('Unsupported file type. Please upload CSV, JSON, XML, or SQLite database files.');
       return;
     }
     
@@ -1314,7 +1317,8 @@ const FileSelector: React.FC<{
         const filesResponse = await axios.get(`http://localhost:5000/list_files/${userId}`);
         setFiles(filesResponse.data.files.filter((f: ExistingFile) => 
           f.file_type === 'csv' || f.file_type === 'db' || 
-          f.file_type === 'sqlite' || f.file_type === 'sqlite3'
+          f.file_type === 'sqlite' || f.file_type === 'sqlite3' || 
+          f.file_type === 'json' || f.file_type === 'xml'
         ));
         
         // Select the newly uploaded file
@@ -1340,6 +1344,23 @@ const FileSelector: React.FC<{
     }
   };
 
+  function getFileIcon(file_type: string): React.ReactNode {
+    switch(file_type.toLowerCase()) {
+      case 'csv':
+        return <FileText className="h-4 w-4 mr-2 text-blue-500" />;
+      case 'json':
+        return <FileJson className="h-4 w-4 mr-2 text-orange-500" />;
+      case 'xml':
+        return <FileCode className="h-4 w-4 mr-2 text-green-500" />;
+      case 'db':
+      case 'sqlite':
+      case 'sqlite3':
+        return <Database className="h-4 w-4 mr-2 text-purple-500" />;
+      default:
+        return <FileText className="h-4 w-4 mr-2 text-gray-500" />;
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -1355,12 +1376,12 @@ const FileSelector: React.FC<{
           
           <TabsContent value="upload" className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="file-upload">Upload CSV or Database File</Label>
+              <Label htmlFor="file-upload">Upload CSV, JSON, XML, or Database File</Label>
               <div className="grid w-full max-w-sm items-center gap-1.5">
                 <Input
                   id="file-upload"
                   type="file"
-                  accept=".csv,.db,.sqlite,.sqlite3"
+                  accept=".csv,.db,.sqlite,.sqlite3,.json,.xml"
                   onChange={handleFileUpload}
                   disabled={uploadingFile}
                 />
@@ -1400,11 +1421,7 @@ const FileSelector: React.FC<{
                   {files.map((file) => (
                     <SelectItem key={file.file_id} value={file.file_id.toString()}>
                       <div className="flex items-center">
-                        {file.file_type === 'csv' ? (
-                          <FileText className="h-4 w-4 mr-2" />
-                        ) : (
-                          <Database className="h-4 w-4 mr-2" />
-                        )}
+                        {getFileIcon(file.file_type)}
                         {file.filename} ({file.file_type})
                       </div>
                     </SelectItem>
@@ -2268,7 +2285,7 @@ const AnalysisPanel: React.FC<{
                           </div>
                           
                           {/* Visualizations section */}
-                          {selectedReportId && savedReports.find(r => r.id === selectedReportId)?.visualizations?.length > 0 && (
+                          {selectedReportId && savedReports.find(r => r.id === selectedReportId)?.visualizations && savedReports.find(r => r.id === selectedReportId)!.visualizations.length > 0 && (
                             <div className="space-y-2 border-t pt-4 mt-4">
                               <h4 className="font-medium flex items-center">
                                 <ImageIcon className="h-4 w-4 mr-2 text-blue-500" />
@@ -2365,6 +2382,10 @@ export default function InsightAIPage() {
               <div className="mr-3">
                 {selectedFile.fileType === 'csv' ? (
                   <FileText className="h-5 w-5 text-blue-500" />
+                ) : selectedFile.fileType === 'json' ? (
+                  <FileJson className="h-5 w-5 text-blue-500" />
+                ) : selectedFile.fileType === 'xml' ? (
+                  <FileCode className="h-5 w-5 text-blue-500" />
                 ) : (
                   <Database className="h-5 w-5 text-blue-500" />
                 )}

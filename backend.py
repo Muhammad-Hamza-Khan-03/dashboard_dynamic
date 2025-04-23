@@ -43,7 +43,7 @@ import queue
 from background_worker_implementation import *
 import asyncio
 from EnhancedGenerator import *
-from insightai import InsightAI
+from insightai import InsightAI # type: ignore
 from contextlib import redirect_stdout
  # Import required libraries
 from reportlab.lib.pagesizes import A4, landscape
@@ -635,23 +635,27 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
     os.environ['VISUALIZATION_DIR'] = viz_dir
     
     try:
-        if file_type == 'csv':
-            # For CSV files
+        if file_type in ['csv', 'json', 'xml']:  # Add other structured file types
+            # For structured files
             table_name = f"table_{unique_key}"
             
             # Query all data from the table
-            df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
-            
-            # Create InsightAI instance with DataFrame
-            insight = InsightAI(
-                df=df,
-                debug=True,
-                exploratory=True,
-                generate_report=report_enabled,
-                report_questions=report_questions
-            )
-            
-            return insight, None
+            try:
+                df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+                
+                # Create InsightAI instance with DataFrame
+                insight = InsightAI(
+                    df=df,
+                    debug=True,
+                    exploratory=True,
+                    generate_report=report_enabled,
+                    report_questions=report_questions
+                )
+                
+                return insight, None
+            except Exception as e:
+                app.logger.error(f"Error loading data: {str(e)}")
+                return None, f"Error loading data: {str(e)}"
             
         elif file_type in ['db', 'sqlite', 'sqlite3']:
             # For database files, we'll use the original stored database
@@ -690,16 +694,24 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
                 return None, f"Database file not found at {db_path}"
             
             # Create InsightAI instance with the original db_path
-            insight = InsightAI(
-                db_path=db_path,
-                debug=True,
-                exploratory=True,
-                generate_report=report_enabled,
-                report_questions=report_questions
-            )
-            
-            return insight, None
+            try:
+                insight = InsightAI(
+                    db_path=db_path,
+                    debug=True,
+                    exploratory=True,
+                    generate_report=report_enabled,
+                    report_questions=report_questions
+                )
+                
+                return insight, None
+            except Exception as e:
+                app.logger.error(f"Error creating InsightAI instance: {str(e)}")
+                return None, f"Error creating InsightAI instance: {str(e)}"
+        else:
+            # Unsupported file type
+            return None, f"Unsupported file type: {file_type}"
     except Exception as e:
+        app.logger.error(f"Error in create_insight_instance: {str(e)}")
         return None, str(e)
     finally:
         conn.close()
@@ -5920,7 +5932,7 @@ async def generate_chart_image(html_content):
     Returns:
         Binary image data (PNG)
     """
-    import pyppeteer
+    import pyppeteer # type: ignore
     
     # Full HTML template with necessary scripts
     full_html = f"""
