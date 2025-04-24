@@ -43,7 +43,7 @@ import queue
 from background_worker_implementation import *
 import asyncio
 from EnhancedGenerator import *
-from insightai import InsightAI # type: ignore
+from insightai import InsightAI
 from contextlib import redirect_stdout
  # Import required libraries
 from reportlab.lib.pagesizes import A4, landscape
@@ -590,20 +590,20 @@ def configure_llm_settings():
     
     # Set the LLM_CONFIG
     llm_config = [
-        {"agent": "Expert Selector", "details": {"model": "deepseek-r1-distill-qwen-32b", "provider":"groq","max_tokens": 500, "temperature": 0}},
-        {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-qwen-32b", "provider":"groq","max_tokens": 500, "temperature": 0}},
+        {"agent": "Expert Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 500, "temperature": 0}},
+        {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 500, "temperature": 0}},
         {"agent": "SQL Analyst", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
         {"agent": "SQL Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
         {"agent": "SQL Executor", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
-        {"agent": "Planner", "details": {"model": "deepseek-r1-distill-qwen-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+        {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
         {"agent": "Code Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
         {"agent": "Code Debugger", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
-        {"agent": "Solution Summarizer", "details": {"model": "deepseek-r1-distill-qwen-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}}
+        {"agent": "Solution Summarizer", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}}
     ]
     
     # Set as environment variable
     os.environ['LLM_CONFIG'] = json.dumps(llm_config)
-def create_insight_instance(file_id, user_id, report_enabled=False, report_questions=3):
+def create_insight_instance(file_id, user_id, report_enabled=False, report_questions=3, diagram_enabled=False):
     """
     Create an InsightAI instance based on file type (CSV or DB)
     """
@@ -643,13 +643,14 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
             try:
                 df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
                 
-                # Create InsightAI instance with DataFrame
+                # Create InsightAI instance with DataFrame and include diagram_enabled
                 insight = InsightAI(
                     df=df,
                     debug=True,
                     exploratory=True,
                     generate_report=report_enabled,
-                    report_questions=report_questions
+                    report_questions=report_questions,
+                    diagram=diagram_enabled
                 )
                 
                 return insight, None
@@ -693,14 +694,15 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
             if not os.path.exists(db_path):
                 return None, f"Database file not found at {db_path}"
             
-            # Create InsightAI instance with the original db_path
+            # Create InsightAI instance with the original db_path and include diagram_enabled
             try:
                 insight = InsightAI(
                     db_path=db_path,
                     debug=True,
                     exploratory=True,
                     generate_report=report_enabled,
-                    report_questions=report_questions
+                    report_questions=report_questions,
+                    diagram=diagram_enabled
                 )
                 
                 return insight, None
@@ -723,6 +725,7 @@ def process_question(user_id, file_id):
         question = data.get('question', '')
         generate_report = data.get('generate_report', False)
         report_questions = data.get('report_questions', 3)
+        diagram_enabled = data.get('diagram_enabled', False)  # Get diagram parameter
         
         if not question and not generate_report:
             return jsonify({'error': 'Question or report generation required'}), 400
@@ -732,18 +735,19 @@ def process_question(user_id, file_id):
         matplotlib.use('Agg')
         
         # Create visualization directory
-        viz_dir = os.path.join('static', 'visualization')
+        viz_dir = os.path.join('visualization')
         os.makedirs(viz_dir, exist_ok=True)
         
         # Set environment variable so InsightAI knows where to save visualizations
         os.environ['VISUALIZATION_DIR'] = viz_dir
             
-        # Create InsightAI instance
+        # Create InsightAI instance with diagram_enabled parameter
         insight, error = create_insight_instance(
             file_id, 
             user_id, 
             report_enabled=generate_report,
-            report_questions=report_questions
+            report_questions=report_questions,
+            diagram_enabled=diagram_enabled
         )
         
         if error:
@@ -761,21 +765,31 @@ def process_question(user_id, file_id):
             
             # Find all generated visualizations
             viz_files = []
+            mermaid_files = []  # New array for Mermaid diagrams
             
             if os.path.exists(viz_dir):
                 # Get only the most recent .png files based on modification time
                 all_files = [(f, os.path.getmtime(os.path.join(viz_dir, f))) 
-                            for f in os.listdir(viz_dir) if f.endswith('.png')]
+                            for f in os.listdir(viz_dir) if f.endswith(('.png', '.mmd'))]  # Include .mmd files
                 
                 # Sort by modification time, newest first
                 all_files.sort(key=lambda x: x[1], reverse=True)
                 
-                # Take the 10 most recent files
-                viz_files = [f[0] for f in all_files[:10]]
+                # Separate PNG and MMD files
+                for f, _ in all_files[:20]:  # Increase limit to capture more files
+                    if f.endswith('.png'):
+                        viz_files.append(f)
+                    elif f.endswith('.mmd'):
+                        mermaid_files.append(f)
             
             # Check for report file
             report_file = None
             report_files = [f for f in os.listdir() if f.startswith('data_analysis_report_') and f.endswith('.md')]
+            
+            # Check for cleaned data file (for Data Cleaning agent)
+            cleaned_data_file = None
+            if os.path.exists('cleaned_data.csv'):
+                cleaned_data_file = 'cleaned_data.csv'
             
             if report_files:
                 # Sort by modification time to get the most recent
@@ -790,12 +804,15 @@ def process_question(user_id, file_id):
             
             # Create visualization paths with proper format for frontend
             visualization_paths = [os.path.join('visualization', f) for f in viz_files]
+            mermaid_paths = [os.path.join('visualization', f) for f in mermaid_files]
             
             return jsonify({
                 'success': True,
                 'output': "Report generated successfully",
                 'visualizations': visualization_paths,
+                'mermaid_diagrams': mermaid_paths,  # Include Mermaid diagrams
                 'report_file': report_file,
+                'cleaned_data_file': cleaned_data_file,  # Include cleaned data file
                 'is_report': True  # Flag to indicate this is a report response
             })
         else:
@@ -808,12 +825,13 @@ def process_question(user_id, file_id):
             
             # Find visualizations created by this specific question
             viz_files = []
+            mermaid_files = []  # New array for Mermaid diagrams
             
             if os.path.exists(viz_dir):
                 # Get only files created in the last minute (assuming this question just ran)
                 current_time = time.time()
                 recent_files = [(f, os.path.getmtime(os.path.join(viz_dir, f))) 
-                                for f in os.listdir(viz_dir) if f.endswith('.png')]
+                                for f in os.listdir(viz_dir) if f.endswith(('.png', '.mmd'))]  # Include .mmd files
                 
                 # Filter for files created within the last minute
                 one_minute_ago = current_time - 60
@@ -822,11 +840,21 @@ def process_question(user_id, file_id):
                 # Sort by modification time, newest first
                 recent_files.sort(key=lambda x: x[1], reverse=True)
                 
-                # Take the most recent files
-                viz_files = [f[0] for f in recent_files[:10]]
+                # Separate PNG and MMD files
+                for f, _ in recent_files[:20]:  # Increase limit to capture more files
+                    if f.endswith('.png'):
+                        viz_files.append(f)
+                    elif f.endswith('.mmd'):
+                        mermaid_files.append(f)
+            print("Found visualization files:", viz_files)
+            # Check for cleaned data file (for Data Cleaning agent)
+            cleaned_data_file = None
+            if os.path.exists('cleaned_data.csv'):
+                cleaned_data_file = 'cleaned_data.csv'
             
             # Create visualization paths
             visualization_paths = [os.path.join('visualization', f) for f in viz_files]
+            mermaid_paths = [f for f in mermaid_files]
             
             # Important: Close any open matplotlib figures to prevent leaks
             import matplotlib.pyplot as plt
@@ -836,7 +864,9 @@ def process_question(user_id, file_id):
                 'success': True,
                 'output': result,
                 'visualizations': visualization_paths,
-                'is_report': False  # Flag to indicate this is a question response
+                'mermaid_diagrams': mermaid_paths, 
+                'cleaned_data_file': cleaned_data_file, 
+                'is_report': False 
             })
             
     except Exception as e:
@@ -851,6 +881,17 @@ def process_question(user_id, file_id):
             pass
             
         return jsonify({'error': str(e)}), 500
+@app.route('/cleaned_data.csv')
+def serve_cleaned_data():
+    if os.path.exists('cleaned_data.csv'):
+        return send_file('cleaned_data.csv', mimetype='text/csv', as_attachment=True)
+    else:
+        return "Cleaned data file not found", 404
+
+# Add route to serve Mermaid diagrams
+@app.route('/mermaid/<path:filename>')
+def serve_mermaid(filename):
+    return send_from_directory('static/visualization', filename, mimetype='text/plain')
 
 def start_background_worker():
     """Start the background worker thread"""

@@ -128,13 +128,16 @@ interface SelectedFile {
 interface AnalysisConfig {
   generateReport: boolean;
   questionCount: number;
+  diagram_enabled: boolean; 
 }
 
 interface AnalysisResult {
   success: boolean;
   output: string;
   visualizations?: string[];
+  mermaid_diagrams?: string[];
   report_file?: string;
+  cleaned_data_file?: string; 
   is_report?: boolean;
 }
 
@@ -1586,13 +1589,15 @@ const AnalysisConfig: React.FC<{
 }> = ({ onConfigChange }) => {
   const [generateReport, setGenerateReport] = useState(false);
   const [questionCount, setQuestionCount] = useState(3);
+  const [diagramEnabled, setDiagramEnabled] = useState(false); // Added state
   
   useEffect(() => {
     onConfigChange({
       generateReport,
-      questionCount
+      questionCount,
+      diagram_enabled: diagramEnabled // New property added to config
     });
-  }, [generateReport, questionCount, onConfigChange]);
+  }, [generateReport, questionCount, diagramEnabled, onConfigChange]);
   
   return (
     <Card>
@@ -1602,6 +1607,7 @@ const AnalysisConfig: React.FC<{
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {/* Report Generation Option */}
           <div className="flex items-center space-x-2">
             <Checkbox 
               id="generate-report" 
@@ -1636,6 +1642,38 @@ const AnalysisConfig: React.FC<{
               </p>
             </div>
           )}
+          
+          {/* Diagram Generation Option - NEW */}
+          <div className="flex items-center space-x-2 mt-2 pt-2 border-t">
+            <Checkbox 
+              id="enable-diagram" 
+              checked={diagramEnabled}
+              onCheckedChange={(checked) => setDiagramEnabled(checked === true)}
+            />
+            <label 
+              htmlFor="enable-diagram" 
+              className="text-sm font-medium leading-none cursor-pointer"
+            >
+              Generate Flow Diagram
+            </label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-4 w-4 text-muted-foreground ml-1 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>Creates a Mermaid diagram visualizing the analysis flow</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          {diagramEnabled && (
+            <div className="pl-6">
+              <p className="text-xs text-muted-foreground">
+                A visual flow diagram will be generated showing the analysis process.
+              </p>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -1656,6 +1694,7 @@ const AnalysisPanel: React.FC<{
   const [reportContent, setReportContent] = useState<string | null>(null);
   const [agentSections, setAgentSections] = useState<AgentSection[]>([]);
   const [extractedVisualizations, setExtractedVisualizations] = useState<string[]>([]);
+  const [mermaidDiagrams, setMermaidDiagrams] = useState<string[]>([]); // New state for Mermaid diagrams
   const [activeTab, setActiveTab] = useState<'analysis' | 'reports'>('analysis');
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
@@ -1696,6 +1735,7 @@ const AnalysisPanel: React.FC<{
     setReportContent(null);
     setAgentSections([]);
     setExtractedVisualizations([]);
+    setMermaidDiagrams([]); // Clear Mermaid diagrams
     setActiveTab('analysis');
     setSelectedReportId(null);
     setSelectedReportContent(null);
@@ -1723,9 +1763,19 @@ const AnalysisPanel: React.FC<{
       });
       
       setExtractedVisualizations(formattedVisualizations);
+      
+      // Set Mermaid diagrams
+      if (result.mermaid_diagrams && result.mermaid_diagrams.length > 0) {
+        setMermaidDiagrams(result.mermaid_diagrams);
+      }
     } else if (result && result.is_report) {
       // For report responses, just use the visualizations from the API
       setExtractedVisualizations(result.visualizations || []);
+      
+      // Set Mermaid diagrams
+      if (result.mermaid_diagrams && result.mermaid_diagrams.length > 0) {
+        setMermaidDiagrams(result.mermaid_diagrams);
+      }
     }
   }, [result]);
   
@@ -1831,6 +1881,7 @@ const AnalysisPanel: React.FC<{
     setResult(null);
     setAgentSections([]);
     setExtractedVisualizations([]);
+    setMermaidDiagrams([]); // Clear Mermaid diagrams
     setReportContent(null); // Clear previous report content
     setActiveTab('analysis'); // Switch to analysis tab
     
@@ -1842,13 +1893,20 @@ const AnalysisPanel: React.FC<{
           {
             question: config.generateReport ? '' : question,
             generate_report: config.generateReport,
-            report_questions: config.questionCount
+            report_questions: config.questionCount,
+            diagram_enabled: config.diagram_enabled // Pass diagram parameter
           }
         );
         
         if (response.data.success) {
+          console.log('Visualizations from backend:', response.data.visualizations);
+          console.log('Mermaid diagrams from backend:', response.data.mermaid_diagrams);
           // Set result based on response - either report or question
-          setResult(response.data);
+          setResult(prev => ({
+            ...response.data,
+            // Only keep cleaned_data_file if it's actually in the response
+            cleaned_data_file: response.data.cleaned_data_file || undefined
+          }));
           
           console.log('API Response:', response.data); // Helpful for debugging
           
@@ -1865,6 +1923,11 @@ const AnalysisPanel: React.FC<{
             } catch (reportErr) {
               console.error("Failed to fetch report content:", reportErr);
             }
+          }
+          
+          // Set Mermaid diagrams
+          if (response.data.mermaid_diagrams && response.data.mermaid_diagrams.length > 0) {
+            setMermaidDiagrams(response.data.mermaid_diagrams);
           }
           
           // For question responses (not reports), parse the output to extract sections
@@ -1907,6 +1970,95 @@ const AnalysisPanel: React.FC<{
     }
   };
   
+  const MermaidDiagram: React.FC<{ source: string }> = ({ source }) => {
+    const [diagram, setDiagram] = useState<string>("");
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const mermaidRef = useRef<HTMLDivElement>(null);
+    
+    useEffect(() => {
+      // Fetch the diagram content from the server
+      const fetchDiagram = async () => {
+        setLoading(true);
+        try {
+          // Extract just the filename from the path
+          const filename = source.split('/').pop();
+          
+          // Use the /mermaid/ route to access files in static/visualization
+          const response = await fetch(`http://localhost:5000/mermaid/${filename}`);
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch diagram: ${response.status}`);
+          }
+          const text = await response.text();
+          setDiagram(text);
+          setError(null);
+        } catch (error) {
+          console.error("Error fetching Mermaid diagram:", error);
+          setError(error instanceof Error ? error.message : "Failed to load diagram");
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      if (source) {
+        fetchDiagram();
+      }
+    }, [source]);
+    
+    return (
+      <div className="border rounded-lg p-4 my-4">
+        <div className="flex items-center mb-2">
+          <BarChart className="h-5 w-5 mr-2 text-blue-500" />
+          <h3 className="font-medium">Analysis Flow Diagram</h3>
+        </div>
+        
+        {loading ? (
+          <div className="flex justify-center p-8 text-muted-foreground">
+            <Loader2 className="h-8 w-8 animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="p-4 text-red-500 bg-red-50 dark:bg-red-900/20 rounded-md">
+            <p className="font-medium">Error loading diagram</p>
+            <p className="text-sm">{error}</p>
+          </div>
+        ) : (
+          <div className="overflow-auto bg-white dark:bg-gray-900 p-4 rounded-md">
+            <div className="mermaid" ref={mermaidRef}>
+              {diagram}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+// Add Data Cleaning Result Component
+const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedDataFile }) => {
+  return (
+    <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 mt-4">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center text-green-700 dark:text-green-300 text-lg">
+          <CheckCircle2 className="h-5 w-5 mr-2" />
+          Data Cleaning Completed
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="mb-4">
+          Your data has been successfully cleaned and is ready for further analysis or machine learning tasks.
+        </p>
+        <Button 
+          variant="outline" 
+          className="border-green-500 text-green-600 hover:bg-green-50 mt-2"
+          onClick={() => window.open(`http://localhost:5000/cleaned_data.csv`, '_blank')}
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Download Cleaned Data
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
   // Get the Analysis Summary section if available
   const analysisSummary = agentSections.find(section => section.agentName === "Analysis Summary");
   
@@ -1936,7 +2088,7 @@ const AnalysisPanel: React.FC<{
     "Create a bar chart of the top 5 items",
     "What trends do you see in this data?",
     "Calculate the average values by category",
-    "Show me a correlation matrix of the numeric columns"
+    "Clean this data and suggest ML models" // Added data cleaning suggestion
   ];
   
   return (
@@ -1962,7 +2114,7 @@ const AnalysisPanel: React.FC<{
                     onChange={(e) => setQuestion(e.target.value)}
                     placeholder={isDatabaseFile ? 
                       "e.g., Show me the top 5 products by price" : 
-                      "e.g., What are the average values by category?"}
+                      "e.g., Clean this data and suggest ML models"}
                     disabled={isProcessing}
                     className="flex-1"
                   />
@@ -2059,6 +2211,14 @@ const AnalysisPanel: React.FC<{
             </div>
           )}
         
+          {result?.cleaned_data_file && 
+          (sortedSections.some(section => 
+            section.agentName === "Data Cleaning Expert" || 
+            section.agentName === "Data Quality Analyzer" ||
+            section.agentName === "Data Cleaning Planner"
+          )) && (
+            <DataCleaningResult cleanedDataFile={result.cleaned_data_file} />
+          )}
           {/* Display the ordered agent sections for question responses */}
           {sortedSections.length > 0 && (
             <Card>
@@ -2096,12 +2256,33 @@ const AnalysisPanel: React.FC<{
                     <AgentBox key={`sql-gen-${index}`} section={section} />
                   ))}
                   
+                  {/* Data Quality Analyzer - New for Data Cleaning */}
+                  {sortedSections.filter(section => 
+                    section.agentName === "Data Quality Analyzer"
+                  ).map((section, index) => (
+                    <AgentBox key={`quality-${index}`} section={section} />
+                  ))}
+                  
+                  {/* Data Cleaning Planner - New for Data Cleaning */}
+                  {sortedSections.filter(section => 
+                    section.agentName === "Data Cleaning Planner"
+                  ).map((section, index) => (
+                    <AgentBox key={`cleaning-plan-${index}`} section={section} />
+                  ))}
+                  
                   {/* Code Generator */}
                   {sortedSections.filter(section => 
                     section.agentName === "Code Generator" ||
                     section.agentName === "Planner"
                   ).map((section, index) => (
                     <AgentBox key={`code-gen-${index}`} section={section} />
+                  ))}
+                  
+                  {/* ML Model Suggester - New for Data Cleaning */}
+                  {sortedSections.filter(section => 
+                    section.agentName === "ML Model Suggester"
+                  ).map((section, index) => (
+                    <AgentBox key={`ml-suggest-${index}`} section={section} />
                   ))}
                   
                   {/* Summary Results + Plot */}
@@ -2133,6 +2314,23 @@ const AnalysisPanel: React.FC<{
                           </CardContent>
                         </Card>
                       )}
+                      
+                      {/* Mermaid Diagrams - NEW */}
+                      {mermaidDiagrams.length > 0 && (
+                        <Card className="bg-indigo-50/50 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-800">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="flex items-center text-indigo-700 dark:text-indigo-300">
+                              <BarChart className="h-5 w-5 mr-2" />
+                              Analysis Flow Diagram
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            {mermaidDiagrams.map((diagram, index) => (
+                              <MermaidDiagram key={index} source={diagram} />
+                            ))}
+                          </CardContent>
+                        </Card>
+                      )}
                     </div>
                   )}
                   
@@ -2145,7 +2343,10 @@ const AnalysisPanel: React.FC<{
                     section.agentName !== "SQL Generator" &&
                     section.agentName !== "Code Generator" &&
                     section.agentName !== "Planner" &&
-                    section.agentName !== "Analysis Summary"
+                    section.agentName !== "Analysis Summary" &&
+                    section.agentName !== "Data Quality Analyzer" &&
+                    section.agentName !== "Data Cleaning Planner" &&
+                    section.agentName !== "ML Model Suggester"
                   ).map((section, index) => (
                     <AgentBox key={`other-${index}`} section={section} />
                   ))}
@@ -2353,14 +2554,13 @@ const AnalysisPanel: React.FC<{
     </div>
   );
 };
-
-// Main Component
 export default function InsightAIPage() {
   const { user } = useUser();
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [config, setConfig] = useState<AnalysisConfig>({
     generateReport: false,
-    questionCount: 3
+    questionCount: 3,
+    diagram_enabled: false
   });
   
   return (
