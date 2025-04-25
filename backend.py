@@ -824,16 +824,19 @@ def process_question(user_id, file_id):
             result = question_buffer.getvalue()
             
             # Find visualizations created by this specific question
+            # Modify around line 680 in backend.py (in the process_question function)
+            # Find visualizations created by this specific question
             viz_files = []
-            mermaid_files = []  # New array for Mermaid diagrams
-            
+            mermaid_files = []  # Array for Mermaid diagrams
+
+            # Check the regular visualization directory first
             if os.path.exists(viz_dir):
-                # Get only files created in the last minute (assuming this question just ran)
+                # Get files with .png and .mmd extensions
                 current_time = time.time()
                 recent_files = [(f, os.path.getmtime(os.path.join(viz_dir, f))) 
-                                for f in os.listdir(viz_dir) if f.endswith(('.png', '.mmd'))]  # Include .mmd files
+                                for f in os.listdir(viz_dir) if f.endswith(('.png', '.mmd'))]
                 
-                # Filter for files created within the last minute
+                # Filter for recent files
                 one_minute_ago = current_time - 60
                 recent_files = [(f, t) for f, t in recent_files if t > one_minute_ago]
                 
@@ -841,12 +844,39 @@ def process_question(user_id, file_id):
                 recent_files.sort(key=lambda x: x[1], reverse=True)
                 
                 # Separate PNG and MMD files
-                for f, _ in recent_files[:20]:  # Increase limit to capture more files
+                for f, _ in recent_files[:20]:
                     if f.endswith('.png'):
                         viz_files.append(f)
                     elif f.endswith('.mmd'):
                         mermaid_files.append(f)
+
+            # ADDED CODE: Also check the static/visualization directory for .mmd files
+            static_viz_dir = os.path.join('static', 'visualization')
+            if os.path.exists(static_viz_dir):
+                # Get only .mmd files from this directory
+                current_time = time.time()
+                static_recent_files = [(f, os.path.getmtime(os.path.join(static_viz_dir, f))) 
+                                    for f in os.listdir(static_viz_dir) if f.endswith('.mmd')]
+                
+                # Filter for recent files
+                one_minute_ago = current_time - 60
+                static_recent_files = [(f, t) for f, t in static_recent_files if t > one_minute_ago]
+                
+                # Sort by modification time, newest first
+                static_recent_files.sort(key=lambda x: x[1], reverse=True)
+                
+                # Add .mmd files to mermaid_files list with adjusted paths
+                for f, _ in static_recent_files[:10]:
+                    # Check if we already found this file in the other directory
+                    if f not in mermaid_files:
+                        mermaid_files.append(f)
+
             print("Found visualization files:", viz_files)
+            print("Found mermaid files:", mermaid_files)
+
+            # Create visualization paths with proper format for frontend
+            visualization_paths = [os.path.join('visualization', f) for f in viz_files]
+            mermaid_paths = [os.path.join('visualization', f) for f in mermaid_files]  # Keep the same path structure
             # Check for cleaned data file (for Data Cleaning agent)
             cleaned_data_file = None
             if os.path.exists('cleaned_data.csv'):

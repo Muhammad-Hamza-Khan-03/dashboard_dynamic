@@ -10,6 +10,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
+import mermaid from 'mermaid';
 import { format } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
@@ -1974,9 +1975,23 @@ const AnalysisPanel: React.FC<{
     const [diagram, setDiagram] = useState<string>("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [svgContent, setSvgContent] = useState<string | null>(null);
     const mermaidRef = useRef<HTMLDivElement>(null);
     
+    // Initialize mermaid when component mounts
     useEffect(() => {
+// Initialize mermaid with dark theme support
+// Initialize mermaid with dark theme support
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+        securityLevel: 'loose',
+        fontFamily: 'inherit',
+      });
+    }, []);
+    
+    useEffect(() => {
+      console.log("Fetching Mermaid diagram for source:", source);
       // Fetch the diagram content from the server
       const fetchDiagram = async () => {
         setLoading(true);
@@ -1992,7 +2007,18 @@ const AnalysisPanel: React.FC<{
           }
           const text = await response.text();
           setDiagram(text);
-          setError(null);
+          
+          // Render the diagram after fetching
+          if (text && mermaidRef.current) {
+            try {
+              const { svg } = await mermaid.render('mermaid-diagram-' + Date.now(), text);
+              setSvgContent(svg);
+              setError(null);
+            } catch (renderError) {
+              console.error("Error rendering Mermaid diagram:", renderError);
+              setError("Failed to render the diagram. There might be a syntax error.");
+            }
+          }
         } catch (error) {
           console.error("Error fetching Mermaid diagram:", error);
           setError(error instanceof Error ? error.message : "Failed to load diagram");
@@ -2022,11 +2048,15 @@ const AnalysisPanel: React.FC<{
             <p className="font-medium">Error loading diagram</p>
             <p className="text-sm">{error}</p>
           </div>
+        ) : svgContent ? (
+          // Render the SVG content directly
+          <div className="flex justify-center overflow-auto bg-white dark:bg-gray-900 p-4 rounded-md">
+            <div dangerouslySetInnerHTML={{ __html: svgContent }} />
+          </div>
         ) : (
+          // Fallback to showing the source
           <div className="overflow-auto bg-white dark:bg-gray-900 p-4 rounded-md">
-            <div className="mermaid" ref={mermaidRef}>
-              {diagram}
-            </div>
+            <pre className="text-sm text-gray-700 dark:text-gray-300">{diagram}</pre>
           </div>
         )}
       </div>
@@ -2286,20 +2316,21 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                   ))}
                   
                   {/* Summary Results + Plot */}
-                  {analysisSummary && (
+                  {((analysisSummary && !result?.is_report) || (result && mermaidDiagrams.length > 0)) && (
                     <div className="space-y-4">
-                      <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="flex items-center text-blue-700 dark:text-blue-300">
-                            <Sparkles className="h-5 w-5 mr-2" />
-                            Analysis Summary
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <EnhancedMarkdown content={analysisSummary.content} />
-                        </CardContent>
-                      </Card>
-                      
+                      {analysisSummary && (
+                        <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="flex items-center text-blue-700 dark:text-blue-300">
+                              <Sparkles className="h-5 w-5 mr-2" />
+                              Analysis Summary
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <EnhancedMarkdown content={analysisSummary.content} />
+                          </CardContent>
+                        </Card>
+                      )}
                       {/* Visualizations */}
                       {extractedVisualizations.length > 0 && (
                         <Card className="bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-800">
@@ -2314,8 +2345,7 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                           </CardContent>
                         </Card>
                       )}
-                      
-                      {/* Mermaid Diagrams - NEW */}
+                      {/* Mermaid Diagrams for both CSV and SQL results */}
                       {mermaidDiagrams.length > 0 && (
                         <Card className="bg-indigo-50/50 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-800">
                           <CardHeader className="pb-2">
