@@ -53,7 +53,8 @@ import {
   Server,
   Brain,
   FileJson,
-  FileCode
+  FileCode,
+  Maximize
 } from 'lucide-react';
 
 // UI components
@@ -1975,50 +1976,61 @@ const AnalysisPanel: React.FC<{
     const [diagram, setDiagram] = useState<string>("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [svgContent, setSvgContent] = useState<string | null>(null);
-    const mermaidRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [zoomLevel, setZoomLevel] = useState(1);
+    const dialogContainerRef = useRef<HTMLDivElement>(null);
     
-    // Initialize mermaid when component mounts
+    // Initialize mermaid only once
     useEffect(() => {
-// Initialize mermaid with dark theme support
-// Initialize mermaid with dark theme support
       mermaid.initialize({
-        startOnLoad: false,
+        startOnLoad: true,
         theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
         securityLevel: 'loose',
+        logLevel: 'error',
         fontFamily: 'inherit',
       });
     }, []);
     
+    // Fetch and render diagram when source changes
     useEffect(() => {
-      console.log("Fetching Mermaid diagram for source:", source);
-      // Fetch the diagram content from the server
-      const fetchDiagram = async () => {
+      if (!source) return;
+      
+      const fetchAndRenderDiagram = async () => {
         setLoading(true);
         try {
-          // Extract just the filename from the path
           const filename = source.split('/').pop();
-          
-          // Use the /mermaid/ route to access files in static/visualization
           const response = await fetch(`http://localhost:5000/mermaid/${filename}`);
           
           if (!response.ok) {
             throw new Error(`Failed to fetch diagram: ${response.status}`);
           }
+          
           const text = await response.text();
           setDiagram(text);
           
-          // Render the diagram after fetching
-          if (text && mermaidRef.current) {
-            try {
-              const { svg } = await mermaid.render('mermaid-diagram-' + Date.now(), text);
-              setSvgContent(svg);
-              setError(null);
-            } catch (renderError) {
-              console.error("Error rendering Mermaid diagram:", renderError);
-              setError("Failed to render the diagram. There might be a syntax error.");
+          // Wait for next render cycle before rendering mermaid
+          setTimeout(() => {
+            if (containerRef.current && text) {
+              try {
+                // Clear previous content
+                containerRef.current.innerHTML = '';
+                
+                // Create a div for mermaid to render into
+                const renderDiv = document.createElement('div');
+                renderDiv.className = 'mermaid';
+                renderDiv.textContent = text;
+                containerRef.current.appendChild(renderDiv);
+                
+                // Let mermaid process all diagrams
+                mermaid.init(undefined, '.mermaid');
+                setError(null);
+              } catch (renderError) {
+                console.error("Error rendering Mermaid diagram:", renderError);
+                setError(`Rendering error: ${renderError instanceof Error ? renderError.message : String(renderError)}`);
+              }
             }
-          }
+          }, 0);
         } catch (error) {
           console.error("Error fetching Mermaid diagram:", error);
           setError(error instanceof Error ? error.message : "Failed to load diagram");
@@ -2027,16 +2039,87 @@ const AnalysisPanel: React.FC<{
         }
       };
       
-      if (source) {
-        fetchDiagram();
-      }
+      fetchAndRenderDiagram();
     }, [source]);
+  
+    // Re-render mermaid diagram in dialog when it opens
+    useEffect(() => {
+      if (isDialogOpen && dialogContainerRef.current && diagram) {
+        // Clear previous content
+        dialogContainerRef.current.innerHTML = '';
+        
+        // Create a div for mermaid to render into
+        const renderDiv = document.createElement('div');
+        renderDiv.className = 'mermaid-dialog';
+        renderDiv.textContent = diagram;
+        dialogContainerRef.current.appendChild(renderDiv);
+        
+        // Let mermaid process all diagrams
+        mermaid.init(undefined, '.mermaid-dialog');
+      }
+    }, [isDialogOpen, diagram, zoomLevel]);
+  
+    // Handle zoom in/out
+    const handleZoomIn = () => {
+      setZoomLevel(prev => Math.min(prev + 0.25, 3));
+    };
+  
+    const handleZoomOut = () => {
+      setZoomLevel(prev => Math.max(prev - 0.25, 0.5));
+    };
+  
+    const handleResetZoom = () => {
+      setZoomLevel(1);
+    };
+  
+    // Download diagram as SVG
+    const handleDownload = () => {
+      if (dialogContainerRef.current) {
+        // Find the SVG element
+        const svgElement = dialogContainerRef.current.querySelector('svg');
+        
+        if (svgElement) {
+          // Create a serialized SVG string
+          const svgData = new XMLSerializer().serializeToString(svgElement);
+          
+          // Create a Blob with the SVG data
+          const blob = new Blob([svgData], { type: 'image/svg+xml' });
+          
+          // Create a download link
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `mermaid-diagram-${Date.now()}.svg`;
+          
+          // Trigger download
+          document.body.appendChild(link);
+          link.click();
+          
+          // Clean up
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }
+      }
+    };
     
     return (
       <div className="border rounded-lg p-4 my-4">
-        <div className="flex items-center mb-2">
-          <BarChart className="h-5 w-5 mr-2 text-blue-500" />
-          <h3 className="font-medium">Analysis Flow Diagram</h3>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center">
+            <BarChart className="h-5 w-5 mr-2 text-blue-500" />
+            <h3 className="font-medium">Analysis Flow Diagram</h3>
+          </div>
+          {!loading && !error && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setIsDialogOpen(true)}
+              className="text-xs"
+            >
+              <Maximize className="h-3 w-3 mr-1" />
+              Expand
+            </Button>
+          )}
         </div>
         
         {loading ? (
@@ -2047,18 +2130,62 @@ const AnalysisPanel: React.FC<{
           <div className="p-4 text-red-500 bg-red-50 dark:bg-red-900/20 rounded-md">
             <p className="font-medium">Error loading diagram</p>
             <p className="text-sm">{error}</p>
-          </div>
-        ) : svgContent ? (
-          // Render the SVG content directly
-          <div className="flex justify-center overflow-auto bg-white dark:bg-gray-900 p-4 rounded-md">
-            <div dangerouslySetInnerHTML={{ __html: svgContent }} />
+            <pre className="mt-2 text-xs overflow-auto bg-gray-100 dark:bg-gray-800 p-2 rounded">
+              {diagram}
+            </pre>
           </div>
         ) : (
-          // Fallback to showing the source
-          <div className="overflow-auto bg-white dark:bg-gray-900 p-4 rounded-md">
-            <pre className="text-sm text-gray-700 dark:text-gray-300">{diagram}</pre>
+          <div 
+            className="overflow-auto bg-white dark:bg-gray-900 p-4 rounded-md cursor-pointer"
+            onClick={() => setIsDialogOpen(true)}
+          >
+            <div ref={containerRef} className="mermaid-container" />
           </div>
         )}
+        
+        {/* Dialog for expanded view */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="max-w-5xl w-full max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <BarChart className="h-5 w-5 mr-2 text-blue-500" />
+                Analysis Flow Diagram
+              </DialogTitle>
+            </DialogHeader>
+            
+            {/* Zoom controls */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex space-x-1">
+                <Button variant="outline" size="sm" onClick={handleZoomOut}>
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleResetZoom}>
+                  {Math.round(zoomLevel * 100)}%
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleZoomIn}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleDownload}>
+                <Download className="h-4 w-4 mr-1" />
+                Download SVG
+              </Button>
+            </div>
+            
+            {/* Diagram container with zoom */}
+            <div className="relative w-full h-[calc(100vh-200px)] bg-white dark:bg-gray-900 rounded-md overflow-auto">
+              <div 
+                ref={dialogContainerRef} 
+                style={{
+                  transform: `scale(${zoomLevel})`,
+                  transformOrigin: 'top left',
+                  transition: 'transform 0.2s ease-out'
+                }}
+                className="mermaid-dialog-container"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   };
