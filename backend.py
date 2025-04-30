@@ -1,3 +1,5 @@
+global app
+
 from scipy import stats
 import numpy as np
 from typing import Dict, Any
@@ -14,563 +16,69 @@ import xml.etree.ElementTree as ET
 import PyPDF2
 from werkzeug.utils import secure_filename
 import uuid
-from pdfminer.high_level import extract_text
-from pdfminer.layout import LAParams
 import os
-import threading
 from flask_caching import Cache, logger
-from pyecharts import options as opts
-from pyecharts.charts import (
-    Line, Bar, Pie, Scatter, Boxplot, Grid, EffectScatter,
-    Funnel, Gauge, HeatMap, Kline, Radar, TreeMap, Surface3D,
-    Bar3D, Line3D, Scatter3D, Map, Graph, Liquid, Parallel,
-    Sankey, Sunburst
-)
-from pyecharts.commons.utils import JsCode
 from dotenv import load_dotenv
-import psutil
 import datetime
 import decimal
 import math
 import json
 import time
-from typing import List, Dict, Any, Generator, Tuple,Optional
-from dataclasses import dataclass
+from typing import Dict, Any
 import traceback
 import re
 from flask import jsonify, request
-import queue
-from background_worker_implementation import *
+from flask_utils.background_worker_implementation import *
 import asyncio
-from EnhancedGenerator import *
+from flask_utils.EnhancedGenerator import *
 from insightai import InsightAI
 from contextlib import redirect_stdout
- # Import required libraries
 from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib import colors
 from reportlab.pdfgen import canvas
-from reportlab.lib.units import mm, inch
-from reportlab.lib.utils import ImageReader
+from reportlab.lib.units import mm
 import base64
-from io import BytesIO
-from PIL import Image
-# from celery_worker import process_statistics_task, stats_task_queue, update_task_status
+from flask_utils.pdf_processing_utils import decompress_content, get_model, initialize_nltk, process_document_file
+from flask_utils.upload_utils import handle_json_upload,handle_xml_upload,process_document_content 
+
+from flask_utils.task_utils import create_stats_task
 import os
 import matplotlib
+from flask_utils.pdf_processing import ConnectionPool
+# Add these utility functions
+import os
+import traceback
+import uuid
+import base64
+from flask import app
+import sqlite3
+import threading
+import queue
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from flask_utils.task_utils import stats_task_queue
+
+
 matplotlib.use('Agg')
+
 app = Flask(__name__)
 cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 CORS(app)
 logging.basicConfig(level=logging.DEBUG)
 CACHE_TIMEOUT = 300  # Cache timeout in seconds
 CHUNK_SIZE = 100000  # Maximum rows to fetch at once
-stats_task_queue = queue.Queue()
-TASK_STATUS = {}
+# stats_task_queue = queue.Queue()
+# TASK_STATUS = {}
 load_dotenv()
+
+connection_pool = ConnectionPool('user_files.db')
+
 
 DB_STORAGE_DIR = os.path.join('static', 'databases')
 os.makedirs(DB_STORAGE_DIR, exist_ok=True)
 
-def handle_json_upload(file, user_id, filename, c, conn):
-    """
-    Handle JSON file upload by:
-    1. Saving the file to a json_file folder
-    2. Reading using pd.read_json
-    3. Normalizing nested structures
-    4. Storing in structured database tables
-    
-    Returns the file_id of the new entry.
-    """
-    try:
-        # Create json_file directory if it doesn't exist
-        json_file_dir = os.path.join('json_file')
-        os.makedirs(json_file_dir, exist_ok=True)
-        
-        # Generate a unique key for this file
-        unique_key = str(uuid.uuid4())
-        
-        # Create unique filename to avoid collisions
-        file_extension = os.path.splitext(filename)[1]
-        if not file_extension:
-            file_extension = '.json'  # Default to .json if no extension
-        unique_filename = f"{unique_key}{file_extension}"
-        file_path = os.path.join(json_file_dir, unique_filename)
-        
-        # Save the uploaded file to disk
-        file_content = file.read()
-        try:
-            # Try to decode as UTF-8 to check if it's text content
-            content_str = file_content.decode('utf-8')
-            # If it's text, write it as text
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content_str)
-        except UnicodeDecodeError:
-            # If it's binary, write it as binary
-            with open(file_path, 'wb') as f:
-                f.write(file_content)
-        
-        # Reset file pointer for potential fallback use
-        file.seek(0)
-        
-        # Try to parse the JSON to validate it
-        df = None
-        try:
-            # Try multiple approaches for reading the JSON file
-            
-            # Approach 1: Use pandas read_json directly
-            try:
-                df = pd.read_json(file_path)
-                app.logger.info(f"Successfully read JSON file with pd.read_json: {filename}")
-            except Exception as pd_error:
-                app.logger.warning(f"pd.read_json failed: {str(pd_error)}")
-                
-                # Approach 2: Load file with json.load and normalize
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as json_file:
-                        json_data = json.load(json_file)
-                    
-                    # Check JSON structure and normalize accordingly
-                    if isinstance(json_data, list) and len(json_data) > 0 and isinstance(json_data[0], dict):
-                        app.logger.info(f"Processing JSON array with {len(json_data)} items")
-                        # Array of objects - normalize directly
-                        df = pd.json_normalize(json_data)
-                        app.logger.info(f"Successfully normalized JSON array of {len(json_data)} objects")
-                    
-                    elif isinstance(json_data, dict):
-                        app.logger.info(f"Processing JSON object with {len(json_data.keys())} keys")
-                        
-                        # Look for nested arrays of objects to normalize
-                        array_found = False
-                        for key, value in json_data.items():
-                            if isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
-                                app.logger.info(f"Found array of objects in key: {key} with {len(value)} items")
-                                # Normalize with record_path for nested array
-                                df = pd.json_normalize(json_data, record_path=key)
-                                array_found = True
-                                app.logger.info(f"Successfully normalized nested array in key: {key}")
-                                break
-                        
-                        # If no nested arrays or normalization failed, normalize the whole object
-                        if not array_found:
-                            app.logger.info("Normalizing single JSON object")
-                            df = pd.json_normalize([json_data])
-                            app.logger.info("Successfully normalized single JSON object")
-                    
-                    else:
-                        app.logger.warning(f"Unsupported JSON structure for normalization")
-                        df = None
-                
-                except Exception as json_error:
-                    app.logger.error(f"Error parsing JSON file with json.load: {str(json_error)}")
-                    df = None
-            
-            # If all approaches failed, fall back to unstructured storage
-            if df is None or df.empty:
-                app.logger.warning("Could not convert JSON to structured DataFrame")
-                return handle_unstructured_upload(file, user_id, filename, c, conn, 'json', content=file_content)
-            
-            # Log successful data frame creation
-            app.logger.info(f"Successfully created DataFrame with {len(df)} rows and {len(df.columns)} columns")
-            
-            # Clean up column names by replacing dots and special characters
-            df.columns = [col.replace('.', '_').replace('[', '_').replace(']', '_') for col in df.columns]
-            
-            # Create a table name for this data
-            table_name = f"table_{unique_key}"
-            
-            # Store data in the table (handle potential SQLite limitations with large JSON)
-            try:
-                app.logger.info(f"Saving DataFrame to SQL table: {table_name}")
-                df.to_sql(table_name, conn, if_exists='replace', index=False)
-                app.logger.info(f"Successfully saved DataFrame to SQL table: {table_name}")
-            except Exception as sql_error:
-                app.logger.error(f"Error saving to SQL: {str(sql_error)}")
-                # If to_sql fails, try to handle common issues (like NaN values)
-                app.logger.info("Handling potential data type issues")
-                df = df.fillna('')
-                # Convert all columns to string to avoid type issues
-                df = df.astype(str)
-                app.logger.info("Saving DataFrame with string conversion")
-                df.to_sql(table_name, conn, if_exists='replace', index=False)
-            
-            # Insert metadata into 'user_files'
-            app.logger.info(f"Inserting metadata into user_files table")
-            c.execute("""
-                INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
-                VALUES (?, ?, ?, ?, ?)
-            """, (user_id, filename, 'json', True, unique_key))
-            file_id = c.lastrowid
-            
-            # Insert mapping into 'structured_file_storage' including file path
-            app.logger.info(f"Inserting mapping into structured_file_storage table")
-            c.execute("""
-                INSERT INTO structured_file_storage (unique_key, file_id, table_name)
-                VALUES (?, ?, ?)
-            """, (unique_key, file_id, table_name))
-            
-            # Create and update json_file_paths table to track physical files
-            try:
-                c.execute("""
-                    CREATE TABLE IF NOT EXISTS json_file_paths (
-                        file_id INTEGER PRIMARY KEY,
-                        unique_key TEXT,
-                        file_path TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                
-                c.execute("""
-                    INSERT INTO json_file_paths (file_id, unique_key, file_path)
-                    VALUES (?, ?, ?)
-                """, (file_id, unique_key, file_path))
-                app.logger.info(f"Saved file path in json_file_paths table: {file_path}")
-            except Exception as table_error:
-                app.logger.error(f"Error with json_file_paths table: {str(table_error)}")
-            
-            conn.commit()
-            app.logger.info(f"Successfully processed JSON file: {filename}")
-            return file_id, unique_key, table_name
-            
-        except Exception as e:
-            app.logger.error(f"Failed to process JSON file: {str(e)}")
-            traceback.print_exc()
-            # If structured handling fails, try unstructured
-            return handle_unstructured_upload(file, user_id, filename, c, conn, 'json', content=file_content)
-        
-    except Exception as e:
-        app.logger.error(f"Error handling JSON upload: {str(e)}")
-        traceback.print_exc()
-        # If overall processing fails, try unstructured
-        return handle_unstructured_upload(file, user_id, filename, c, conn, 'json')
-        
-def handle_xml_upload(file, user_id, filename, c, conn):
-    """
-    Handle XML file upload, trying to convert to structured data if possible.
-    If conversion fails, stores as unstructured text.
-    Returns the file_id of the new entry.
-    """
-    try:
-        import xml.etree.ElementTree as ET
-        
-        # Try to parse the XML
-        file_content = file.read()
-        
-        # Make a copy of the content for potential unstructured storage
-        content_copy = file_content
-        
-        # Reset file pointer to beginning
-        file.seek(0)
-        
-        # Parse the XML
-        tree = ET.parse(file)
-        root = tree.getroot()
-        
-        # Check if XML is regular and can be converted to DataFrame
-        # Look for repeating elements with similar structure
-        children = list(root)
-        
-        # If there are no children or only one child, treat as unstructured
-        if len(children) <= 1:
-            return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml', content=content_copy)
-        
-        # Check if children have similar structure (same tag or similar attributes)
-        first_child_tag = children[0].tag
-        if not all(child.tag == first_child_tag for child in children):
-            # Children have different tags, treat as unstructured
-            return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml', content=content_copy)
-        
-        # Try to convert to structured data
-        try:
-            # Extract data from similar elements
-            data = []
-            
-            for child in children:
-                item = {}
-                # Add attributes
-                for key, value in child.attrib.items():
-                    item[key] = value
-                
-                # Add text content if element has no children
-                if len(list(child)) == 0 and child.text and child.text.strip():
-                    item['text'] = child.text.strip()
-                
-                # Add child elements
-                for subchild in child:
-                    # Use tag as key, text as value
-                    if subchild.text and subchild.text.strip():
-                        item[subchild.tag] = subchild.text.strip()
-                    # If subchild has attributes but no text, use attributes
-                    elif subchild.attrib:
-                        for attr_key, attr_val in subchild.attrib.items():
-                            item[f"{subchild.tag}_{attr_key}"] = attr_val
-                
-                data.append(item)
-            
-            # Convert to DataFrame
-            df = pd.DataFrame(data)
-            
-            # If DataFrame is empty or has no columns, treat as unstructured
-            if df.empty or len(df.columns) == 0:
-                return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml', content=content_copy)
-            
-            # Generate a unique key for this file
-            unique_key = str(uuid.uuid4())
-            
-            # Create a table name for this data
-            table_name = f"table_{unique_key}"
-            
-            # Store data in the table
-            df.to_sql(table_name, conn, if_exists='replace', index=False)
-            
-            # Insert metadata into 'user_files'
-            c.execute("""
-                INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
-                VALUES (?, ?, ?, ?, ?)
-            """, (user_id, filename, 'xml', True, unique_key))
-            file_id = c.lastrowid
-            
-            # Insert mapping into 'structured_file_storage'
-            c.execute("""
-                INSERT INTO structured_file_storage (unique_key, file_id, table_name)
-                VALUES (?, ?, ?)
-            """, (unique_key, file_id, table_name))
-            
-            conn.commit()
-            return file_id, unique_key, table_name
-            
-        except Exception as e:
-            app.logger.error(f"Failed to convert XML to DataFrame: {str(e)}")
-            return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml', content=content_copy)
-            
-    except Exception as e:
-        app.logger.error(f"Error handling XML upload: {str(e)}")
-        traceback.print_exc()
-        return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml')
 
-def handle_unstructured_upload(file, user_id, filename, c, conn, file_type, content=None):
-    """Helper function to handle unstructured file storage"""
-    try:
-        unique_key = str(uuid.uuid4())
-        
-        # Read content if not provided
-        if content is None:
-            content = file.read()
-        
-        # Insert metadata into 'user_files'
-        c.execute("""
-            INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_id, filename, file_type, False, unique_key))
-        file_id = c.lastrowid
 
-        # Insert the content into 'unstructured_file_storage'
-        c.execute("""
-            INSERT INTO unstructured_file_storage (file_id, unique_key, content)
-            VALUES (?, ?, ?)
-        """, (file_id, unique_key, content))
-        
-        conn.commit()
-        app.logger.info(f"Stored {file_type} as unstructured content")
-        return file_id, unique_key, None
-    except Exception as e:
-        app.logger.error(f"Error in handle_unstructured_upload: {str(e)}")
-        traceback.print_exc()
-        raise
-
-## Background worker implementation starts
-def process_statistics_task(task):
-    """Process a statistics calculation task"""
-    task_id = task['task_id']
-    table_id = task['table_id']
-    table_name = task['table_name']
-    
-    try:
-        update_task_status(task_id, 'processing', 0.0, 'Starting statistics calculation')
-        
-        conn_user = sqlite3.connect('user_files.db')
-        conn_stats = sqlite3.connect('stats.db')
-        
-        # Load the data
-        query = f'SELECT * FROM "{table_name}"'
-        
-        # For large tables, check row count first
-        row_count_query = f'SELECT COUNT(*) FROM "{table_name}"'
-        row_count = pd.read_sql_query(row_count_query, conn_user).iloc[0, 0]
-        
-        # If table is very large, use chunking
-        if row_count > 100000:
-            chunk_size = 50000
-            # Just get the column names first
-            col_query = f'SELECT * FROM "{table_name}" LIMIT 1'
-            df_schema = pd.read_sql_query(col_query, conn_user)
-            columns = df_schema.columns.tolist()
-            
-            # Update status
-            update_task_status(task_id, 'processing', 0.1, f'Processing large table with {row_count} rows')
-            
-            # Process prioritized columns first
-            numeric_cols = []
-            categorical_cols = []
-            other_cols = []
-            
-            # Load a sample to determine column types
-            sample_query = f'SELECT * FROM "{table_name}" LIMIT 1000'
-            sample_df = pd.read_sql_query(sample_query, conn_user)
-            
-            # Categorize columns by type
-            for col in columns:
-                if pd.api.types.is_numeric_dtype(sample_df[col]):
-                    numeric_cols.append(col)
-                elif pd.api.types.is_categorical_dtype(sample_df[col]) or pd.api.types.is_object_dtype(sample_df[col]):
-                    categorical_cols.append(col)
-                else:
-                    other_cols.append(col)
-            
-            # Prioritize columns
-            prioritized_cols = numeric_cols + categorical_cols + other_cols
-            
-            # Calculate column statistics for each column with chunking
-            for i, column in enumerate(prioritized_cols):
-                # Update progress
-                progress = 0.1 + (0.7 * (i / len(prioritized_cols)))
-                update_task_status(
-                    task_id, 
-                    'processing', 
-                    progress, 
-                    f'Processing column {i+1}/{len(prioritized_cols)}: {column}'
-                )
-                
-                # Read column data in chunks
-                column_data = []
-                for chunk_df in pd.read_sql_query(query, conn_user, chunksize=chunk_size):
-                    column_data.append(chunk_df[column])
-                
-                # Combine chunks
-                full_column = pd.concat(column_data)
-                
-                # Calculate statistics for this column
-                column_stats = calculate_column_statistics_chunked(
-                    pd.DataFrame({column: full_column}), 
-                    column
-                )
-                
-                # Store or update column statistics
-                c_stats = conn_stats.cursor()
-                c_stats.execute("""
-                    INSERT OR REPLACE INTO column_stats 
-                    (table_id, column_name, data_type, basic_stats, distribution, 
-                     shape_stats, outlier_stats)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    table_id, 
-                    column, 
-                    column_stats['data_type'],
-                    column_stats['basic_stats'],
-                    column_stats['distribution'],
-                    column_stats['shape_stats'],
-                    column_stats['outlier_stats']
-                ))
-                conn_stats.commit()
-            
-            # Update progress
-            update_task_status(task_id, 'processing', 0.8, 'Calculating dataset statistics')
-            
-            # For dataset statistics, use a sample
-            if row_count > 10000:
-                sample_size = 10000
-                sample_query = f'SELECT * FROM "{table_name}" ORDER BY RANDOM() LIMIT {sample_size}'
-                sample_df = pd.read_sql_query(sample_query, conn_user)
-                dataset_stats = calculate_dataset_statistics_optimized(sample_df)
-            else:
-                full_df = pd.concat([chunk for chunk in pd.read_sql_query(query, conn_user, chunksize=chunk_size)])
-                dataset_stats = calculate_dataset_statistics_optimized(full_df)
-        else:
-            # For smaller tables, process everything at once
-            df = pd.read_sql_query(query, conn_user)
-            update_task_status(task_id, 'processing', 0.2, 'Processing columns')
-            
-            # Calculate statistics for each column
-            for i, column in enumerate(df.columns):
-                progress = 0.2 + (0.6 * (i / len(df.columns)))
-                update_task_status(
-                    task_id, 
-                    'processing', 
-                    progress, 
-                    f'Processing column {i+1}/{len(df.columns)}: {column}'
-                )
-                
-                column_stats = calculate_column_statistics_chunked(df, column)
-                
-                c_stats = conn_stats.cursor()
-                c_stats.execute("""
-                    INSERT OR REPLACE INTO column_stats 
-                    (table_id, column_name, data_type, basic_stats, distribution, 
-                     shape_stats, outlier_stats)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    table_id, 
-                    column, 
-                    column_stats['data_type'],
-                    column_stats['basic_stats'],
-                    column_stats['distribution'],
-                    column_stats['shape_stats'],
-                    column_stats['outlier_stats']
-                ))
-                conn_stats.commit()
-            
-            update_task_status(task_id, 'processing', 0.8, 'Calculating dataset statistics')
-            dataset_stats = calculate_dataset_statistics_optimized(df)
-        
-        # Store or update dataset statistics
-        c_stats = conn_stats.cursor()
-        c_stats.execute("""
-            INSERT OR REPLACE INTO dataset_stats 
-            (table_id, correlation_matrix, parallel_coords, 
-             violin_data, heatmap_data, scatter_matrix)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            table_id,
-            dataset_stats['correlation_matrix'],
-            dataset_stats['parallel_coords'],
-            dataset_stats['violin_data'],
-            dataset_stats['heatmap_data'],
-            dataset_stats['scatter_matrix']
-        ))
-        conn_stats.commit()
-        
-        # Update task status to completed
-        update_task_status(task_id, 'completed', 1.0, 'Statistics calculation completed')
-        
-        conn_user.close()
-        conn_stats.close()
-        
-        return True
-    except Exception as e:
-        logging.error(f"Error processing statistics task: {str(e)}")
-        traceback.print_exc()
-        update_task_status(task_id, 'failed', None, f'Error: {str(e)}')
-        return False
-
-def background_worker():
-    """Background worker function to process statistics tasks"""
-    logging.info("Starting background worker for statistics calculation")
-    while True:
-        try:
-            # Get a task from the queue with a timeout
-            task = stats_task_queue.get(timeout=5)
-            logging.info(f"Processing task: {task['task_id']}")
-            
-            # Process the task
-            process_statistics_task(task)
-            
-            # Mark the task as done
-            stats_task_queue.task_done()
-        except queue.Empty:
-            # No tasks in queue, just continue polling
-            pass
-        except Exception as e:
-            logging.error(f"Error in background worker: {str(e)}")
-            traceback.print_exc()
+# LLM settings
 def configure_llm_settings():
     """
     Set up LLM configuration for InsightAI.
@@ -718,6 +226,8 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
     finally:
         conn.close()
 
+
+# API Routes
 @app.route('/process_question/<user_id>/<file_id>', methods=['POST'])
 def process_question(user_id, file_id):
     try:
@@ -918,17 +428,18 @@ def serve_cleaned_data():
     else:
         return "Cleaned data file not found", 404
 
-# Add route to serve Mermaid diagrams
+# Mermaid diagrams
 @app.route('/mermaid/<path:filename>')
 def serve_mermaid(filename):
     return send_from_directory('static/visualization', filename, mimetype='text/plain')
 
-def start_background_worker():
-    """Start the background worker thread"""
-    worker_thread = threading.Thread(target=background_worker)
-    worker_thread.daemon = True  # Thread will exit when main thread exits
-    worker_thread.start()
-    logging.info("Background worker started")
+
+# def start_background_worker():
+#     """Start the background worker thread"""
+#     worker_thread = threading.Thread(target=background_worker)
+#     worker_thread.daemon = True  # Thread will exit when main thread exits
+#     worker_thread.start()
+    # logging.info("Background worker started")
 ## Background worker implementation ends
 
 def init_db():
@@ -981,6 +492,7 @@ def init_db():
     
     c.execute('''CREATE TABLE IF NOT EXISTS  unstructured_file_storage (
     file_id INTEGER REFERENCES user_files(file_id),
+    file_path TEXT,
     unique_key TEXT PRIMARY KEY,
     content BLOB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1044,8 +556,64 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
         """)
-    conn.commit()
-    conn.close()
+    
+    # Add document processing tables
+    with connection_pool.get_connection() as conn:
+        c = conn.cursor()
+        
+        # Table for document chunks and embeddings
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS document_chunks (
+                chunk_id TEXT PRIMARY KEY,
+                file_id INTEGER,
+                doc_id TEXT,
+                chunk_type TEXT NOT NULL,
+                content TEXT,
+                content_compressed BLOB,
+                embedding BLOB,
+                summary TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Table for document images
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS document_images (
+                image_id TEXT PRIMARY KEY,
+                file_id INTEGER,
+                doc_id TEXT,
+                image_data BLOB,
+                summary TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
+            )
+        ''')
+        
+        c.execute('''
+    CREATE TABLE IF NOT EXISTS document_processing (
+        process_id TEXT PRIMARY KEY,
+        file_id INTEGER,
+        status TEXT NOT NULL,
+        progress REAL DEFAULT 0,
+        message TEXT,
+        verbose_output TEXT,  -- New column for verbose output
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP,
+        FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
+    )
+''')
+        
+        # Create indexes for efficient querying
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_file_id ON document_chunks(file_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc_id ON document_chunks(doc_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_type ON document_chunks(chunk_type)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_images_file_id ON document_images(file_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_processing_file_id ON document_processing(file_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_processing_status ON document_processing(status)')
+    # if conn:
+    #     conn.commit()
+    #     conn.close()
 
 def init_stats_db():
     """Initialize the stats database structure"""
@@ -1117,36 +685,8 @@ def get_table_data(table_name, selected_columns):
     finally:
         if conn:
             conn.close()        
-def process_pdf_content(pdf_content):
-    """Process PDF content and return text with formatting preserved"""
-    try:
-        # Create a temporary file to write PDF content
-        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
-            temp_file.write(pdf_content)
-            temp_path = temp_file.name
 
-        try:
-            # Use pdfminer for better text extraction
-            text = extract_text(
-                temp_path,
-                laparams=LAParams(
-                    line_margin=0.5,
-                    word_margin=0.1,
-                    boxes_flow=0.5,
-                    detect_vertical=True
-                )
-            )
-            
-            # Clean up extracted text
-            text = '\n'.join(line.strip() for line in text.split('\n') if line.strip())
-            return text
-        finally:
-            # Clean up temporary file
-            os.unlink(temp_path)
-
-    except Exception as e:
-        logging.error(f"Error processing PDF: {str(e)}")
-        return None
+    
 def upload_local(file, filename):
     
     folder = "mydatabase"
@@ -1259,338 +799,218 @@ def handle_sqlite_upload(file, user_id, filename, c, conn):
 
 # //////////////////////////////////////////////
 
-def calculate_column_statistics_chunked(df, column_name, chunk_size=10000):
-    """Calculate statistics for a column using chunking for large datasets"""
-    column_data = df[column_name]
+# def calculate_column_statistics_chunked(df, column_name, chunk_size=10000):
+#     """Calculate statistics for a column using chunking for large datasets"""
+#     column_data = df[column_name]
     
-    # Determine data type
-    if pd.api.types.is_numeric_dtype(column_data):
-        data_type = 'numeric'
-        # Filter out NaN values for calculations
-        clean_data = column_data.dropna()
+#     # Determine data type
+#     if pd.api.types.is_numeric_dtype(column_data):
+#         data_type = 'numeric'
+#         # Filter out NaN values for calculations
+#         clean_data = column_data.dropna()
         
-        if len(clean_data) == 0:
-            # Handle empty columns
-            return {
-                'data_type': 'numeric',
-                'basic_stats': json.dumps({'missing_count': len(column_data), 'missing_percentage': 100.0}),
-                'distribution': json.dumps({}),
-                'shape_stats': json.dumps({}),
-                'outlier_stats': json.dumps({})
-            }
+#         if len(clean_data) == 0:
+#             # Handle empty columns
+#             return {
+#                 'data_type': 'numeric',
+#                 'basic_stats': json.dumps({'missing_count': len(column_data), 'missing_percentage': 100.0}),
+#                 'distribution': json.dumps({}),
+#                 'shape_stats': json.dumps({}),
+#                 'outlier_stats': json.dumps({})
+#             }
         
-        # Process in chunks for better performance
-        chunks = [clean_data[i:i+chunk_size] for i in range(0, len(clean_data), chunk_size)]
+#         # Process in chunks for better performance
+#         chunks = [clean_data[i:i+chunk_size] for i in range(0, len(clean_data), chunk_size)]
         
-        # Calculate basic stats incrementally
-        count = 0
-        sum_val = 0
-        sum_sq = 0
-        min_val = float('inf')
-        max_val = float('-inf')
+#         # Calculate basic stats incrementally
+#         count = 0
+#         sum_val = 0
+#         sum_sq = 0
+#         min_val = float('inf')
+#         max_val = float('-inf')
         
-        # First pass - calculate sums, min, max
-        for chunk in chunks:
-            chunk_min = chunk.min()
-            chunk_max = chunk.max()
-            min_val = min(min_val, chunk_min)
-            max_val = max(max_val, chunk_max)
+#         # First pass - calculate sums, min, max
+#         for chunk in chunks:
+#             chunk_min = chunk.min()
+#             chunk_max = chunk.max()
+#             min_val = min(min_val, chunk_min)
+#             max_val = max(max_val, chunk_max)
             
-            chunk_count = len(chunk)
-            chunk_sum = chunk.sum()
+#             chunk_count = len(chunk)
+#             chunk_sum = chunk.sum()
             
-            count += chunk_count
-            sum_val += chunk_sum
-            sum_sq += (chunk ** 2).sum()
+#             count += chunk_count
+#             sum_val += chunk_sum
+#             sum_sq += (chunk ** 2).sum()
         
-        # Calculate mean and variance
-        mean = sum_val / count if count > 0 else 0
-        variance = (sum_sq / count) - (mean ** 2) if count > 0 else 0
-        std_dev = math.sqrt(variance) if variance > 0 else 0
+#         # Calculate mean and variance
+#         mean = sum_val / count if count > 0 else 0
+#         variance = (sum_sq / count) - (mean ** 2) if count > 0 else 0
+#         std_dev = math.sqrt(variance) if variance > 0 else 0
         
-        # Calculate median and quartiles
-        sorted_data = clean_data.sort_values().reset_index(drop=True)
-        median_idx = len(sorted_data) // 2
-        median = sorted_data.iloc[median_idx]
+#         # Calculate median and quartiles
+#         sorted_data = clean_data.sort_values().reset_index(drop=True)
+#         median_idx = len(sorted_data) // 2
+#         median = sorted_data.iloc[median_idx]
         
-        q1_idx = len(sorted_data) // 4
-        q3_idx = q1_idx * 3
-        q1 = sorted_data.iloc[q1_idx]
-        q3 = sorted_data.iloc[q3_idx]
-        iqr = q3 - q1
+#         q1_idx = len(sorted_data) // 4
+#         q3_idx = q1_idx * 3
+#         q1 = sorted_data.iloc[q1_idx]
+#         q3 = sorted_data.iloc[q3_idx]
+#         iqr = q3 - q1
         
-        # Calculate mode efficiently
-        value_counts = clean_data.value_counts()
-        mode_value = value_counts.index[0] if not value_counts.empty else None
+#         # Calculate mode efficiently
+#         value_counts = clean_data.value_counts()
+#         mode_value = value_counts.index[0] if not value_counts.empty else None
         
-        # Basic stats
-        basic_stats = {
-            'min': float(min_val),
-            'max': float(max_val),
-            'mean': float(mean),
-            'median': float(median),
-            'mode': float(mode_value) if mode_value is not None else None,
-            'count': int(count),
-            'missing_count': int(len(column_data) - count),
-            'missing_percentage': float((len(column_data) - count) / len(column_data) * 100)
-        }
+#         # Basic stats
+#         basic_stats = {
+#             'min': float(min_val),
+#             'max': float(max_val),
+#             'mean': float(mean),
+#             'median': float(median),
+#             'mode': float(mode_value) if mode_value is not None else None,
+#             'count': int(count),
+#             'missing_count': int(len(column_data) - count),
+#             'missing_percentage': float((len(column_data) - count) / len(column_data) * 100)
+#         }
         
-        # Calculate histogram with fewer bins for large datasets
-        bin_count = min(50, max(10, int(count / 1000)))
-        hist, bin_edges = np.histogram(clean_data, bins=bin_count)
+#         # Calculate histogram with fewer bins for large datasets
+#         bin_count = min(50, max(10, int(count / 1000)))
+#         hist, bin_edges = np.histogram(clean_data, bins=bin_count)
         
-        # Generate a sampled version of the data for QQ-plot
-        # Use sampling for huge datasets
-        if len(clean_data) > 10000:
-            sample_size = 5000
-            sampled_data = clean_data.sample(sample_size) if len(clean_data) > sample_size else clean_data
-            sorted_sample = sampled_data.sort_values().values
-            n = len(sorted_sample)
-            theoretical_quantiles = np.array([stats.norm.ppf((i + 0.5) / n) for i in range(n)])
-            valid_mask = ~np.isnan(theoretical_quantiles)
-            x_values = theoretical_quantiles[valid_mask].tolist()
-            y_values = sorted_sample[valid_mask].tolist()
-        else:
-            sorted_values = clean_data.sort_values().values
-            n = len(sorted_values)
-            theoretical_quantiles = np.array([stats.norm.ppf((i + 0.5) / n) for i in range(n)])
-            valid_mask = ~np.isnan(theoretical_quantiles)
-            x_values = theoretical_quantiles[valid_mask].tolist()
-            y_values = sorted_values[valid_mask].tolist()
+#         # Generate a sampled version of the data for QQ-plot
+#         # Use sampling for huge datasets
+#         if len(clean_data) > 10000:
+#             sample_size = 5000
+#             sampled_data = clean_data.sample(sample_size) if len(clean_data) > sample_size else clean_data
+#             sorted_sample = sampled_data.sort_values().values
+#             n = len(sorted_sample)
+#             theoretical_quantiles = np.array([stats.norm.ppf((i + 0.5) / n) for i in range(n)])
+#             valid_mask = ~np.isnan(theoretical_quantiles)
+#             x_values = theoretical_quantiles[valid_mask].tolist()
+#             y_values = sorted_sample[valid_mask].tolist()
+#         else:
+#             sorted_values = clean_data.sort_values().values
+#             n = len(sorted_values)
+#             theoretical_quantiles = np.array([stats.norm.ppf((i + 0.5) / n) for i in range(n)])
+#             valid_mask = ~np.isnan(theoretical_quantiles)
+#             x_values = theoretical_quantiles[valid_mask].tolist()
+#             y_values = sorted_values[valid_mask].tolist()
         
-        distribution = {
-            'histogram': {
-                'counts': hist.tolist(),
-                'bin_edges': bin_edges.tolist()
-            },
-            'boxplot': {
-                'q1': float(q1),
-                'q3': float(q3),
-                'median': float(median),
-                'whislo': float(max(min_val, q1 - 1.5 * iqr)),
-                'whishi': float(min(max_val, q3 + 1.5 * iqr))
-            },
-            'qqplot': {
-                'x': x_values,
-                'y': y_values
-            }
-        }
+#         distribution = {
+#             'histogram': {
+#                 'counts': hist.tolist(),
+#                 'bin_edges': bin_edges.tolist()
+#             },
+#             'boxplot': {
+#                 'q1': float(q1),
+#                 'q3': float(q3),
+#                 'median': float(median),
+#                 'whislo': float(max(min_val, q1 - 1.5 * iqr)),
+#                 'whishi': float(min(max_val, q3 + 1.5 * iqr))
+#             },
+#             'qqplot': {
+#                 'x': x_values,
+#                 'y': y_values
+#             }
+#         }
         
-        # Calculate skewness and kurtosis on sampled data for large datasets
-        if len(clean_data) > 50000:
-            sample_size = 10000
-            skew_sample = clean_data.sample(sample_size) if len(clean_data) > sample_size else clean_data
-            skewness = float(skew_sample.skew())
-            kurtosis = float(skew_sample.kurtosis())
-        else:
-            skewness = float(clean_data.skew())
-            kurtosis = float(clean_data.kurtosis())
+#         # Calculate skewness and kurtosis on sampled data for large datasets
+#         if len(clean_data) > 50000:
+#             sample_size = 10000
+#             skew_sample = clean_data.sample(sample_size) if len(clean_data) > sample_size else clean_data
+#             skewness = float(skew_sample.skew())
+#             kurtosis = float(skew_sample.kurtosis())
+#         else:
+#             skewness = float(clean_data.skew())
+#             kurtosis = float(clean_data.kurtosis())
         
-        shape_stats = {
-            'skewness': skewness,
-            'kurtosis': kurtosis,
-            'range': float(max_val - min_val)
-        }
+#         shape_stats = {
+#             'skewness': skewness,
+#             'kurtosis': kurtosis,
+#             'range': float(max_val - min_val)
+#         }
         
-        # Find outliers
-        lower_bound = q1 - 1.5 * iqr
-        upper_bound = q3 + 1.5 * iqr
-        outliers = clean_data[(clean_data < lower_bound) | (clean_data > upper_bound)]
+#         # Find outliers
+#         lower_bound = q1 - 1.5 * iqr
+#         upper_bound = q3 + 1.5 * iqr
+#         outliers = clean_data[(clean_data < lower_bound) | (clean_data > upper_bound)]
         
-        # Limit the number of outliers stored
-        max_outliers = 100
-        outlier_list = outliers.head(max_outliers).tolist()
+#         # Limit the number of outliers stored
+#         max_outliers = 100
+#         outlier_list = outliers.head(max_outliers).tolist()
         
-        outlier_stats = {
-            'count': len(outliers),
-            'percentage': float((len(outliers) / len(clean_data)) * 100),
-            'lower_bound': float(lower_bound),
-            'upper_bound': float(upper_bound),
-            'outlier_values': outlier_list
-        }
+#         outlier_stats = {
+#             'count': len(outliers),
+#             'percentage': float((len(outliers) / len(clean_data)) * 100),
+#             'lower_bound': float(lower_bound),
+#             'upper_bound': float(upper_bound),
+#             'outlier_values': outlier_list
+#         }
     
-    elif pd.api.types.is_categorical_dtype(column_data) or pd.api.types.is_object_dtype(column_data):
-        data_type = 'categorical'
+#     elif pd.api.types.is_categorical_dtype(column_data) or pd.api.types.is_object_dtype(column_data):
+#         data_type = 'categorical'
         
-        # For large datasets, limit the number of unique values processed
-        if len(column_data) > 100000:
-            sample = column_data.sample(min(50000, len(column_data)))
-            value_counts = sample.value_counts()
-        else:
-            value_counts = column_data.value_counts()
+#         # For large datasets, limit the number of unique values processed
+#         if len(column_data) > 100000:
+#             sample = column_data.sample(min(50000, len(column_data)))
+#             value_counts = sample.value_counts()
+#         else:
+#             value_counts = column_data.value_counts()
         
-        # Limit to top 1000 categories for very large categorical columns
-        if len(value_counts) > 1000:
-            value_counts = value_counts.head(1000)
+#         # Limit to top 1000 categories for very large categorical columns
+#         if len(value_counts) > 1000:
+#             value_counts = value_counts.head(1000)
         
-        basic_stats = {
-            'unique_count': int(value_counts.shape[0]),
-            'top': str(value_counts.index[0]) if not value_counts.empty else None,
-            'top_count': int(value_counts.iloc[0]) if not value_counts.empty else 0,
-            'missing_count': int(column_data.isna().sum()),
-            'missing_percentage': float(column_data.isna().sum() / len(column_data) * 100)
-        }
+#         basic_stats = {
+#             'unique_count': int(value_counts.shape[0]),
+#             'top': str(value_counts.index[0]) if not value_counts.empty else None,
+#             'top_count': int(value_counts.iloc[0]) if not value_counts.empty else 0,
+#             'missing_count': int(column_data.isna().sum()),
+#             'missing_percentage': float(column_data.isna().sum() / len(column_data) * 100)
+#         }
         
-        # Distribution for categorical data
-        value_dict = {}
-        for k, v in value_counts.items():
-            # Convert key to string to ensure JSON serialization
-            key = str(k) if k is not None else 'null'
-            value_dict[key] = int(v)
+#         # Distribution for categorical data
+#         value_dict = {}
+#         for k, v in value_counts.items():
+#             # Convert key to string to ensure JSON serialization
+#             key = str(k) if k is not None else 'null'
+#             value_dict[key] = int(v)
             
-        distribution = {
-            'value_counts': value_dict
-        }
+#         distribution = {
+#             'value_counts': value_dict
+#         }
         
-        # Shape stats (minimal for categorical)
-        # Calculate entropy with a limit on number of categories
-        shape_stats = {
-            'entropy': float(stats.entropy(value_counts.values)) if len(value_counts) > 1 else 0
-        }
+#         # Shape stats (minimal for categorical)
+#         # Calculate entropy with a limit on number of categories
+#         shape_stats = {
+#             'entropy': float(stats.entropy(value_counts.values)) if len(value_counts) > 1 else 0
+#         }
         
-        # No outliers for categorical data
-        outlier_stats = {}
+#         # No outliers for categorical data
+#         outlier_stats = {}
     
-    else:
-        # For other types (datetime, etc.)
-        data_type = 'other'
-        missing_count = column_data.isna().sum()
-        basic_stats = {
-            'missing_count': int(missing_count),
-            'missing_percentage': float(missing_count / len(column_data) * 100)
-        }
-        distribution = {}
-        shape_stats = {}
-        outlier_stats = {}
+#     else:
+#         # For other types (datetime, etc.)
+#         data_type = 'other'
+#         missing_count = column_data.isna().sum()
+#         basic_stats = {
+#             'missing_count': int(missing_count),
+#             'missing_percentage': float(missing_count / len(column_data) * 100)
+#         }
+#         distribution = {}
+#         shape_stats = {}
+#         outlier_stats = {}
     
-    return {
-        'data_type': data_type,
-        'basic_stats': json.dumps(basic_stats),
-        'distribution': json.dumps(distribution),
-        'shape_stats': json.dumps(shape_stats),
-        'outlier_stats': json.dumps(outlier_stats)
-    }
+#     return {
+#         'data_type': data_type,
+#         'basic_stats': json.dumps(basic_stats),
+#         'distribution': json.dumps(distribution),
+#         'shape_stats': json.dumps(shape_stats),
+#         'outlier_stats': json.dumps(outlier_stats)
+#     }
 
-def calculate_dataset_statistics_optimized(df, max_columns=15, sample_size=5000):
-    """Calculate dataset-level statistics with optimizations for large datasets"""
-    # Only include numeric columns for dataset-wide statistics
-    numeric_df = df.select_dtypes(include=['number'])
-    
-    if numeric_df.empty or numeric_df.shape[1] < 2:
-        # Not enough numeric columns for meaningful dataset statistics
-        return {
-            'correlation_matrix': '{}',
-            'parallel_coords': '{}',
-            'violin_data': '{}',
-            'heatmap_data': '{}',
-            'scatter_matrix': '{}'
-        }
-    
-    # Limit the number of columns to analyze
-    if numeric_df.shape[1] > max_columns:
-        # Choose columns with highest variance
-        variances = numeric_df.var().sort_values(ascending=False)
-        selected_columns = variances.head(max_columns).index.tolist()
-        numeric_df = numeric_df[selected_columns]
-    
-    # Sample the data for large datasets
-    if len(df) > sample_size:
-        sampled_df = numeric_df.sample(sample_size)
-    else:
-        sampled_df = numeric_df
-    
-    # Calculate correlation matrix
-    corr_matrix = sampled_df.corr().round(4).fillna(0)
-    corr_dict = {col: corr_matrix[col].to_dict() for col in corr_matrix.columns}
-    
-    # Calculate p-values for correlations - with optimizations
-    p_values = {}
-    for col1 in numeric_df.columns:
-        p_values[col1] = {}
-        for col2 in numeric_df.columns:
-            if col1 != col2:
-                # Use the sampled data for p-value calculations
-                clean_data1 = sampled_df[col1].dropna()
-                clean_data2 = sampled_df[col2].dropna()
-                # Only calculate if there's enough data
-                if len(clean_data1) > 2 and len(clean_data2) > 2:
-                    try:
-                        _, p_value = stats.pearsonr(clean_data1, clean_data2)
-                        p_values[col1][col2] = float(p_value)
-                    except:
-                        p_values[col1][col2] = 1.0
-                else:
-                    p_values[col1][col2] = 1.0
-            else:
-                p_values[col1][col2] = 0.0  # p-value for correlation with self
-    
-    # Prepare parallel coordinates data
-    # Normalize sampled data for visualization
-    parallel_df = sampled_df.copy()
-    for col in parallel_df.columns:
-        min_val = parallel_df[col].min()
-        max_val = parallel_df[col].max()
-        if max_val > min_val:
-            parallel_df[col] = (parallel_df[col] - min_val) / (max_val - min_val)
-    
-    # Limit to 1000 rows for parallel coords
-    viz_sample_size = min(1000, len(parallel_df))
-    viz_df = parallel_df.sample(viz_sample_size) if len(parallel_df) > viz_sample_size else parallel_df
-    
-    parallel_coords = {
-        'columns': numeric_df.columns.tolist(),
-        'data': viz_df.fillna(0).values.tolist(),
-        'ranges': {col: [float(numeric_df[col].min()), float(numeric_df[col].max())] 
-                 for col in numeric_df.columns}
-    }
-    
-    # Prepare violin plot data
-    # Limit data points for each violin
-    max_points_per_violin = 1000
-    violin_data = {
-        'columns': numeric_df.columns.tolist(),
-        'data': {
-            col: numeric_df[col].dropna().sample(
-                min(max_points_per_violin, numeric_df[col].dropna().shape[0])
-            ).tolist() for col in numeric_df.columns
-        },
-        'stats': {
-            col: {
-                'min': float(numeric_df[col].min()),
-                'max': float(numeric_df[col].max()),
-                'mean': float(numeric_df[col].mean()),
-                'median': float(numeric_df[col].median()),
-                'q1': float(numeric_df[col].quantile(0.25)),
-                'q3': float(numeric_df[col].quantile(0.75))
-            } for col in numeric_df.columns
-        }
-    }
-    
-    # Prepare heatmap data
-    heatmap_data = {
-        'z': corr_matrix.values.tolist(),
-        'x': corr_matrix.columns.tolist(),
-        'y': corr_matrix.columns.tolist(),
-        'p_values': p_values
-    }
-    
-    # Prepare scatter matrix data
-    # Limit to 500 points for scatter plots
-    scatter_sample_size = min(500, len(sampled_df))
-    scatter_df = sampled_df.sample(scatter_sample_size) if len(sampled_df) > scatter_sample_size else sampled_df
-    
-    scatter_matrix = {
-        'columns': numeric_df.columns.tolist(),
-        'data': scatter_df.fillna(0).to_dict('records')
-    }
-    
-    return {
-        'correlation_matrix': json.dumps(corr_dict),
-        'parallel_coords': json.dumps(parallel_coords),
-        'violin_data': json.dumps(violin_data),
-        'heatmap_data': json.dumps(heatmap_data),
-        'scatter_matrix': json.dumps(scatter_matrix)
-    }
 # /////////////////////////////////
 def calculate_column_statistics(df, column_name):
     """Calculate comprehensive statistics for a single column"""
@@ -1808,29 +1228,31 @@ def upload_file(user_id):
                 'status_task_id': task_id 
             }), 200
         elif extension in unstructured_extensions:
-            if extension =='pdf':
-               content = file.read()
-            
-               # Process PDF content immediately during upload
-               processed_text = process_pdf_content(content)
-               if not processed_text:
+            if extension in ['pdf','txt','docx','doc']:
+                content = file.read()
+                
+                # Process PDF content immediately during upload
+                processed_text = process_document_content(content,extension)
+                
+                if not processed_text:
                    return 'Error processing PDF', 500
                    
-               unique_key = str(uuid.uuid4())
+                unique_key = str(uuid.uuid4())
                
                # Store file metadata
-               c.execute("""
+                c.execute("""
                    INSERT INTO user_files 
                    (user_id, filename, file_type, is_structured, unique_key)
                    VALUES (?, ?, ?, ?, ?)
                """, (user_id, file.filename, extension, False, unique_key))
-               file_id = c.lastrowid
+                file_id = c.lastrowid
                    # Store processed text content
-               c.execute("""
+                c.execute("""
                    INSERT INTO unstructured_file_storage 
                    (file_id, unique_key, content)
                    VALUES (?, ?, ?)
-               """, (file_id, unique_key, processed_text))
+                """, (file_id, unique_key, processed_text))
+                
             elif extension == 'xml':
                 # Handle XML - try structured first, fall back to unstructured
                 file_id, unique_key, table_name = handle_xml_upload(file, user_id, filename, c, conn)
@@ -2371,133 +1793,6 @@ def get_stats_status(user_id, file_id):
         if 'conn_stats' in locals():
             conn_stats.close()
 # Task status starts
-def create_stats_task(table_id, table_name):
-    """Create a new statistics calculation task with Celery"""
-    task_id = f"stats_{table_id}_{int(time.time())}"
-    
-    conn = sqlite3.connect('stats.db')
-    c = conn.cursor()
-    
-    try:
-        c.execute("""
-            INSERT INTO stats_tasks (task_id, table_id, status, message)
-            VALUES (?, ?, ?, ?)
-        """, (task_id, table_id, 'pending', 'Task created'))
-        
-        conn.commit()
-        
-        # Queue the task for background processing
-        stats_task_queue.put({
-            'task_id': task_id,
-            'table_id': table_id,
-            'table_name': table_name
-        })
-        
-        logger.info(f"Created statistics task: {task_id}")
-        return task_id
-    except Exception as e:
-        logger.error(f"Error creating stats task: {str(e)}")
-        return None
-    finally:
-        conn.close()
-
-def update_task_status(task_id, status, progress=None, message=None):
-    """Update the status of a statistics calculation task"""
-    conn = sqlite3.connect('stats.db')
-    c = conn.cursor()
-    
-    try:
-        # Update task status
-        if progress is not None and message is not None:
-            c.execute("""
-                UPDATE stats_tasks 
-                SET status = ?, progress = ?, message = ?
-                WHERE task_id = ?
-            """, (status, progress, message, task_id))
-        elif progress is not None:
-            c.execute("""
-                UPDATE stats_tasks 
-                SET status = ?, progress = ?
-                WHERE task_id = ?
-            """, (status, progress, task_id))
-        elif message is not None:
-            c.execute("""
-                UPDATE stats_tasks 
-                SET status = ?, message = ?
-                WHERE task_id = ?
-            """, (status, message, task_id))
-        else:
-            c.execute("""
-                UPDATE stats_tasks 
-                SET status = ?
-                WHERE task_id = ?
-            """, (status, task_id))
-        
-        # If task is completed, update the completed_at timestamp
-        if status == 'completed':
-            c.execute("""
-                UPDATE stats_tasks 
-                SET completed_at = CURRENT_TIMESTAMP
-                WHERE task_id = ?
-            """, (task_id,))
-        
-        conn.commit()
-        
-        # Update global status dictionary for quicker access
-        TASK_STATUS[task_id] = {
-            'status': status,
-            'progress': progress if progress is not None else 0.0,
-            'message': message
-        }
-        
-        return True
-    except Exception as e:
-        logging.error(f"Error updating task status: {str(e)}")
-        return False
-    finally:
-        conn.close()
-
-def get_task_status(task_id):
-    """Get the current status of a task"""
-    # Check the in-memory cache first
-    if task_id in TASK_STATUS:
-        return TASK_STATUS[task_id]
-    
-    # If not in cache, check the database
-    conn = sqlite3.connect('stats.db')
-    c = conn.cursor()
-    
-    try:
-        c.execute("""
-            SELECT status, progress, message, created_at, completed_at
-            FROM stats_tasks
-            WHERE task_id = ?
-        """, (task_id,))
-        
-        result = c.fetchone()
-        if not result:
-            return None
-            
-        status, progress, message, created_at, completed_at = result
-        
-        # Cache the result
-        TASK_STATUS[task_id] = {
-            'status': status,
-            'progress': progress,
-            'message': message,
-            'created_at': created_at,
-            'completed_at': completed_at
-        }
-        
-        return TASK_STATUS[task_id]
-    except Exception as e:
-        logging.error(f"Error getting task status: {str(e)}")
-        return None
-    finally:
-        conn.close()
-#Task status ends
-
-
 ## status updates API ENDPOINTS start
 @app.route('/start-stats-calculation/<user_id>/<file_id>', methods=['POST'])
 def start_stats_calculation(user_id, file_id):
@@ -4749,7 +4044,7 @@ def convert_numpy_types(obj):
     if isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32,
                        np.int64, np.uint8, np.uint16, np.uint32, np.uint64)):
         return int(obj)
-    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+    elif isinstance(obj, (np.float64, np.float16, np.float32, np.float64)):
         return float(obj)
     elif isinstance(obj, (np.bool_)):
         return bool(obj)
@@ -5991,7 +5286,6 @@ def save_dashboard(user_id, dashboard_id):
             conn.close()
             
 # nest_asyncio.apply()
-# Replace your current generate_chart_image function with this improved version
 
 async def generate_chart_image(html_content):
     """
@@ -6070,207 +5364,6 @@ async def generate_chart_image(html_content):
         
     finally:
         await browser.close()
-# async def generate_chart_image(html_content):
-
-#     """
-#     Generate an image from HTML content using pyppeteer without using signal handlers.
-    
-#     Args:
-#         html_content: The HTML content of the chart
-        
-#     Returns:
-#         Binary image data (PNG)
-#     """
-#     # Import here to avoid blocking the main thread
-#     import pyppeteer
-    
-#     # Full HTML template with necessary scripts
-#     full_html = f"""
-#     <!DOCTYPE html>
-#     <html>
-#     <head>
-#         <meta charset="utf-8">
-#         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-#         <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-#         <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2/dist/echarts-gl.min.js"></script>
-#         <style>
-#             body, html {{
-#                 margin: 0;
-#                 padding: 0;
-#                 overflow: hidden;
-#                 width: 1000px;
-#                 height: 600px;
-#             }}
-#             #chart-container {{
-#                 width: 100%;
-#                 height: 100%;
-#             }}
-#         </style>
-#     </head>
-#     <body>
-#         <div id="chart-container">
-#             {html_content}
-#         </div>
-#     </body>
-#     </html>
-#     """
-    
-#     # Launch browser with args that avoid signal handling issues
-#     browser = await pyppeteer.launch({
-#         'headless': True,
-#         'handleSIGINT': False,
-#         'handleSIGTERM': False,
-#         'handleSIGHUP': False,
-#         'args': ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-#     })
-    
-#     try:
-#         page = await browser.newPage()
-#         await page.setViewport({'width': 1000, 'height': 600})
-        
-#         # Set content and wait for chart to render
-#         await page.setContent(full_html)
-#         await page.waitForSelector('#chart-container')
-        
-#         # Wait for charts to render
-#         # await page.waitForFunction("""
-#         #     () => {
-#         #         const charts = document.querySelectorAll('.echarts-container');
-#         #         return charts.length > 0 && 
-#         #                Array.from(charts).every(chart => chart.__echarts__ && 
-#         #                !chart.__echarts__.isLoading());
-#         #     }
-#         # """, {'timeout': 5000})
-#         await page.waitForSelector('#chart-container div', {'timeout': 10000})
-#         # Additional wait to ensure animations complete
-#         await page.waitForTimeout(2000)
-        
-#         # Take screenshot
-#         screenshot = await page.screenshot({
-#             'type': 'png',
-#             'fullPage': False,
-#             'clip': {
-#                 'x': 0,
-#                 'y': 0,
-#                 'width': 1000,
-#                 'height': 600
-#             }
-#         })
-        
-#         return screenshot
-        
-#     finally:
-#         await browser.close()
-
-# async def generate_chart_image(html_content):
-#     """
-#     Generate an image from HTML content using pyppeteer with simplified approach.
-    
-#     Args:
-#         html_content: The HTML content of the chart
-        
-#     Returns:
-#         Binary image data (PNG)
-#     """
-#     # Import here to avoid blocking the main thread
-#     import pyppeteer
-    
-#     # Full HTML template with necessary scripts
-#     full_html = f"""
-#     <!DOCTYPE html>
-#     <html>
-#     <head>
-#         <meta charset="utf-8">
-#         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-#         <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-#         <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2/dist/echarts-gl.min.js"></script>
-#         <style>
-#             body, html {{
-#                 margin: 0;
-#                 padding: 0;
-#                 overflow: hidden;
-#                 width: 1000px;
-#                 height: 600px;
-#                 background-color: white;
-#             }}
-#             #chart-container {{
-#                 width: 100%;
-#                 height: 100%;
-#                 display: flex;
-#                 align-items: center;
-#                 justify-content: center;
-#                 background-color: white;
-#             }}
-#         </style>
-#     </head>
-#     <body>
-#         <div id="chart-container">
-#             {html_content}
-#         </div>
-#     </body>
-#     </html>
-#     """
-    
-#     # Launch browser with args that avoid signal handling issues
-#     browser = await pyppeteer.launch({
-#         'headless': True,
-#         'handleSIGINT': False,
-#         'handleSIGTERM': False,
-#         'handleSIGHUP': False,
-#         'args': [
-#             '--no-sandbox', 
-#             '--disable-setuid-sandbox', 
-#             '--disable-dev-shm-usage',
-#             '--disable-web-security',
-#             '--disable-features=IsolateOrigins,site-per-process'
-#         ]
-#     })
-    
-#     try:
-#         page = await browser.newPage()
-        
-#         # Increase default navigation timeout
-#         page.setDefaultNavigationTimeout(30000)
-        
-#         # Set viewport
-#         await page.setViewport({'width': 1000, 'height': 600})
-        
-#         # Load content
-#         await page.setContent(full_html)
-        
-#         # Use the correct method name for waiting in pyppeteer
-#         await page.waitFor(5000)  # waitFor is the correct method in pyppeteer
-        
-#         # Take screenshot
-#         screenshot = await page.screenshot({
-#             'type': 'png',
-#             'fullPage': False,
-#             'omitBackground': False
-#         })
-        
-#         return screenshot
-        
-#     except Exception as e:
-#         # Log the error but don't raise it
-#         import logging
-#         logging.error(f"Error during screenshot capture: {str(e)}")
-        
-#         # Return a basic fallback image
-#         from PIL import Image, ImageDraw, ImageFont
-#         import io
-        
-#         # Create a blank white image with error text
-#         img = Image.new('RGB', (1000, 600), color='white')
-#         d = ImageDraw.Draw(img)
-#         d.text((20, 20), f"Chart rendering failed: {str(e)}", fill=(255, 0, 0))
-        
-#         # Convert to bytes
-#         buffer = io.BytesIO()
-#         img.save(buffer, format='PNG')
-#         return buffer.getvalue()
-        
-#     finally:
-#         await browser.close()
 
 # calculator statistics here
 # Add these routes to your Flask application
@@ -6725,266 +5818,497 @@ def apply_calculation(user_id, file_id):
             conn.close()
 # calculator statistics end
 
-import threading
-import queue
-import sqlite3  
-import pandas as pd
-import logging
-import traceback
-
-
-## Background worker implementation starts
-def process_statistics_task(task):
-    """
-    Enhanced version of process_statistics_task that handles the table naming correctly
-    """
-    task_id = task['task_id']
-    table_id = task['table_id']
-    table_name = task['table_name']
-    
+# pdf_processing
+@app.route('/process-document/<user_id>/<file_id>', methods=['POST'])
+def start_document_processing(user_id, file_id):
+    """Start the document processing and return a process ID."""
     try:
-        update_task_status(task_id, 'processing', 0.0, 'Starting statistics calculation')
+        data = request.json
+        model_name = data.get('model_name', 'meta-llama/llama-4-maverick-17b-128e-instruct')
+        verbose = data.get('verbose', False)
         
-        conn_user = sqlite3.connect('user_files.db')
-        conn_stats = sqlite3.connect('stats.db')
-        
-        # Verify table exists
-        c_user = conn_user.cursor()
-        c_user.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-        
-        if not c_user.fetchone():
-            logging.error(f"Table {table_name} does not exist in the database")
-            update_task_status(task_id, 'failed', None, f'Error: Table {table_name} not found')
-            return False
-        
-        # Load the data
-        query = f'SELECT * FROM "{table_name}"'
-        
-        # For large tables, check row count first
-        row_count_query = f'SELECT COUNT(*) FROM "{table_name}"'
-        try:
-            row_count = pd.read_sql_query(row_count_query, conn_user).iloc[0, 0]
-        except Exception as count_error:
-            logging.error(f"Error counting rows: {str(count_error)}")
-            # Fallback to estimate
-            row_count = 10000
-        
-        # Proceed with processing based on table size
-        update_task_status(task_id, 'processing', 0.1, f'Processing table with approximately {row_count} rows')
-        
-        # If table is very large, use chunking
-        if row_count > 100000:
-            chunk_size = 50000
-            # Just get the column names first
-            col_query = f'SELECT * FROM "{table_name}" LIMIT 1'
-            df_schema = pd.read_sql_query(col_query, conn_user)
-            columns = df_schema.columns.tolist()
+        # Validate file exists and belongs to user
+        with connection_pool.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("""
+                SELECT file_id, file_type
+                FROM user_files
+                WHERE file_id = ? AND user_id = ?
+            """, (file_id, user_id))
             
-            # Update status
-            update_task_status(task_id, 'processing', 0.2, f'Processing large table with {len(columns)} columns')
+            file_info = c.fetchone()
+            if not file_info:
+                return jsonify({'error': 'File not found'}), 404
             
-            # Process prioritized columns first
-            numeric_cols = []
-            categorical_cols = []
-            other_cols = []
+            # Check if file type is supported
+            file_type = file_info[1]
+            if file_type not in ['pdf', 'docx', 'doc', 'txt']:
+                return jsonify({
+                    'error': 'Unsupported file type for document processing',
+                    'file_type': file_type
+                }), 400
             
-            # Load a sample to determine column types
-            sample_query = f'SELECT * FROM "{table_name}" LIMIT 1000'
-            sample_df = pd.read_sql_query(sample_query, conn_user)
+            # Check if file is already being processed
+            c.execute("""
+                SELECT process_id, status
+                FROM document_processing
+                WHERE file_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (file_id,))
             
-            # Categorize columns by type
-            for col in columns:
-                try:
-                    if pd.api.types.is_numeric_dtype(sample_df[col]):
-                        numeric_cols.append(col)
-                    elif pd.api.types.is_categorical_dtype(sample_df[col]) or pd.api.types.is_object_dtype(sample_df[col]):
-                        categorical_cols.append(col)
-                    else:
-                        other_cols.append(col)
-                except Exception as col_error:
-                    logging.error(f"Error processing column {col}: {str(col_error)}")
-                    other_cols.append(col)
-            
-            # Prioritize columns
-            prioritized_cols = numeric_cols + categorical_cols + other_cols
-            
-            # Calculate column statistics for each column with chunking
-            for i, column in enumerate(prioritized_cols):
-                # Update progress
-                progress = 0.2 + (0.6 * (i / len(prioritized_cols)))
-                update_task_status(
-                    task_id, 
-                    'processing', 
-                    progress, 
-                    f'Processing column {i+1}/{len(prioritized_cols)}: {column}'
-                )
-                
-                try:
-                    # Read column data in chunks
-                    column_data = []
-                    for chunk_df in pd.read_sql_query(query, conn_user, chunksize=chunk_size):
-                        column_data.append(chunk_df[column])
-                    
-                    # Combine chunks
-                    full_column = pd.concat(column_data)
-                    
-                    # Calculate statistics for this column
-                    column_stats = calculate_column_statistics_chunked(
-                        pd.DataFrame({column: full_column}), 
-                        column
-                    )
-                    
-                    # Store or update column statistics
-                    c_stats = conn_stats.cursor()
-                    c_stats.execute("""
-                        INSERT OR REPLACE INTO column_stats 
-                        (table_id, column_name, data_type, basic_stats, distribution, 
-                         shape_stats, outlier_stats)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        table_id, 
-                        column, 
-                        column_stats['data_type'],
-                        column_stats['basic_stats'],
-                        column_stats['distribution'],
-                        column_stats['shape_stats'],
-                        column_stats['outlier_stats']
-                    ))
-                    conn_stats.commit()
-                    
-                except Exception as col_error:
-                    logging.error(f"Error processing column {column}: {str(col_error)}")
-                    update_task_status(
-                        task_id, 
-                        'processing', 
-                        progress, 
-                        f'Error processing column {column}, skipping: {str(col_error)}'
-                    )
-            
-            # Update progress
-            update_task_status(task_id, 'processing', 0.8, 'Calculating dataset statistics')
-            
-            # For dataset statistics, use a sample for very large tables
-            if row_count > 10000:
-                sample_size = min(10000, row_count)
-                sample_query = f'SELECT * FROM "{table_name}" ORDER BY RANDOM() LIMIT {sample_size}'
-                sample_df = pd.read_sql_query(sample_query, conn_user)
-                dataset_stats = calculate_dataset_statistics_optimized(sample_df)
-            else:
-                # For smaller tables, process everything at once
-                full_df = pd.concat([chunk for chunk in pd.read_sql_query(query, conn_user, chunksize=chunk_size)])
-                dataset_stats = calculate_dataset_statistics_optimized(full_df)
-        else:
-            # For smaller tables, process everything at once
-            try:
-                df = pd.read_sql_query(query, conn_user)
-                update_task_status(task_id, 'processing', 0.2, f'Processing {len(df.columns)} columns')
-                
-                # Calculate statistics for each column
-                for i, column in enumerate(df.columns):
-                    progress = 0.2 + (0.6 * (i / len(df.columns)))
-                    update_task_status(
-                        task_id, 
-                        'processing', 
-                        progress, 
-                        f'Processing column {i+1}/{len(df.columns)}: {column}'
-                    )
-                    
-                    try:
-                        column_stats = calculate_column_statistics_chunked(df, column)
-                        
-                        c_stats = conn_stats.cursor()
-                        c_stats.execute("""
-                            INSERT OR REPLACE INTO column_stats 
-                            (table_id, column_name, data_type, basic_stats, distribution, 
-                             shape_stats, outlier_stats)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            table_id, 
-                            column, 
-                            column_stats['data_type'],
-                            column_stats['basic_stats'],
-                            column_stats['distribution'],
-                            column_stats['shape_stats'],
-                            column_stats['outlier_stats']
-                        ))
-                        conn_stats.commit()
-                    except Exception as col_error:
-                        logging.error(f"Error processing column {column}: {str(col_error)}")
-                
-                update_task_status(task_id, 'processing', 0.8, 'Calculating dataset statistics')
-                dataset_stats = calculate_dataset_statistics_optimized(df)
-            except Exception as df_error:
-                logging.error(f"Error processing dataframe: {str(df_error)}")
-                update_task_status(task_id, 'failed', None, f'Error processing data: {str(df_error)}')
-                return False
+            process_info = c.fetchone()
+            if process_info and process_info[1] in ['processing', 'queued']:
+                return jsonify({
+                    'process_id': process_info[0],
+                    'status': process_info[1],
+                    'message': 'Document is already being processed'
+                }), 200
         
-        # Store or update dataset statistics
-        try:
-            c_stats = conn_stats.cursor()
-            c_stats.execute("""
-                INSERT OR REPLACE INTO dataset_stats 
-                (table_id, correlation_matrix, parallel_coords, 
-                 violin_data, heatmap_data, scatter_matrix)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                table_id,
-                dataset_stats['correlation_matrix'],
-                dataset_stats['parallel_coords'],
-                dataset_stats['violin_data'],
-                dataset_stats['heatmap_data'],
-                dataset_stats['scatter_matrix']
-            ))
-            conn_stats.commit()
-        except Exception as stats_error:
-            logging.error(f"Error storing dataset statistics: {str(stats_error)}")
-            update_task_status(task_id, 'failed', None, f'Error storing dataset statistics: {str(stats_error)}')
-            return False
+        # Start document processing with model_name and verbose parameters
+        process_id = process_document_file(connection_pool, file_id, user_id, model_name, verbose)
         
-        # Update task status to completed
-        update_task_status(task_id, 'completed', 1.0, 'Statistics calculation completed')
+        return jsonify({
+            'success': True,
+            'process_id': process_id,
+            'message': 'Document processing started',
+            'model_name': model_name,
+            'verbose': verbose
+        })
         
-        return True
     except Exception as e:
-        logging.error(f"Error processing statistics task: {str(e)}")
-        traceback.print_exc()
-        update_task_status(task_id, 'failed', None, f'Error: {str(e)}')
-        return False
-    finally:
-        if 'conn_user' in locals():
-            conn_user.close()
-        if 'conn_stats' in locals():
-            conn_stats.close()
-def background_worker():
-    """Background worker function to process statistics tasks"""
-    logging.info("Starting background worker for statistics calculation")
-    while True:
-        try:
-            # Get a task from the queue with a timeout
-            task = stats_task_queue.get(timeout=5)
-            logging.info(f"Processing task: {task['task_id']}")
+        app.logger.error(f"Error starting document processing: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+     
+@app.route('/check-document-processing/<process_id>', methods=['GET'])
+def check_document_processing(process_id):
+    """Check the status of a document processing task."""
+    try:
+        with connection_pool.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("""
+                SELECT file_id, status, progress, message, created_at, completed_at, verbose_output
+                FROM document_processing
+                WHERE process_id = ?
+            """, (process_id,))
             
-            # Process the task
-            process_statistics_task(task)
+            result = c.fetchone()
+            if not result:
+                return jsonify({'error': 'Process not found'}), 404
+                
+            file_id, status, progress, message, created_at, completed_at, verbose_output = result
             
-            # Mark the task as done
-            stats_task_queue.task_done()
-        except queue.Empty:
-            # No tasks in queue, just continue polling
-            pass
-        except Exception as e:
-            logging.error(f"Error in background worker: {str(e)}")
-            traceback.print_exc()
+            # Get chunk counts
+            c.execute("""
+                SELECT COUNT(*) FROM document_chunks WHERE file_id = ?
+            """, (file_id,))
+            
+            chunk_count = c.fetchone()[0]
+            
+            c.execute("""
+                SELECT COUNT(*) FROM document_images WHERE file_id = ?
+            """, (file_id,))
+            
+            image_count = c.fetchone()[0]
+            
+            return jsonify({
+                'process_id': process_id,
+                'file_id': file_id,
+                'status': status,
+                'progress': progress,
+                'message': message,
+                'created_at': created_at,
+                'completed_at': completed_at,
+                'chunk_count': chunk_count,
+                'image_count': image_count,
+                'verbose_output': verbose_output  # Include verbose output
+            })
+            
+    except Exception as e:
+        app.logger.error(f"Error checking document processing: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/query-document/<user_id>/<file_id>', methods=['POST'])
+def query_document(user_id, file_id):
+    """Query a processed document with natural language."""
+    try:
+        data = request.json
+        query = data.get('query')
+        
+        if not query:
+            return jsonify({'error': 'Query is required'}), 400
+        
+        # Validate file exists and belongs to user
+        with connection_pool.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("""
+                SELECT file_id
+                FROM user_files
+                WHERE file_id = ? AND user_id = ?
+            """, (file_id, user_id))
+            
+            if not c.fetchone():
+                return jsonify({'error': 'File not found or access denied'}), 404
+            
+            # Check if file has been processed
+            c.execute("""
+                SELECT COUNT(*) FROM document_chunks WHERE file_id = ?
+            """, (file_id,))
+            
+            chunk_count = c.fetchone()[0]
+            if chunk_count == 0:
+                return jsonify({
+                    'error': 'Document has not been processed yet',
+                    'suggestion': 'Process the document first using /process-document endpoint'
+                }), 400
+            
+            # Get relevant document chunks for the query
+            c.execute("""
+                SELECT chunk_id, doc_id, chunk_type, content_compressed, summary
+                FROM document_chunks
+                WHERE file_id = ?
+                ORDER BY rowid DESC
+                LIMIT 20
+            """, (file_id,))
+            
+            chunks = c.fetchall()
+            
+            # Get relevant images
+            c.execute("""
+                SELECT image_id, doc_id, summary
+                FROM document_images
+                WHERE file_id = ?
+                LIMIT 5
+            """, (file_id,))
+            
+            images = c.fetchall()
+        
+        # Prepare context for the query
+        context_text = ""
+        for chunk in chunks:
+            chunk_id, doc_id, chunk_type, content_compressed, summary = chunk
+            if content_compressed:
+                try:
+                    content = decompress_content(content_compressed)
+                    context_text += f"{content}\n\n"
+                except:
+                    context_text += f"{summary}\n\n"
+            else:
+                context_text += f"{summary}\n\n"
+        
+        # Prepare prompt for the query - specifically requesting [FINAL ANSWER] format
+        model_name = "meta-llama/llama-4-maverick-17b-128e-instruct"  # Default model
+        prompt_text = f"""
+        Answer the question based only on the following context from the document.
+        
+        Context:
+        {context_text}
+        
+        Question: {query}
+        
+        Format your response with '[FINAL ANSWER]' before your answer.
+        For example:
+        
+        [FINAL ANSWER]
+        Your detailed answer here...
+        """
+        
+        # Use the LLM to get the answer
+        model = get_model(model_name)
+        prompt = ChatPromptTemplate.from_template(prompt_text)
+        chain = prompt | model | StrOutputParser()
+        
+        # Get the answer
+        answer = chain.invoke({})
+        
+        # Ensure the answer has the [FINAL ANSWER] tag
+        if "[FINAL ANSWER]" not in answer:
+            answer = f"[FINAL ANSWER]\n{answer}"
+        
+        # Extract just the final answer part
+        final_answer_parts = answer.split("[FINAL ANSWER]")
+        if len(final_answer_parts) > 1:
+            final_answer = final_answer_parts[1].strip()
+        else:
+            final_answer = answer.strip()
+        
+        # Get image data if needed
+        image_data = []
+        if images:
+            with connection_pool.get_connection() as conn:
+                c = conn.cursor()
+                for image in images:
+                    image_id, doc_id, summary = image
+                    
+                    c.execute("""
+                        SELECT image_data FROM document_images WHERE image_id = ?
+                    """, (image_id,))
+                    
+                    result = c.fetchone()
+                    if result and result[0]:
+                        image_data.append({
+                            'image_id': image_id,
+                            'summary': summary,
+                            'data': base64.b64encode(result[0]).decode('utf-8')
+                        })
+        
+        return jsonify({
+            'success': True,
+            'query': query,
+            'full_answer': answer,
+            'final_answer': final_answer,
+            'chunk_count': len(chunks),
+            'images': image_data
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error querying document: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/document-chunks/<user_id>/<file_id>', methods=['GET'])
+def get_document_chunks(user_id, file_id):
+    """Get document chunks for a file."""
+    try:
+        page = request.args.get('page', 1, type=int)
+        page_size = request.args.get('page_size', 10, type=int)
+        chunk_type = request.args.get('type', None)
+        
+        with connection_pool.get_connection() as conn:
+            c = conn.cursor()
+            
+            # Validate file exists and belongs to user
+            c.execute("""
+                SELECT file_id
+                FROM user_files
+                WHERE file_id = ? AND user_id = ?
+            """, (file_id, user_id))
+            
+            if not c.fetchone():
+                return jsonify({'error': 'File not found or access denied'}), 404
+            
+            # Build query with optional type filter
+            query_params = [file_id]
+            type_filter = ""
+            if chunk_type:
+                type_filter = "AND chunk_type = ?"
+                query_params.append(chunk_type)
+            
+            # Get total count
+            c.execute(f"""
+                SELECT COUNT(*) 
+                FROM document_chunks 
+                WHERE file_id = ? {type_filter}
+            """, query_params)
+            
+            total_count = c.fetchone()[0]
+            
+            # Get chunks with pagination
+            offset = (page - 1) * page_size
+            params = query_params + [page_size, offset]
+            
+            c.execute(f"""
+                SELECT chunk_id, doc_id, chunk_type, summary, created_at
+                FROM document_chunks
+                WHERE file_id = ? {type_filter}
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            """, params)
+            
+            chunks = c.fetchall()
+            
+            # Convert to list of dictionaries
+            chunks_data = []
+            for chunk in chunks:
+                chunk_id, doc_id, chunk_type, summary, created_at = chunk
+                chunks_data.append({
+                    'chunk_id': chunk_id,
+                    'doc_id': doc_id,
+                    'type': chunk_type,
+                    'summary': summary,
+                    'created_at': created_at
+                })
+            
+            return jsonify({
+                'chunks': chunks_data,
+                'pagination': {
+                    'total': total_count,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': (total_count + page_size - 1) // page_size
+                }
+            })
+            
+    except Exception as e:
+        app.logger.error(f"Error getting document chunks: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-def start_background_worker():
-    """Start the background worker thread"""
-    worker_thread = threading.Thread(target=background_worker)
-    worker_thread.daemon = True  # Thread will exit when main thread exits
-    worker_thread.start()
-    logging.info("Background worker started")
-## Background worker implementation ends
+@app.route('/document-images/<user_id>/<file_id>', methods=['GET'])
+def get_document_images(user_id, file_id):
+    """Get document images for a file."""
+    try:
+        page = request.args.get('page', 1, type=int)
+        page_size = request.args.get('page_size', 5, type=int)
+        include_data = request.args.get('include_data', 'false').lower() == 'true'
+        
+        with connection_pool.get_connection() as conn:
+            c = conn.cursor()
+            
+            # Validate file exists and belongs to user
+            c.execute("""
+                SELECT file_id
+                FROM user_files
+                WHERE file_id = ? AND user_id = ?
+            """, (file_id, user_id))
+            
+            if not c.fetchone():
+                return jsonify({'error': 'File not found or access denied'}), 404
+            
+            # Get total count
+            c.execute("""
+                SELECT COUNT(*) 
+                FROM document_images 
+                WHERE file_id = ?
+            """, (file_id,))
+            
+            total_count = c.fetchone()[0]
+            
+            # Get images with pagination
+            offset = (page - 1) * page_size
+            
+            if include_data:
+                c.execute("""
+                    SELECT image_id, doc_id, image_data, summary, created_at
+                    FROM document_images
+                    WHERE file_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                """, (file_id, page_size, offset))
+            else:
+                c.execute("""
+                    SELECT image_id, doc_id, NULL as image_data, summary, created_at
+                    FROM document_images
+                    WHERE file_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                """, (file_id, page_size, offset))
+            
+            images = c.fetchall()
+            
+            # Convert to list of dictionaries
+            images_data = []
+            for image in images:
+                image_id, doc_id, image_data, summary, created_at = image
+                
+                image_entry = {
+                    'image_id': image_id,
+                    'doc_id': doc_id,
+                    'summary': summary,
+                    'created_at': created_at
+                }
+                
+                if include_data and image_data:
+                    image_entry['data'] = base64.b64encode(image_data).decode('utf-8')
+                
+                images_data.append(image_entry)
+            
+            return jsonify({
+                'images': images_data,
+                'pagination': {
+                    'total': total_count,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': (total_count + page_size - 1) // page_size
+                }
+            })
+            
+    except Exception as e:
+        app.logger.error(f"Error getting document images: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
+@app.route('/document-image/<image_id>', methods=['GET'])
+def get_document_image(image_id):
+    """Get a specific document image by ID."""
+    try:
+        with connection_pool.get_connection() as conn:
+            c = conn.cursor()
+            
+            c.execute("""
+                SELECT image_data
+                FROM document_images
+                WHERE image_id = ?
+            """, (image_id,))
+            
+            result = c.fetchone()
+            if not result or not result[0]:
+                return jsonify({'error': 'Image not found'}), 404
+            
+            image_data = result[0]
+            
+            # Determine content type - assume JPEG/PNG
+            content_type = 'image/jpeg'
+            
+            # Return image as binary response
+            return Response(image_data, mimetype=content_type)
+            
+    except Exception as e:
+        app.logger.error(f"Error getting document image: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-
+@app.route('/document-summary/<user_id>/<file_id>', methods=['GET'])
+def get_document_summary(user_id, file_id):
+    """Get the final summary of a processed document."""
+    try:
+        with connection_pool.get_connection() as conn:
+            c = conn.cursor()
+            
+            # Validate file exists and belongs to user
+            c.execute("""
+                SELECT file_id
+                FROM user_files
+                WHERE file_id = ? AND user_id = ?
+            """, (file_id, user_id))
+            
+            if not c.fetchone():
+                return jsonify({'error': 'File not found or access denied'}), 404
+            
+            # Get the most recent summary
+            c.execute("""
+                SELECT summary_id, summary, created_at
+                FROM document_summaries
+                WHERE file_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (file_id,))
+            
+            result = c.fetchone()
+            if not result:
+                return jsonify({
+                    'error': 'No summary found for this document',
+                    'suggestion': 'Process the document first using /process-document endpoint'
+                }), 404
+                
+            summary_id, summary, created_at = result
+            
+            # Extract just the final answer part if present
+            final_answer = summary
+            if "[FINAL ANSWER]" in summary:
+                final_answer_parts = summary.split("[FINAL ANSWER]")
+                if len(final_answer_parts) > 1:
+                    final_answer = final_answer_parts[1].strip()
+            
+            return jsonify({
+                'success': True,
+                'summary_id': summary_id,
+                'full_summary': summary,
+                'final_answer': final_answer,
+                'created_at': created_at
+            })
+            
+    except Exception as e:
+        app.logger.error(f"Error getting document summary: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 if __name__ == '__main__':
     app.run(debug=False, port=5000)
+    initialize_nltk()

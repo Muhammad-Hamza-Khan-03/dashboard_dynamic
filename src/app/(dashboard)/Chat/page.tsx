@@ -1265,7 +1265,7 @@ const FileSelector: React.FC<{
         setFiles(response.data.files.filter((f: ExistingFile) => 
           f.file_type === 'csv' || f.file_type === 'db' || 
           f.file_type === 'sqlite' || f.file_type === 'sqlite3' || 
-          f.file_type === 'json' || f.file_type === 'xml'
+          f.file_type === 'json' || f.file_type === 'xml' || f.file_type === 'pdf'
         ));
       } catch (err: any) {
         console.error('Error fetching files:', err);
@@ -1287,8 +1287,8 @@ const FileSelector: React.FC<{
     const fileType = file.name.split('.').pop()?.toLowerCase();
     
     // Check if file type is supported
-    if (!['csv', 'db', 'sqlite', 'sqlite3', 'json', 'xml'].includes(fileType || '')) {
-      setError('Unsupported file type. Please upload CSV, JSON, XML, or SQLite database files.');
+    if (!['csv', 'db', 'sqlite', 'sqlite3', 'json', 'xml', 'pdf', 'docx', 'doc', 'txt'].includes(fileType || '')) {
+      setError('Unsupported file type. Please upload CSV, JSON, XML, SQLite database, or document files (PDF, DOCX, DOC, TXT).');
       return;
     }
     
@@ -1348,6 +1348,8 @@ const FileSelector: React.FC<{
       setUploadingFile(false);
     }
   };
+
+
 
   function getFileIcon(file_type: string): React.ReactNode {
     switch(file_type.toLowerCase()) {
@@ -2720,6 +2722,12 @@ export default function InsightAIPage() {
     diagram_enabled: false
   });
   
+  // Determine if the selected file is a document (PDF, DOCX, etc.)
+  const isDocumentFile = selectedFile?.fileType === 'pdf' || 
+                         selectedFile?.fileType === 'docx' || 
+                         selectedFile?.fileType === 'doc' || 
+                         selectedFile?.fileType === 'txt';
+
   return (
     <div className="container mx-auto py-8 px-4">
       <h1 className="text-3xl font-bold text-center mb-8 flex items-center justify-center">
@@ -2743,6 +2751,10 @@ export default function InsightAIPage() {
                   <FileJson className="h-5 w-5 text-blue-500" />
                 ) : selectedFile.fileType === 'xml' ? (
                   <FileCode className="h-5 w-5 text-blue-500" />
+                ) :  selectedFile.fileType === 'pdf' ? (
+                  <FileText className="h-5 w-5 text-red-500" />
+                ) : selectedFile.fileType === 'docx' || selectedFile.fileType === 'doc' ? (
+                  <FileText className="h-5 w-5 text-blue-500" />
                 ) : (
                   <Database className="h-5 w-5 text-blue-500" />
                 )}
@@ -2756,16 +2768,475 @@ export default function InsightAIPage() {
               </div>
             </div>
             
-            <AnalysisConfig onConfigChange={setConfig} />
+            {isDocumentFile ? (
+              // Document Analysis Panel for document files (PDF, DOCX, etc.)
+              <DocumentAnalysisPanel 
+                userId={user?.id}
+                selectedFile={selectedFile}
+              />
+            ) : (
+              // Standard data analysis for structured data files
+              <>
+                <AnalysisConfig onConfigChange={setConfig} />
+                <AnalysisPanel 
+                  userId={user?.id}
+                  selectedFile={selectedFile}
+                  config={config}
+                />
+              </>
+            )}
+
+            {/* <AnalysisConfig onConfigChange={setConfig} /> */}
             
-            <AnalysisPanel 
+            {/* <AnalysisPanel 
               userId={user?.id}
               selectedFile={selectedFile}
               config={config}
-            />
+            /> */}
           </>
         )}
       </div>
     </div>
   );
 }
+
+
+const DocumentAnalysisPanel: React.FC<{
+  userId: string | undefined;
+  selectedFile: SelectedFile | null;
+}> = ({ userId, selectedFile }) => {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessed, setIsProcessed] = useState(false);
+  const [processId, setProcessId] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<{
+    status: string;
+    progress: number;
+    message: string;
+  }>({ status: '', progress: 0, message: '' });
+  const [query, setQuery] = useState('');
+  const [queryResult, setQueryResult] = useState<{
+    success: boolean;
+    query: string;
+    final_answer: string;
+    images: any[];
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [polling, setPolling] = useState(false);
+  const [modelName, setModelName] = useState<string>("meta-llama/llama-4-maverick-17b-128e-instruct");
+  const [verboseMode, setVerboseMode] = useState<boolean>(false);
+  const [verboseOutput, setVerboseOutput] = useState<{
+    infoMessages: string[];
+    textSummaries: string[];
+    tableSummaries: string[];
+    imageSummaries: string[];
+  }>({
+    infoMessages: [],
+    textSummaries: [],
+    tableSummaries: [],
+    imageSummaries: []
+  });
+
+  
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    
+    if (polling && processId) {
+      intervalId = setInterval(async () => {
+        try {
+          const response = await axios.get(
+            `http://localhost:5000/check-document-processing/${processId}`
+          );
+          
+          setProcessingStatus({
+            status: response.data.status,
+            progress: response.data.progress * 100,
+            message: response.data.message
+          });
+          
+          // Parse verbose output if available
+          if (verboseMode && response.data.verbose_output) {
+            parseVerboseOutput(response.data.verbose_output);
+          }
+          
+          if (response.data.status === 'completed') {
+            setPolling(false);
+            setIsProcessing(false);
+            setIsProcessed(true);
+          } else if (response.data.status === 'failed') {
+            setPolling(false);
+            setIsProcessing(false);
+            setError(response.data.message || 'Processing failed');
+          }
+        } catch (err) {
+          console.error('Error checking document processing status:', err);
+          setPolling(false);
+        }
+      }, 2000);
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [polling, processId, verboseMode]);
+
+  const parseVerboseOutput = (output: string) => {
+    // Parse INFO messages
+    const infoRegex = /\[INFO\](.*?)(?=\[INFO\]|\[TEXT SUMMARIES\]|\[TABLE SUMMARIES\]|\[IMAGE SUMMARIES\]|$)/gs;
+    const infoMatches = [...output.matchAll(infoRegex)].map(match => match[1].trim());
+    
+    // Parse TEXT SUMMARIES
+    const textSummariesMatch = output.match(/\[TEXT SUMMARIES\]\s*\n\s*(.*?)(?=\[TABLE SUMMARIES\]|$)/s);
+    const textSummaries = textSummariesMatch ? 
+      JSON.parse(textSummariesMatch[1].trim().replace(/^\'|\'$/g, '"').replace(/\'/g, '"')) : [];
+    
+    // Parse TABLE SUMMARIES
+    const tableSummariesMatch = output.match(/\[TABLE SUMMARIES\]\s*\n\s*(.*?)(?=\[IMAGE SUMMARIES\]|$)/s);
+    const tableSummaries = tableSummariesMatch ? 
+      JSON.parse(tableSummariesMatch[1].trim().replace(/^\'|\'$/g, '"').replace(/\'/g, '"')) : [];
+    
+    // Parse IMAGE SUMMARIES
+    const imageSummariesMatch = output.match(/\[IMAGE SUMMARIES\]\s*\n\s*(.*?)(?=\[WARNING\]|$)/s);
+    const imageSummaries = imageSummariesMatch ? 
+      JSON.parse(imageSummariesMatch[1].trim().replace(/^\'|\'$/g, '"').replace(/\'/g, '"')) : [];
+    
+    setVerboseOutput({
+      infoMessages: infoMatches,
+      textSummaries: textSummaries,
+      tableSummaries: tableSummaries,
+      imageSummaries: imageSummaries
+    });
+  };
+  
+
+  const startProcessing = async () => {
+    if (!userId || !selectedFile?.fileId) return;
+    
+    setIsProcessing(true);
+    setError(null);
+    
+    try {
+      const response = await axios.post(
+        `http://localhost:5000/process-document/${userId}/${selectedFile.fileId}`,
+        { 
+          model_name: modelName,
+          verbose: verboseMode
+        }
+      );
+      
+      if (response.data.process_id) {
+        setProcessId(response.data.process_id);
+        setPolling(true);
+      } else {
+        throw new Error(response.data.error || "Failed to start processing");
+      }
+    } catch (err: any) {
+      console.error('Error starting document processing:', err);
+      setError(err.response?.data?.error || err.message || 'An unknown error occurred');
+      setIsProcessing(false);
+    }
+  };
+
+
+  // Check processing status
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    
+    if (polling && processId) {
+      intervalId = setInterval(async () => {
+        try {
+          const response = await axios.get(
+            `http://localhost:5000/check-document-processing/${processId}`
+          );
+          
+          setProcessingStatus({
+            status: response.data.status,
+            progress: response.data.progress * 100,
+            message: response.data.message
+          });
+          
+          if (response.data.status === 'completed') {
+            setPolling(false);
+            setIsProcessing(false);
+            setIsProcessed(true);
+          } else if (response.data.status === 'failed') {
+            setPolling(false);
+            setIsProcessing(false);
+            setError(response.data.message || 'Processing failed');
+          }
+        } catch (err) {
+          console.error('Error checking document processing status:', err);
+          setPolling(false);
+        }
+      }, 2000);
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [polling, processId]);
+
+  // Query the processed document
+  const handleQuery = async () => {
+    if (!userId || !selectedFile?.fileId || !query) return;
+    
+    setError(null);
+    
+    try {
+      const response = await axios.post(
+        `http://localhost:5000/query-document/${userId}/${selectedFile.fileId}`,
+        { query }
+      );
+      
+      if (response.data.success) {
+        setQueryResult(response.data);
+      } else {
+        throw new Error(response.data.error || "Failed to process query");
+      }
+    } catch (err: any) {
+      console.error('Error querying document:', err);
+      setError(err.response?.data?.error || err.message || 'An unknown error occurred');
+    }
+  };
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <FileText className="h-5 w-5 mr-2 inline-block" />
+            Document Analysis
+          </CardTitle>
+          <CardDescription>
+            Process and query your document using AI
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!isProcessed && !isProcessing ? (
+            <div className="space-y-4">
+              {/* Model Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="model-select">AI Model</Label>
+                <Select 
+                  value={modelName} 
+                  onValueChange={setModelName}
+                >
+                  <SelectTrigger id="model-select">
+                    <SelectValue placeholder="Select AI model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="meta-llama/llama-4-maverick-17b-128e-instruct">
+                      Llama 4 Maverick (Recommended)
+                    </SelectItem>
+                    <SelectItem value="gpt-4o-mini">
+                      GPT-4o Mini (Faster)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Verbose Mode Toggle */}
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="verbose-mode" 
+                  checked={verboseMode}
+                  onCheckedChange={(checked) => setVerboseMode(checked === true)}
+                />
+                <label 
+                  htmlFor="verbose-mode" 
+                  className="text-sm font-medium leading-none cursor-pointer"
+                >
+                  Verbose Mode (Detailed Processing Information)
+                </label>
+              </div>
+              
+              <Button 
+                className="w-full"
+                onClick={startProcessing}
+              >
+                <BookOpen className="h-4 w-4 mr-2" />
+                Process Document
+              </Button>
+            </div>
+          ) : isProcessing ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>{processingStatus.message}</span>
+                  <span>{Math.round(processingStatus.progress)}%</span>
+                </div>
+                <Progress value={processingStatus.progress} className="w-full h-2" />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Ask a question about this document..."
+                  className="flex-1"
+                />
+                <Button onClick={handleQuery} disabled={!query}>
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              {queryResult && (
+                <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-md">
+                      <Sparkles className="h-5 w-5 mr-2 inline-block text-blue-500" />
+                      Answer
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {/* Display the FINAL ANSWER tag content */}
+                    <div className="prose prose-sm dark:prose-invert">
+                      {queryResult.final_answer.includes("[FINAL ANSWER]") ? (
+                        // Parse out the final answer part
+                        <EnhancedMarkdown 
+                          content={queryResult.final_answer.split("[FINAL ANSWER]")[1].trim()} 
+                        />
+                      ) : (
+                        <EnhancedMarkdown content={queryResult.final_answer} />
+                      )}
+                    </div>
+                    
+                    {/* Images Section - Display with better formatting */}
+                    {queryResult.images && queryResult.images.length > 0 && (
+                      <div className="mt-6 space-y-4 border-t pt-4">
+                        <h4 className="font-medium flex items-center">
+                          <ImageIcon className="h-4 w-4 mr-2 text-blue-500" />
+                          Document Images
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {queryResult.images.map((img, idx) => (
+                            <div key={idx} className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
+                              <div className="relative w-full h-64">
+                                <img 
+                                  src={`data:image/jpeg;base64,${img.data}`} 
+                                  alt={img.summary || `Document image ${idx+1}`}
+                                  className="object-contain w-full h-full"
+                                />
+                              </div>
+                              {img.summary && (
+                                <div className="text-center text-sm text-muted-foreground py-2 px-2 border-t">
+                                  {img.summary}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Add this to the DocumentAnalysisPanel's return statement after the error Alert */}
+{verboseMode && isProcessing && verboseOutput && (
+  <div className="space-y-4 mt-8">
+    <h3 className="text-xl font-semibold flex items-center">
+      <Terminal className="h-5 w-5 mr-2 text-blue-500" />
+      Verbose Processing Output
+    </h3>
+    
+    {/* INFO Messages */}
+    {verboseOutput.infoMessages.length > 0 && (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-md flex items-center">
+            <Info className="h-5 w-5 mr-2 text-blue-500" />
+            Document Info
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {verboseOutput.infoMessages.map((info, index) => (
+              <div key={index} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md">
+                <pre className="whitespace-pre-wrap text-sm font-mono">{info}</pre>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )}
+    
+    {/* Text Summaries */}
+    {verboseOutput.textSummaries.length > 0 && (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-md flex items-center">
+            <AlignLeft className="h-5 w-5 mr-2 text-green-500" />
+            Text Summaries
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {verboseOutput.textSummaries.map((summary, index) => (
+              <div key={index} className="bg-green-50 dark:bg-green-900/10 p-4 rounded-md">
+                <p className="whitespace-pre-wrap text-sm">{summary}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )}
+    
+    {/* Table Summaries */}
+    {verboseOutput.tableSummaries.length > 0 && (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-md flex items-center">
+            <Table className="h-5 w-5 mr-2 text-amber-500" />
+            Table Summaries
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {verboseOutput.tableSummaries.map((summary, index) => (
+              <div key={index} className="bg-amber-50 dark:bg-amber-900/10 p-4 rounded-md">
+                <p className="whitespace-pre-wrap text-sm">{summary}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )}
+    
+    {/* Image Summaries */}
+    {verboseOutput.imageSummaries.length > 0 && (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-md flex items-center">
+            <ImageIcon className="h-5 w-5 mr-2 text-purple-500" />
+            Image Summaries
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {verboseOutput.imageSummaries.map((summary, index) => (
+              <div key={index} className="bg-purple-50 dark:bg-purple-900/10 p-4 rounded-md border border-purple-100 dark:border-purple-800">
+                <p className="whitespace-pre-wrap text-sm">{summary}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )}
+  </div>
+)}
+    </div>
+  );
+};

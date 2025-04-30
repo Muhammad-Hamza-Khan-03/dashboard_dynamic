@@ -31,6 +31,8 @@ yarn-error.log*
 # vercel
 .vercel
 
+.vscode
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
@@ -60,7 +62,9 @@ var/
 wheels/
 *.egg-info/
 .installed.cfg
-*.egg
+*.eggs
+
+
 
 static/exports/
 stats.db
@@ -85,3 +89,9 @@ static/
 visualization/
 data_analysis*.md
 stats.db
+
+
+
+# folders
+non-used
+process_pdf
