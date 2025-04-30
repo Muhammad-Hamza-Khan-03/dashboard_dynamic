@@ -1232,7 +1232,7 @@ def upload_file(user_id):
                 content = file.read()
                 
                 # Process PDF content immediately during upload
-                processed_text = process_document_content(content,extension)
+                processed_text,file_path = process_document_content(content,extension)
                 
                 if not processed_text:
                    return 'Error processing PDF', 500
@@ -1249,9 +1249,9 @@ def upload_file(user_id):
                    # Store processed text content
                 c.execute("""
                    INSERT INTO unstructured_file_storage 
-                   (file_id, unique_key, content)
-                   VALUES (?, ?, ?)
-                """, (file_id, unique_key, processed_text))
+                   (file_id, unique_key, content, file_path)
+                   VALUES (?, ?, ?, ?)
+                """, (file_id, unique_key, content, file_path))
                 
             elif extension == 'xml':
                 # Handle XML - try structured first, fall back to unstructured

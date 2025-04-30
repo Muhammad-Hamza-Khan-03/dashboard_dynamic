@@ -135,18 +135,18 @@ def _process_document_background(connection_pool, process_id, file_id, user_id, 
                     conn.commit()
                     return
                 if content_result:
-                    app.logger.info("Content from pdf file: \n",content)
+                    # app.logger.error("Content from pdf file: \n",content)
                     file_path,content = content_result
 
                 else:
                     content = " "
                 # Save content to temporary file
-                # temp_dir = os.path.join('static', 'temp')
-                # os.makedirs(temp_dir, exist_ok=True)
-                # temp_file_path = os.path.join(temp_dir, f"{unique_key}.{file_type}")
+                temp_dir = os.path.join('static', 'temp')
+                os.makedirs(temp_dir, exist_ok=True)
+                temp_file_path = os.path.join(temp_dir, f"{unique_key}.{file_type}")
                 
-                # with open(temp_file_path, 'wb') as temp_file:
-                #     temp_file.write(content if isinstance(content, bytes) else content.encode('utf-8'))
+                with open(temp_file_path, 'wb') as temp_file:
+                    temp_file.write(content if isinstance(content, bytes) else content.encode('utf-8'))
                 
                 # Update status
                 c.execute("""
@@ -161,15 +161,16 @@ def _process_document_background(connection_pool, process_id, file_id, user_id, 
                 os.makedirs(image_dir, exist_ok=True)
                 
                 # Process the document using partition with better image handling
-                if not (file_path or os.path.exists(file_path)):
-                    c.execute("""
-                        UPDATE document_processing SET status = 'failed', message = 'File not found'
-                        WHERE process_id = ?
-                    """, (process_id,))
-                    conn.commit()
-                    return
+                # if not (file_path or os.path.exists(file_path)):
+                #     c.execute("""
+                #         UPDATE document_processing SET status = 'failed', message = 'File not found'
+                #         WHERE process_id = ?
+                #     """, (process_id,))
+                #     conn.commit()
+                #     return
                     
                 try:
+                    
                     chunks = partition(
                         filename=file_path,
                         infer_table_structure=True,
@@ -228,6 +229,7 @@ def _process_document_background(connection_pool, process_id, file_id, user_id, 
                                 # Make sure to capture the image
                                 if hasattr(el.metadata, 'image_base64') and el.metadata.image_base64:
                                     images.append(el.metadata.image_base64)
+                print("Images", images)
                 
                 # Log extraction info in verbose mode                    
                 if verbose and verbose_output_buffer:

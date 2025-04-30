@@ -684,6 +684,18 @@ def process_document_content(file_content: bytes, suffix: str):
     """
     try:
         # Create a temporary file with appropriate suffix
+        
+        unique_key = str(uuid.uuid4())
+        file_path = os.path.join('static', 'uploads', f"{unique_key}.{suffix}")
+
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        # Save content to file
+        with open(file_path, 'wb') as f:
+            f.write(file_content)
+
+
         suffix = '.' + suffix
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
             temp_file.write(file_content)
@@ -695,7 +707,7 @@ def process_document_content(file_content: bytes, suffix: str):
 
             # Join non-empty text elements with cleaned formatting
             text = '\n'.join(str(el).strip() for el in elements if str(el).strip())
-            return text
+            return text,file_path
         finally:
             os.unlink(temp_path)
 
