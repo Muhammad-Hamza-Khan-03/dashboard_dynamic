@@ -160,15 +160,7 @@ def _process_document_background(connection_pool, process_id, file_id, user_id, 
                 image_dir = os.path.join('static', 'document_images', unique_key)
                 os.makedirs(image_dir, exist_ok=True)
                 
-                # Process the document using partition with better image handling
-                # if not (file_path or os.path.exists(file_path)):
-                #     c.execute("""
-                #         UPDATE document_processing SET status = 'failed', message = 'File not found'
-                #         WHERE process_id = ?
-                #     """, (process_id,))
-                #     conn.commit()
-                #     return
-                    
+               
                 try:
                     
                     chunks = partition(

@@ -1265,7 +1265,7 @@ const FileSelector: React.FC<{
         setFiles(response.data.files.filter((f: ExistingFile) => 
           f.file_type === 'csv' || f.file_type === 'db' || 
           f.file_type === 'sqlite' || f.file_type === 'sqlite3' || 
-          f.file_type === 'json' || f.file_type === 'xml' || f.file_type === 'pdf'
+          f.file_type === 'json' || f.file_type === 'xml' || f.file_type === 'pdf' 
         ));
       } catch (err: any) {
         console.error('Error fetching files:', err);

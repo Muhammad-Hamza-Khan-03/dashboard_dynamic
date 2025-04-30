@@ -702,11 +702,12 @@ def process_document_content(file_content: bytes, suffix: str):
             temp_path = temp_file.name
 
         try:
-            # Automatically detect and parse file type
-            elements = partition(filename=temp_path)
+            # elements = partition(filename=temp_path)
+
 
             # Join non-empty text elements with cleaned formatting
-            text = '\n'.join(str(el).strip() for el in elements if str(el).strip())
+            # text = '\n'.join(str(el).strip() for el in elements if str(el).strip())
+            text = " "
             return text,file_path
         finally:
             os.unlink(temp_path)
