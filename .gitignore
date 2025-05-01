@@ -85,3 +85,5 @@ static/
 visualization/
 data_analysis*.md
 stats.db
+chroma_db
+process_pdf/
