@@ -29,6 +29,8 @@ background_logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 background_logger.addHandler(handler)
+global images_num
+images_num = 0
 
 
 def compress_content(content):
@@ -52,7 +54,61 @@ def get_model(model_name):
         return ChatOpenAI(model=model_name)
     return ChatGroq(model=model_name)
 
-
+def store_document_embeddings(connection_pool, file_id, user_id, chunks, db_directory="chroma_db"):
+    """Store document chunks in Chroma DB for vector search."""
+    try:
+        # Create Chroma DB directory
+        persist_directory = os.path.join(db_directory, f"file_{file_id}")
+        os.makedirs(persist_directory, exist_ok=True)
+        
+        # Initialize embeddings
+        embeddings = OpenAIEmbeddings()
+        
+        # Create Document objects for Chroma
+        documents = []
+        for chunk in chunks:
+            if hasattr(chunk, 'text') and chunk.text:
+                # Create Document with metadata
+                doc = Document(
+                    page_content=chunk.text,
+                    metadata={
+                        "file_id": file_id,
+                        "user_id": user_id,
+                        "type": str(type(chunk)),
+                        "doc_id": str(uuid.uuid4())
+                    }
+                )
+                documents.append(doc)
+        
+        # Create and persist Chroma DB
+        vectorstore = Chroma.from_documents(
+            documents=documents,
+            embedding=embeddings,
+            persist_directory=persist_directory
+        )
+        vectorstore.persist()
+        
+        # Track Chroma DB location in your database
+        with connection_pool.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS chroma_vectorstores (
+                    file_id INTEGER PRIMARY KEY,
+                    persist_directory TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
+                )
+            """)
+            c.execute("""
+                INSERT OR REPLACE INTO chroma_vectorstores
+                (file_id, persist_directory) VALUES (?, ?)
+            """, (file_id, persist_directory))
+        
+        return True
+    except Exception as e:
+        background_logger.error(f"Error storing document embeddings: {str(e)}")
+        return False
+    
 def process_document_file(connection_pool, file_id, user_id, model_name="meta-llama/llama-4-maverick-17b-128e-instruct", verbose=False):
     """Process a document file and store chunks in the database."""
     process_id = str(uuid.uuid4())
@@ -172,7 +228,7 @@ def _process_document_background(connection_pool, process_id, file_id, user_id, 
                         extract_image_block_to_payload=True,
                         chunking_strategy="by_title",
                         max_characters=10000,
-                        combine_text_under_n_chars=2000,
+                       combine_text_under_n_chars=2000,
                         new_after_n_chars=6000,
                     )
                     
@@ -200,6 +256,20 @@ def _process_document_background(connection_pool, process_id, file_id, user_id, 
                     conn.commit()
                     return
                 
+                # vectore store
+                try:
+                    store_document_embeddings(connection_pool, file_id, user_id, chunks)
+
+                    c.execute("""
+                        UPDATE document_processing 
+                        SET progress = 0.4, message = 'Vector store created'
+                        WHERE process_id = ?
+                    """, (process_id,))
+                    conn.commit()
+
+                except Exception as e:
+                    background_logger.error(f"Error creating vector store: {str(e)}")
+                
                 # Update status
                 c.execute("""
                     UPDATE document_processing 
@@ -221,8 +291,7 @@ def _process_document_background(connection_pool, process_id, file_id, user_id, 
                                 # Make sure to capture the image
                                 if hasattr(el.metadata, 'image_base64') and el.metadata.image_base64:
                                     images.append(el.metadata.image_base64)
-                print("Images", images)
-                
+               
                 # Log extraction info in verbose mode                    
                 if verbose and verbose_output_buffer:
                     verbose_output_buffer.write(f"[INFO] Total text chunks: {len(texts)}\n")
@@ -511,7 +580,9 @@ def _process_document_background(connection_pool, process_id, file_id, user_id, 
                     {text_context}
                     
                     """
-                    
+                    # getting number of things
+
+                    images_num = len(images)
                     if tables and table_context:
                         final_prompt += f"""
                         Table Content:
@@ -668,3 +739,7 @@ def create_document_embeddings(connection_pool,file_id):
     except Exception as e:
         app.logger.error(f"Error creating document embeddings: {str(e)}")
         return 0
+    
+def get_num_images():
+    print(images_num)
+    return images_num

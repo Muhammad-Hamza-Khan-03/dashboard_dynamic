@@ -90,7 +90,7 @@ visualization/
 data_analysis*.md
 stats.db
 
-
+chroma_db
 
 # folders
 non-used

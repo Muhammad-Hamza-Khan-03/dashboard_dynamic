@@ -1,5 +1,7 @@
 global app
 
+from langchain_chroma import Chroma
+from langchain_openai import OpenAIEmbeddings
 from scipy import stats
 import numpy as np
 from typing import Dict, Any
@@ -37,7 +39,8 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 import base64
-from flask_utils.pdf_processing_utils import decompress_content, get_model, initialize_nltk, process_document_file
+# from flask_utils.db import init_db, init_stats_db
+from flask_utils.pdf_processing_utils import decompress_content, get_model, get_num_images, initialize_nltk, process_document_file
 from flask_utils.upload_utils import handle_json_upload,handle_xml_upload,process_document_content 
 
 from flask_utils.task_utils import create_stats_task
@@ -57,7 +60,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from flask_utils.task_utils import stats_task_queue
 
-
+from flask_utils.pdf_processing_utils import images_num
 matplotlib.use('Agg')
 
 app = Flask(__name__)
@@ -70,12 +73,258 @@ CHUNK_SIZE = 100000  # Maximum rows to fetch at once
 # TASK_STATUS = {}
 load_dotenv()
 
+global connection_pool
+
 connection_pool = ConnectionPool('user_files.db')
 
 
 DB_STORAGE_DIR = os.path.join('static', 'databases')
 os.makedirs(DB_STORAGE_DIR, exist_ok=True)
 
+import logging
+import sqlite3
+from backend import connection_pool
+
+def init_db():
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+    user_id TEXT PRIMARY KEY,
+    -- username TEXT NOT NULL,
+    -- email TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              );
+              ''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS  user_files 
+              (file_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT REFERENCES users(user_id),
+    filename TEXT NOT NULL,
+    file_type TEXT, --CHECK(file_type IN ('csv', 'xlsx','xls', 'db', 'tsv', 'doc', 'docx', 'txt', 'xml','pdf')),
+    is_structured BOOLEAN,
+    sheet_table TEXT, -- For Excel sheets or DB tables
+    unique_key TEXT,  -- Random unique identifier for structured data storage table
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+    );
+              ''')
+    conn = sqlite3.connect('user_files.db')
+    c = conn.cursor()
+    
+    # Check if parent_file_id column exists
+    c.execute("PRAGMA table_info(user_files)")
+    columns = [row[1] for row in c.fetchall()]
+    
+    if 'parent_file_id' not in columns:
+        # Add parent_file_id column
+        c.execute('''ALTER TABLE user_files 
+                    ADD COLUMN parent_file_id INTEGER 
+                    REFERENCES user_files(file_id)''')
+    
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS  structured_file_storage (
+    unique_key TEXT PRIMARY KEY,
+    file_id INTEGER REFERENCES user_files(file_id),
+    table_name TEXT NOT NULL, -- Name of dynamically created table for each file
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (file_id) REFERENCES user_files(file_id)
+    );
+              ''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS  unstructured_file_storage (
+    file_id INTEGER REFERENCES user_files(file_id),
+    file_path TEXT,
+    unique_key TEXT PRIMARY KEY,
+    content BLOB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_text TEXT,
+    FOREIGN KEY (file_id) REFERENCES user_files(file_id)
+    );
+    ''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS  dashboard_store (
+        dashboard_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_id INTEGER REFERENCES user_files(file_id),
+        dashboard_data BLOB,
+              user_id TEXT REFERENCES users(user_id),
+        dashboardname TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    ''')
+    c.execute('''CREATE TABLE IF NOT EXISTS graph_cache (
+        graph_id TEXT PRIMARY KEY,
+        html_content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    # Check if the column 'dashboard_name' exists before adding it
+    c.execute("PRAGMA table_info(graph_cache)")
+    columns = [row[1] for row in c.fetchall()]
+    
+    if 'dashboard_name' not in columns:
+        c.execute('''ALTER TABLE graph_cache ADD COLUMN dashboard_name TEXT''')
+    
+    if 'image_blob' not in columns:
+        c.execute('''ALTER TABLE graph_cache ADD COLUMN image_blob BLOB''')
+    
+    if 'isImageSuccess' not in columns:
+        c.execute('''ALTER TABLE graph_cache ADD COLUMN isImageSuccess INTEGER DEFAULT 0''')
+    
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_graph_cache_dashboard 
+        ON graph_cache(dashboard_name, isImageSuccess);
+     ''')
+    c.execute("""
+            CREATE TABLE IF NOT EXISTS dashboard_exports (
+                export_id TEXT PRIMARY KEY,
+                user_id TEXT,
+                dashboard_ids TEXT,
+                export_name TEXT,
+                export_path TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+    c.execute("""
+            CREATE TABLE IF NOT EXISTS dashboards (
+                id TEXT PRIMARY KEY,
+                user_id TEXT,
+                name TEXT,
+                charts TEXT,
+                textboxes TEXT,
+                datatables TEXT,
+                statcards TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
+        """)
+    
+    # Add document processing tables
+    with connection_pool.get_connection() as conn:
+        c = conn.cursor()
+        
+        # Table for document chunks and embeddings
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS document_chunks (
+                chunk_id TEXT PRIMARY KEY,
+                file_id INTEGER,
+                doc_id TEXT,
+                chunk_type TEXT NOT NULL,
+                content TEXT,
+                content_compressed BLOB,
+                embedding BLOB,
+                summary TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Table for document images
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS document_images (
+                image_id TEXT PRIMARY KEY,
+                file_id INTEGER,
+                doc_id TEXT,
+                image_data BLOB,
+                summary TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
+            )
+        ''')
+        
+        c.execute('''
+    CREATE TABLE IF NOT EXISTS document_processing (
+        process_id TEXT PRIMARY KEY,
+        file_id INTEGER,
+        status TEXT NOT NULL,
+        progress REAL DEFAULT 0,
+        message TEXT,
+        verbose_output TEXT,  -- New column for verbose output
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP,
+        FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
+    )
+''')
+        
+        # Create indexes for efficient querying
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_file_id ON document_chunks(file_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc_id ON document_chunks(doc_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_type ON document_chunks(chunk_type)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_images_file_id ON document_images(file_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_processing_file_id ON document_processing(file_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_processing_status ON document_processing(status)')
+    # if conn:
+    #     conn.commit()
+    #     conn.close()
+
+def init_stats_db():
+    """Initialize the stats database structure"""
+    conn = sqlite3.connect('stats.db')
+    c = conn.cursor()
+    
+    # Table for column-level statistics
+    c.execute('''CREATE TABLE IF NOT EXISTS column_stats (
+        stats_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_id TEXT NOT NULL,
+        column_name TEXT NOT NULL,
+        data_type TEXT NOT NULL,
+        basic_stats TEXT,
+        distribution TEXT,
+        shape_stats TEXT,
+        outlier_stats TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(table_id, column_name)
+    )''')
+    
+    # Table for dataset-level statistics
+    c.execute('''CREATE TABLE IF NOT EXISTS dataset_stats (
+        stats_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_id TEXT NOT NULL UNIQUE,
+        correlation_matrix TEXT,
+        parallel_coords TEXT,
+        violin_data TEXT,
+        heatmap_data TEXT,
+        scatter_matrix TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    # Table for tracking task status
+    c.execute('''CREATE TABLE IF NOT EXISTS stats_tasks (
+        task_id TEXT PRIMARY KEY,
+        table_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        progress REAL DEFAULT 0.0,
+        message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
+    )''')
+    c.execute("""
+            CREATE TABLE IF NOT EXISTS dashboard_exports (
+                export_id TEXT PRIMARY KEY,
+                user_id TEXT,
+                dashboard_ids TEXT,
+                export_name TEXT,
+                export_path TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+    c.execute("""
+            CREATE TABLE IF NOT EXISTS dashboards (
+                id TEXT PRIMARY KEY,
+                user_id TEXT,
+                name TEXT,
+                charts TEXT,
+                textboxes TEXT,
+                datatables TEXT,
+                statcards TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
+        """)
+    conn.commit()
+    conn.close()
+    logging.info("Stats database initialized")
 
 
 # LLM settings
@@ -432,240 +681,6 @@ def serve_cleaned_data():
 @app.route('/mermaid/<path:filename>')
 def serve_mermaid(filename):
     return send_from_directory('static/visualization', filename, mimetype='text/plain')
-
-
-# def start_background_worker():
-#     """Start the background worker thread"""
-#     worker_thread = threading.Thread(target=background_worker)
-#     worker_thread.daemon = True  # Thread will exit when main thread exits
-#     worker_thread.start()
-    # logging.info("Background worker started")
-## Background worker implementation ends
-
-def init_db():
-    conn = sqlite3.connect('user_files.db')
-    c = conn.cursor()
-
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-    user_id TEXT PRIMARY KEY,
-    -- username TEXT NOT NULL,
-    -- email TEXT UNIQUE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-              );
-              ''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS  user_files 
-              (file_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT REFERENCES users(user_id),
-    filename TEXT NOT NULL,
-    file_type TEXT, --CHECK(file_type IN ('csv', 'xlsx','xls', 'db', 'tsv', 'doc', 'docx', 'txt', 'xml','pdf')),
-    is_structured BOOLEAN,
-    sheet_table TEXT, -- For Excel sheets or DB tables
-    unique_key TEXT,  -- Random unique identifier for structured data storage table
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id)
-    );
-              ''')
-    conn = sqlite3.connect('user_files.db')
-    c = conn.cursor()
-    
-    # Check if parent_file_id column exists
-    c.execute("PRAGMA table_info(user_files)")
-    columns = [row[1] for row in c.fetchall()]
-    
-    if 'parent_file_id' not in columns:
-        # Add parent_file_id column
-        c.execute('''ALTER TABLE user_files 
-                    ADD COLUMN parent_file_id INTEGER 
-                    REFERENCES user_files(file_id)''')
-    
-    c.execute('''
-    CREATE TABLE IF NOT EXISTS  structured_file_storage (
-    unique_key TEXT PRIMARY KEY,
-    file_id INTEGER REFERENCES user_files(file_id),
-    table_name TEXT NOT NULL, -- Name of dynamically created table for each file
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (file_id) REFERENCES user_files(file_id)
-    );
-              ''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS  unstructured_file_storage (
-    file_id INTEGER REFERENCES user_files(file_id),
-    file_path TEXT,
-    unique_key TEXT PRIMARY KEY,
-    content BLOB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    processed_text TEXT,
-    FOREIGN KEY (file_id) REFERENCES user_files(file_id)
-    );
-    ''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS  dashboard_store (
-        dashboard_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_id INTEGER REFERENCES user_files(file_id),
-        dashboard_data BLOB,
-              user_id TEXT REFERENCES users(user_id),
-        dashboardname TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    ''')
-    c.execute('''CREATE TABLE IF NOT EXISTS graph_cache (
-        graph_id TEXT PRIMARY KEY,
-        html_content TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    
-    # Check if the column 'dashboard_name' exists before adding it
-    c.execute("PRAGMA table_info(graph_cache)")
-    columns = [row[1] for row in c.fetchall()]
-    
-    if 'dashboard_name' not in columns:
-        c.execute('''ALTER TABLE graph_cache ADD COLUMN dashboard_name TEXT''')
-    
-    if 'image_blob' not in columns:
-        c.execute('''ALTER TABLE graph_cache ADD COLUMN image_blob BLOB''')
-    
-    if 'isImageSuccess' not in columns:
-        c.execute('''ALTER TABLE graph_cache ADD COLUMN isImageSuccess INTEGER DEFAULT 0''')
-    
-    c.execute('''CREATE INDEX IF NOT EXISTS idx_graph_cache_dashboard 
-        ON graph_cache(dashboard_name, isImageSuccess);
-     ''')
-    c.execute("""
-            CREATE TABLE IF NOT EXISTS dashboard_exports (
-                export_id TEXT PRIMARY KEY,
-                user_id TEXT,
-                dashboard_ids TEXT,
-                export_name TEXT,
-                export_path TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-    c.execute("""
-            CREATE TABLE IF NOT EXISTS dashboards (
-                id TEXT PRIMARY KEY,
-                user_id TEXT,
-                name TEXT,
-                charts TEXT,
-                textboxes TEXT,
-                datatables TEXT,
-                statcards TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
-            )
-        """)
-    
-    # Add document processing tables
-    with connection_pool.get_connection() as conn:
-        c = conn.cursor()
-        
-        # Table for document chunks and embeddings
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS document_chunks (
-                chunk_id TEXT PRIMARY KEY,
-                file_id INTEGER,
-                doc_id TEXT,
-                chunk_type TEXT NOT NULL,
-                content TEXT,
-                content_compressed BLOB,
-                embedding BLOB,
-                summary TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
-            )
-        ''')
-        
-        # Table for document images
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS document_images (
-                image_id TEXT PRIMARY KEY,
-                file_id INTEGER,
-                doc_id TEXT,
-                image_data BLOB,
-                summary TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
-            )
-        ''')
-        
-        c.execute('''
-    CREATE TABLE IF NOT EXISTS document_processing (
-        process_id TEXT PRIMARY KEY,
-        file_id INTEGER,
-        status TEXT NOT NULL,
-        progress REAL DEFAULT 0,
-        message TEXT,
-        verbose_output TEXT,  -- New column for verbose output
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        completed_at TIMESTAMP,
-        FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
-    )
-''')
-        
-        # Create indexes for efficient querying
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_file_id ON document_chunks(file_id)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc_id ON document_chunks(doc_id)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_type ON document_chunks(chunk_type)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_images_file_id ON document_images(file_id)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_processing_file_id ON document_processing(file_id)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_processing_status ON document_processing(status)')
-    # if conn:
-    #     conn.commit()
-    #     conn.close()
-
-def init_stats_db():
-    """Initialize the stats database structure"""
-    conn = sqlite3.connect('stats.db')
-    c = conn.cursor()
-    
-    # Table for column-level statistics
-    c.execute('''CREATE TABLE IF NOT EXISTS column_stats (
-        stats_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        table_id TEXT NOT NULL,
-        column_name TEXT NOT NULL,
-        data_type TEXT NOT NULL,
-        basic_stats TEXT,
-        distribution TEXT,
-        shape_stats TEXT,
-        outlier_stats TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(table_id, column_name)
-    )''')
-    
-    # Table for dataset-level statistics
-    c.execute('''CREATE TABLE IF NOT EXISTS dataset_stats (
-        stats_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        table_id TEXT NOT NULL UNIQUE,
-        correlation_matrix TEXT,
-        parallel_coords TEXT,
-        violin_data TEXT,
-        heatmap_data TEXT,
-        scatter_matrix TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    
-    # Table for tracking task status
-    c.execute('''CREATE TABLE IF NOT EXISTS stats_tasks (
-        task_id TEXT PRIMARY KEY,
-        table_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        progress REAL DEFAULT 0.0,
-        message TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        completed_at TIMESTAMP
-    )''')
-    
-    conn.commit()
-    conn.close()
-    logging.info("Stats database initialized")
-    
-    # Start the background worker
-    start_background_worker()
-
-init_db()
-init_stats_db()   
 
 
 @cache.memoize(timeout=CACHE_TIMEOUT)
@@ -5071,16 +5086,7 @@ def export_dashboard_pre_rendered(user_id):
             pass
         
         # Record the export in the database
-        db_cursor.execute("""
-            CREATE TABLE IF NOT EXISTS dashboard_exports (
-                export_id TEXT PRIMARY KEY,
-                user_id TEXT,
-                dashboard_ids TEXT,
-                export_name TEXT,
-                export_path TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        
         
         # Save export record
         db_cursor.execute("""
@@ -5153,21 +5159,6 @@ def get_dashboards(user_id):
     try:
         conn = sqlite3.connect('user_files.db')
         cursor = conn.cursor()
-        
-        # Create dashboards table if it doesn't exist
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS dashboards (
-                id TEXT PRIMARY KEY,
-                user_id TEXT,
-                name TEXT,
-                charts TEXT,
-                textboxes TEXT,
-                datatables TEXT,
-                statcards TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
-            )
-        """)
         
         # Get dashboards for the user
         cursor.execute("""
@@ -5929,76 +5920,189 @@ def check_document_processing(process_id):
         app.logger.error(f"Error checking document processing: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
+# @app.route('/query-document/<user_id>/<file_id>', methods=['POST'])
+# def query_document(user_id, file_id):
+#     """Query a processed document with natural language."""
+#     try:
+#         data = request.json
+#         query = data.get('query')
+        
+#         if not query:
+#             return jsonify({'error': 'Query is required'}), 400
+        
+#         # Validate file exists and belongs to user
+#         with connection_pool.get_connection() as conn:
+#             c = conn.cursor()
+#             c.execute("""
+#                 SELECT file_id
+#                 FROM user_files
+#                 WHERE file_id = ? AND user_id = ?
+#             """, (file_id, user_id))
+            
+#             if not c.fetchone():
+#                 return jsonify({'error': 'File not found or access denied'}), 404
+            
+#             # Check if file has been processed
+#             c.execute("""
+#                 SELECT COUNT(*) FROM document_chunks WHERE file_id = ?
+#             """, (file_id,))
+            
+#             chunk_count = c.fetchone()[0]
+#             if chunk_count == 0:
+#                 return jsonify({
+#                     'error': 'Document has not been processed yet',
+#                     'suggestion': 'Process the document first using /process-document endpoint'
+#                 }), 400
+            
+#             # Get relevant document chunks for the query
+#             c.execute("""
+#                 SELECT chunk_id, doc_id, chunk_type, content_compressed, summary
+#                 FROM document_chunks
+#                 WHERE file_id = ?
+#                 ORDER BY rowid DESC
+#                 LIMIT 20
+#             """, (file_id,))
+            
+#             chunks = c.fetchall()
+            
+#             # Get relevant images
+#             c.execute("""
+#                 SELECT image_id, doc_id, summary
+#                 FROM document_images
+#                 WHERE file_id = ?
+#                 LIMIT 5
+#             """, (file_id,))
+            
+#             images = c.fetchall()
+        
+#         # Prepare context for the query
+#         context_text = ""
+#         for chunk in chunks:
+#             chunk_id, doc_id, chunk_type, content_compressed, summary = chunk
+#             if content_compressed:
+#                 try:
+#                     content = decompress_content(content_compressed)
+#                     context_text += f"{content}\n\n"
+#                 except:
+#                     context_text += f"{summary}\n\n"
+#             else:
+#                 context_text += f"{summary}\n\n"
+        
+#         # Prepare prompt for the query - specifically requesting [FINAL ANSWER] format
+#         model_name = "meta-llama/llama-4-maverick-17b-128e-instruct"  # Default model
+#         prompt_text = f"""
+#         Answer the question based only on the following context from the document.
+        
+#         Context:
+#         {context_text}
+        
+#         Question: {query}
+        
+#         Format your response with '[FINAL ANSWER]' before your answer.
+#         For example:
+        
+#         [FINAL ANSWER]
+#         Your detailed answer here...
+#         """
+        
+#         # Use the LLM to get the answer
+#         model = get_model(model_name)
+#         prompt = ChatPromptTemplate.from_template(prompt_text)
+#         chain = prompt | model | StrOutputParser()
+        
+#         # Get the answer
+#         answer = chain.invoke({})
+        
+#         # Ensure the answer has the [FINAL ANSWER] tag
+#         if "[FINAL ANSWER]" not in answer:
+#             answer = f"[FINAL ANSWER]\n{answer}"
+        
+#         # Extract just the final answer part
+#         final_answer_parts = answer.split("[FINAL ANSWER]")
+#         if len(final_answer_parts) > 1:
+#             final_answer = final_answer_parts[1].strip()
+#         else:
+#             final_answer = answer.strip()
+        
+#         # Get image data if needed
+#         image_data = []
+#         if images:
+#             with connection_pool.get_connection() as conn:
+#                 c = conn.cursor()
+#                 for image in images:
+#                     image_id, doc_id, summary = image
+                    
+#                     c.execute("""
+#                         SELECT image_data FROM document_images WHERE image_id = ?
+#                     """, (image_id,))
+                    
+#                     result = c.fetchone()
+#                     if result and result[0]:
+#                         image_data.append({
+#                             'image_id': image_id,
+#                             'summary': summary,
+#                             'data': base64.b64encode(result[0]).decode('utf-8')
+#                         })
+        
+#         return jsonify({
+#             'success': True,
+#             'query': query,
+#             'full_answer': answer,
+#             'final_answer': final_answer,
+#             'chunk_count': len(chunks),
+#             'images': image_data
+#         })
+        
+#     except Exception as e:
+#         app.logger.error(f"Error querying document: {str(e)}")
+#         app.logger.error(traceback.format_exc())
+#         return jsonify({'error': str(e)}), 500
+
+    
 @app.route('/query-document/<user_id>/<file_id>', methods=['POST'])
 def query_document(user_id, file_id):
-    """Query a processed document with natural language."""
+    """Query a processed document with natural language using Chroma."""
     try:
         data = request.json
         query = data.get('query')
         
+        # todo: may call an ai for charts or images or whatever based on the query to get the exact thing
+        image_keywords = ['graphs','graph','image', 'picture', 'photo', 'figure', 'diagram', 'visual', 'illustration', 'show me']
+        include_images = any(keyword in query.lower() for keyword in image_keywords)
+
         if not query:
             return jsonify({'error': 'Query is required'}), 400
         
-        # Validate file exists and belongs to user
+        # Get Chroma DB path
         with connection_pool.get_connection() as conn:
             c = conn.cursor()
             c.execute("""
-                SELECT file_id
-                FROM user_files
-                WHERE file_id = ? AND user_id = ?
-            """, (file_id, user_id))
-            
-            if not c.fetchone():
-                return jsonify({'error': 'File not found or access denied'}), 404
-            
-            # Check if file has been processed
-            c.execute("""
-                SELECT COUNT(*) FROM document_chunks WHERE file_id = ?
-            """, (file_id,))
-            
-            chunk_count = c.fetchone()[0]
-            if chunk_count == 0:
-                return jsonify({
-                    'error': 'Document has not been processed yet',
-                    'suggestion': 'Process the document first using /process-document endpoint'
-                }), 400
-            
-            # Get relevant document chunks for the query
-            c.execute("""
-                SELECT chunk_id, doc_id, chunk_type, content_compressed, summary
-                FROM document_chunks
+                SELECT persist_directory 
+                FROM chroma_vectorstores 
                 WHERE file_id = ?
-                ORDER BY rowid DESC
-                LIMIT 20
             """, (file_id,))
             
-            chunks = c.fetchall()
-            
-            # Get relevant images
-            c.execute("""
-                SELECT image_id, doc_id, summary
-                FROM document_images
-                WHERE file_id = ?
-                LIMIT 5
-            """, (file_id,))
-            
-            images = c.fetchall()
+            result = c.fetchone()
+            if not result:
+                return jsonify({'error': 'No vector store found for this document'}), 404
+                
+            persist_directory = result[0]
+        
+        # Load the vector store
+        embeddings = OpenAIEmbeddings()
+        vectorstore = Chroma(
+            persist_directory=persist_directory,
+            embedding_function=embeddings
+        )
+        
+        # Search for relevant documents
+        docs = vectorstore.similarity_search(query, k=5)
         
         # Prepare context for the query
-        context_text = ""
-        for chunk in chunks:
-            chunk_id, doc_id, chunk_type, content_compressed, summary = chunk
-            if content_compressed:
-                try:
-                    content = decompress_content(content_compressed)
-                    context_text += f"{content}\n\n"
-                except:
-                    context_text += f"{summary}\n\n"
-            else:
-                context_text += f"{summary}\n\n"
+        context_text = "\n\n".join([doc.page_content for doc in docs])
         
-        # Prepare prompt for the query - specifically requesting [FINAL ANSWER] format
-        model_name = "meta-llama/llama-4-maverick-17b-128e-instruct"  # Default model
+        # Generate response with LLM
+        model_name = "meta-llama/llama-4-maverick-17b-128e-instruct"
         prompt_text = f"""
         Answer the question based only on the following context from the document.
         
@@ -6008,66 +6112,63 @@ def query_document(user_id, file_id):
         Question: {query}
         
         Format your response with '[FINAL ANSWER]' before your answer.
-        For example:
-        
-        [FINAL ANSWER]
-        Your detailed answer here...
         """
         
-        # Use the LLM to get the answer
         model = get_model(model_name)
         prompt = ChatPromptTemplate.from_template(prompt_text)
         chain = prompt | model | StrOutputParser()
-        
-        # Get the answer
         answer = chain.invoke({})
         
-        # Ensure the answer has the [FINAL ANSWER] tag
+        # Extract final answer
         if "[FINAL ANSWER]" not in answer:
             answer = f"[FINAL ANSWER]\n{answer}"
-        
-        # Extract just the final answer part
+            
         final_answer_parts = answer.split("[FINAL ANSWER]")
         if len(final_answer_parts) > 1:
             final_answer = final_answer_parts[1].strip()
         else:
             final_answer = answer.strip()
         
-        # Get image data if needed
+        # Get images if available
         image_data = []
-        if images:
+        images_num = get_num_images()
+        print("images_num",images_num)
+        if include_images:
             with connection_pool.get_connection() as conn:
                 c = conn.cursor()
+                c.execute("""
+                    SELECT image_id, doc_id, summary, image_data
+                    FROM document_images
+                    WHERE file_id = ?
+                    LIMIT ?
+                """, (file_id,images_num,))
+            
+                images = c.fetchall()
                 for image in images:
-                    image_id, doc_id, summary = image
-                    
-                    c.execute("""
-                        SELECT image_data FROM document_images WHERE image_id = ?
-                    """, (image_id,))
-                    
-                    result = c.fetchone()
-                    if result and result[0]:
+                    image_id, doc_id, summary, img_data = image
+                    if img_data:
                         image_data.append({
                             'image_id': image_id,
                             'summary': summary,
-                            'data': base64.b64encode(result[0]).decode('utf-8')
+                            'data': base64.b64encode(img_data).decode('utf-8')
                         })
         
         return jsonify({
             'success': True,
             'query': query,
-            'full_answer': answer,
             'final_answer': final_answer,
-            'chunk_count': len(chunks),
-            'images': image_data
+            'images': image_data,
+            # 'include_images': include_images
         })
         
     except Exception as e:
         app.logger.error(f"Error querying document: {str(e)}")
-        app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
     
-
 if __name__ == '__main__':
     app.run(debug=False, port=5000)
+    init_db()   
+    # Start the background worker
+    start_background_worker()
+    init_stats_db()   
     initialize_nltk()
