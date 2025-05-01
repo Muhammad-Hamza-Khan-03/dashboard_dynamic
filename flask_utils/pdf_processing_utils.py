@@ -29,8 +29,7 @@ background_logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 background_logger.addHandler(handler)
-global images_num
-images_num = 0
+
 
 
 def compress_content(content):
@@ -581,7 +580,7 @@ def _process_document_background(connection_pool, process_id, file_id, user_id, 
                     
                     """
                     # getting number of things
-
+                    global images_num
                     images_num = len(images)
                     if tables and table_context:
                         final_prompt += f"""

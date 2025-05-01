@@ -60,7 +60,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from flask_utils.task_utils import stats_task_queue
 
-from flask_utils.pdf_processing_utils import images_num
 matplotlib.use('Agg')
 
 app = Flask(__name__)
