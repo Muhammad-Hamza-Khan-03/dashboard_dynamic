@@ -1,9 +1,15 @@
 import threading
 import queue
-import sqlite3  
+import sqlite3
+import time
+from typing import Optional  
+from flask_caching import logger
 import pandas as pd
 import logging
 import traceback
+
+from flask_utils.statistics_utils import calculate_column_statistics_chunked, calculate_dataset_statistics_optimized
+from flask_utils.task_utils import update_task_status,stats_task_queue
 
 
 ## Background worker implementation starts
@@ -249,10 +255,15 @@ def background_worker():
             logging.error(f"Error in background worker: {str(e)}")
             traceback.print_exc()
 
+
+
+
+
+# Task status management
+
 def start_background_worker():
     """Start the background worker thread"""
     worker_thread = threading.Thread(target=background_worker)
     worker_thread.daemon = True  # Thread will exit when main thread exits
     worker_thread.start()
     logging.info("Background worker started")
-## Background worker implementation ends
