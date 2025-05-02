@@ -201,6 +201,12 @@ interface CollapsibleProps {
   onOpenChange?: (open: boolean) => void;
 }
 
+interface HistoryResult {
+  sections: AgentSection[];
+  visualizations: string[];
+  mermaidDiagrams?: string[];
+}
+
 const Collapsible: React.FC<CollapsibleProps> = ({
   children,
   className = "",
@@ -1716,10 +1722,11 @@ const AnalysisPanel: React.FC<{
     timestamp: string;
   }[]>([]);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<number | null>(null);
-  const [historyResult, setHistoryResult] = useState<{
-    sections: AgentSection[];
-    visualizations: string[];
-  }>({ sections: [], visualizations: [] });
+  const [historyResult, setHistoryResult] = useState<HistoryResult>({
+    sections: [],
+    visualizations: [],
+    mermaidDiagrams: []
+  });
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isLoadingHistoryItem, setIsLoadingHistoryItem] = useState(false);
 
@@ -1830,7 +1837,7 @@ const AnalysisPanel: React.FC<{
       }
     }
   }, [reportContent]);
-  // Fetch user query history
+
   // Fetch user query history
   const fetchUserHistory = useCallback(async () => {
     if (!userId) return;
@@ -1867,8 +1874,38 @@ const AnalysisPanel: React.FC<{
       setIsLoadingHistory(false);
     }
   }, [userId]);
-
-  // Fetch specific history item
+  const checkForMermaidDiagram = async (chainId: number) => {
+    console.log(`Checking for Mermaid diagram for chain ID: ${chainId}`);
+    
+    try {
+      // The path format for mermaid diagrams
+      const diagramPath = `analysis_flow_${chainId}.mmd`;
+      console.log(`Looking for diagram at path: ${diagramPath}`);
+      
+      // Try to fetch the diagram
+      const checkResponse = await axios.get(`http://localhost:5000/mermaid/${diagramPath}`, { 
+        validateStatus: (status) => status < 500 // Accept 404 as a valid status
+      });
+      
+      console.log(`Mermaid diagram check response:`, checkResponse.status);
+      
+      if (checkResponse.status === 200) {
+        console.log(`Mermaid diagram found for chain ID: ${chainId}`);
+        // Add the diagram to the result
+        setHistoryResult(prev => {
+          console.log('Updating history result with mermaid diagram');
+          return {
+            ...prev,
+            mermaidDiagrams: [diagramPath]
+          };
+        });
+      } else {
+        console.log(`No Mermaid diagram found for chain ID: ${chainId} (Status: ${checkResponse.status})`);
+      }
+    } catch (err) {
+      console.error('Error checking for Mermaid diagram:', err);
+    }
+  };
   // Fetch specific history item
   const fetchHistoryItem = async (chainId: number) => {
     setIsLoadingHistoryItem(true);
@@ -1877,7 +1914,7 @@ const AnalysisPanel: React.FC<{
     try {
       const response = await axios.get(`http://localhost:5000/get_history_result/${chainId}`);
       if (response.data.success) {
-        // Update the AgentSection interface to include 'sql-results' type
+        // Update interface to include 'sql-results' type
         interface HistorySection {
           agentName: string;
           modelName: string;
@@ -1887,13 +1924,12 @@ const AnalysisPanel: React.FC<{
           type: 'sql' | 'code' | 'summary' | 'explanation' | 'default' | 'sql-results';
         }
 
-        // Process the sections similar to how we process agent responses
+        // Process the sections
         const processedSections = response.data.sections.map((section: any) => {
           let icon: React.ReactNode;
           let order = 100;
           let type: 'sql' | 'code' | 'summary' | 'explanation' | 'default' | 'sql-results' = 'default';
 
-          // Assign appropriate icon and order based on agent type
           switch (section.agent) {
             case 'Expert Selector':
               icon = <Search className="h-5 w-5 text-blue-500" />;
@@ -1987,11 +2023,39 @@ const AnalysisPanel: React.FC<{
           };
         });
 
+        // Extract visualizations from the code sections
+        const extractedVisualizations: string[] = [];
+        // Look for visualization paths in Code Generator sections
+        processedSections.forEach((section: any) => {
+          if (section.agentName === 'Code Generator') {
+            // Extract visualization paths using regex
+            const vizPaths = extractVisualizationPaths(section.content);
+            if (vizPaths.length > 0) {
+              extractedVisualizations.push(...vizPaths);
+            }
+          }
+        });
+
+        // Combine extracted visualizations with any in the response
+        const allVisualizations = [
+          ...extractedVisualizations,
+          ...(response.data.visualizations || [])
+        ];
+        // Remove duplicates and ensure proper formatting
+        const uniqueVisualizations = [...new Set(allVisualizations)]
+          .filter(path => path)
+          .map(path => {
+            if (path.startsWith('http')) return path;
+            return path.startsWith('/') ? path : `/${path}`;
+          });
+
         setHistoryResult({
           sections: processedSections.sort((a: HistorySection, b: HistorySection) => a.order - b.order),
-          visualizations: response.data.visualizations || []
+          visualizations: uniqueVisualizations
         });
         setSelectedHistoryItem(chainId);
+
+        await checkForMermaidDiagram(chainId);
       }
     } catch (err: unknown) {
       console.error('Error fetching history item:', err);
@@ -1999,6 +2063,26 @@ const AnalysisPanel: React.FC<{
     } finally {
       setIsLoadingHistoryItem(false);
     }
+  };
+
+  // Helper function to extract visualization paths from content
+  const extractVisualizationPaths = (content: string): string[] => {
+    const paths: string[] = [];
+    // Match plt.savefig or visualization patterns
+    const savefigRegex = /plt\.savefig\(['"]([^'"]+)['"]\)/g;
+    const vizSavedRegex = /Visualization saved as ['"]([^'"]+)['"]/g;
+    const imgPathRegex = /!\[.*?\]\((visualization\/[^)]+)\)/g;
+    let match;
+    while ((match = savefigRegex.exec(content)) !== null) {
+      if (match[1]) paths.push(match[1]);
+    }
+    while ((match = vizSavedRegex.exec(content)) !== null) {
+      if (match[1]) paths.push(match[1]);
+    }
+    while ((match = imgPathRegex.exec(content)) !== null) {
+      if (match[1]) paths.push(match[1]);
+    }
+    return paths;
   };
 
   // Save the current report to the database
@@ -2059,7 +2143,6 @@ const AnalysisPanel: React.FC<{
       setReportToDelete(null);
     }
   };
-
   const handleAnalysis = async () => {
     if (!userId || !selectedFile ||
       (!question && !config.generateReport) ||
@@ -2929,6 +3012,7 @@ const AnalysisPanel: React.FC<{
                   </div>
 
                   <div className="md:col-span-3">
+                    {/* In the History tab content */}
                     {selectedHistoryItem ? (
                       isLoadingHistoryItem ? (
                         <div className="flex items-center justify-center h-[300px]">
@@ -2951,6 +3035,23 @@ const AnalysisPanel: React.FC<{
                               <AgentBox key={`history-section-${index}`} section={section} />
                             ))}
                           </div>
+
+                          {/* Mermaid Diagrams */}
+                          {historyResult.mermaidDiagrams && historyResult.mermaidDiagrams.length > 0 && (
+                            <Card className="bg-indigo-50/50 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-800 mt-4">
+                              <CardHeader className="pb-2">
+                                <CardTitle className="flex items-center text-indigo-700 dark:text-indigo-300">
+                                  <BarChart className="h-5 w-5 mr-2" />
+                                  Analysis Flow Diagram
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                {historyResult.mermaidDiagrams.map((diagram, index) => (
+                                  <MermaidDiagram key={index} source={diagram} />
+                                ))}
+                              </CardContent>
+                            </Card>
+                          )}
 
                           {/* Visualizations */}
                           {historyResult.visualizations.length > 0 && (
