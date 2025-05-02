@@ -130,7 +130,7 @@ interface SelectedFile {
 interface AnalysisConfig {
   generateReport: boolean;
   questionCount: number;
-  diagram_enabled: boolean; 
+  diagram_enabled: boolean;
 }
 
 interface AnalysisResult {
@@ -139,7 +139,7 @@ interface AnalysisResult {
   visualizations?: string[];
   mermaid_diagrams?: string[];
   report_file?: string;
-  cleaned_data_file?: string; 
+  cleaned_data_file?: string;
   is_report?: boolean;
 }
 
@@ -201,20 +201,20 @@ interface CollapsibleProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-const Collapsible: React.FC<CollapsibleProps> = ({ 
-  children, 
-  className = "", 
-  open, 
-  onOpenChange 
+const Collapsible: React.FC<CollapsibleProps> = ({
+  children,
+  className = "",
+  open,
+  onOpenChange
 }) => {
   const [isOpen, setIsOpen] = useState(open || false);
-  
+
   useEffect(() => {
     if (open !== undefined && open !== isOpen) {
       setIsOpen(open);
     }
   }, [open, isOpen]);
-  
+
   const handleToggle = () => {
     const newState = !isOpen;
     setIsOpen(newState);
@@ -222,19 +222,19 @@ const Collapsible: React.FC<CollapsibleProps> = ({
       onOpenChange(newState);
     }
   };
-  
+
   return (
     <div className={className}>
       {React.Children.map(children, child => {
-        if (React.isValidElement(child) && 
-            child.type === CollapsibleTrigger) {
+        if (React.isValidElement(child) &&
+          child.type === CollapsibleTrigger) {
           return React.cloneElement(child as React.ReactElement<any>, {
             onClick: handleToggle,
             'aria-expanded': isOpen
           });
         }
-        if (React.isValidElement(child) && 
-            child.type === CollapsibleContent) {
+        if (React.isValidElement(child) &&
+          child.type === CollapsibleContent) {
           return isOpen ? child : null;
         }
         return child;
@@ -250,15 +250,15 @@ interface CollapsibleTriggerProps {
   'aria-expanded'?: boolean;
 }
 
-const CollapsibleTrigger: React.FC<CollapsibleTriggerProps> = ({ 
-  children, 
-  className = "", 
-  ...props 
+const CollapsibleTrigger: React.FC<CollapsibleTriggerProps> = ({
+  children,
+  className = "",
+  ...props
 }) => {
   return (
-    <button 
-      type="button" 
-      className={className} 
+    <button
+      type="button"
+      className={className}
       {...props}
     >
       {children}
@@ -271,9 +271,9 @@ interface CollapsibleContentProps {
   className?: string;
 }
 
-const CollapsibleContent: React.FC<CollapsibleContentProps> = ({ 
-  children, 
-  className = "" 
+const CollapsibleContent: React.FC<CollapsibleContentProps> = ({
+  children,
+  className = ""
 }) => {
   return (
     <div className={className}>
@@ -289,12 +289,12 @@ const MarkdownImage: React.FC<{
 }> = ({ src, alt }) => {
   const [showFullScreen, setShowFullScreen] = useState(false);
   const [imageError, setImageError] = useState(false);
-  
+
   // Correct image URL if it's a relative path
-  const imageUrl = src?.startsWith('http') ? 
-    src : 
-    src?.startsWith('/') ? 
-      `http://localhost:5000${src}` : 
+  const imageUrl = src?.startsWith('http') ?
+    src :
+    src?.startsWith('/') ?
+      `http://localhost:5000${src}` :
       `http://localhost:5000/${src}`;
 
   return (
@@ -319,7 +319,7 @@ const MarkdownImage: React.FC<{
             </div>
           )}
           <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button 
+            <button
               className="p-1.5 bg-white/90 rounded-full hover:bg-white shadow-sm transition-colors"
               onClick={() => setShowFullScreen(true)}
             >
@@ -331,7 +331,7 @@ const MarkdownImage: React.FC<{
           <div className="text-center text-sm text-muted-foreground py-2 px-2 border-t">{alt}</div>
         )}
       </div>
-      
+
       {showFullScreen && (
         <Dialog open={showFullScreen} onOpenChange={setShowFullScreen}>
           <DialogContent className="max-w-5xl w-full max-h-[90vh]">
@@ -358,8 +358,8 @@ const MarkdownImage: React.FC<{
               )}
             </div>
             <DialogFooter>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => window.open(imageUrl, '_blank')}
               >
                 <Download className="h-4 w-4 mr-2" />
@@ -379,7 +379,7 @@ const EnhancedMarkdown: React.FC<{ content: string }> = ({ content }) => {
 
   return (
     <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-md prose-h2:border-b prose-h2:pb-1 prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-img:rounded-md prose-img:shadow-sm">
-      <ReactMarkdown 
+      <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
         components={{
@@ -387,12 +387,12 @@ const EnhancedMarkdown: React.FC<{ content: string }> = ({ content }) => {
           img: ({ node, ...props }) => (
             <MarkdownImage src={props.src} alt={props.alt} />
           ),
-          
+
           // Enhanced code block rendering
           code: ({ node, inline, className, children, ...props }: any) => {
             const match = /language-(\w+)/.exec(className || '');
             const language = match ? match[1] : '';
-            
+
             if (!inline && language) {
               return (
                 <div className="relative my-4 rounded-md overflow-hidden">
@@ -432,8 +432,8 @@ const EnhancedMarkdown: React.FC<{ content: string }> = ({ content }) => {
                       </svg>
                     </button>
                   </div>
-                  <SyntaxHighlighter 
-                    language={language} 
+                  <SyntaxHighlighter
+                    language={language}
                     style={nord}
                     customStyle={{ margin: 0, borderRadius: 0 }}
                     showLineNumbers={language === 'python' || language === 'javascript' || language === 'typescript'}
@@ -457,50 +457,50 @@ const EnhancedMarkdown: React.FC<{ content: string }> = ({ content }) => {
               );
             }
           },
-          
+
           // Enhanced table rendering
           table: ({ node, ...props }) => (
             <div className="overflow-x-auto my-4 border rounded-md">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700" {...props} />
             </div>
           ),
-          
+
           // Style table headers
           th: ({ node, ...props }) => (
-            <th 
-              className="px-4 py-2 bg-gray-50 dark:bg-gray-800 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700" 
-              {...props} 
+            <th
+              className="px-4 py-2 bg-gray-50 dark:bg-gray-800 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700"
+              {...props}
             />
           ),
-          
+
           // Style table cells
           td: ({ node, ...props }) => (
             <td className="px-4 py-2 text-sm whitespace-nowrap border-b border-gray-100 dark:border-gray-800" {...props} />
           ),
-          
+
           // Style paragraphs with proper spacing
           p: ({ node, ...props }) => (
             <p className="leading-relaxed mb-4" {...props} />
           ),
-          
+
           // Style links with proper color and underline
           a: ({ node, ...props }) => (
-            <a 
-              className="text-blue-600 dark:text-blue-400 hover:underline" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              {...props} 
+            <a
+              className="text-blue-600 dark:text-blue-400 hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+              {...props}
             />
           ),
-          
+
           // Style blockquotes
           blockquote: ({ node, ...props }) => (
-            <blockquote 
-              className="border-l-4 border-blue-200 dark:border-blue-800 pl-4 italic text-gray-600 dark:text-gray-300 my-4" 
-              {...props} 
+            <blockquote
+              className="border-l-4 border-blue-200 dark:border-blue-800 pl-4 italic text-gray-600 dark:text-gray-300 my-4"
+              {...props}
             />
           ),
-          
+
           // Style headings with proper spacing and sizes
           h1: ({ node, ...props }) => (
             <h1 className="text-2xl font-bold mt-6 mb-4 pb-1 border-b border-gray-200 dark:border-gray-700" {...props} />
@@ -514,7 +514,7 @@ const EnhancedMarkdown: React.FC<{ content: string }> = ({ content }) => {
           h4: ({ node, ...props }) => (
             <h4 className="text-base font-medium mt-4 mb-2" {...props} />
           ),
-          
+
           // Style lists
           ul: ({ node, ...props }) => (
             <ul className="list-disc pl-6 mb-4 space-y-1" {...props} />
@@ -544,7 +544,7 @@ const SqlCode: React.FC<{ sql: string }> = ({ sql }) => {
 
   // Determine if it's a schema query
   const isSchemaQuery = sql.toLowerCase().includes('sqlite_master');
-  
+
   return (
     <div className="relative">
       <div className="bg-gray-100 dark:bg-gray-800 rounded-md overflow-x-auto">
@@ -593,11 +593,11 @@ const SqlCode: React.FC<{ sql: string }> = ({ sql }) => {
           </Button>
         </div>
         <div className="p-4">
-          <SyntaxHighlighter 
-            language="sql" 
-            style={nord} 
-            customStyle={{ 
-              margin: 0, 
+          <SyntaxHighlighter
+            language="sql"
+            style={nord}
+            customStyle={{
+              margin: 0,
               background: 'transparent',
               fontSize: '0.9rem',
               color: '#333333',
@@ -622,7 +622,7 @@ const SqlResults: React.FC<{ content: string }> = ({ content }) => {
   };
 
   const tableResults = extractTableResults(content);
-  
+
   if (!tableResults) {
     return <EnhancedMarkdown content={content} />;
   }
@@ -634,33 +634,33 @@ const SqlResults: React.FC<{ content: string }> = ({ content }) => {
       try {
         // Split by lines to parse the table
         const lines = results.split('\n').filter(line => line.trim());
-        
+
         // Extract header row (assuming first line after "Results for query:")
         const headerLine = lines.find(line => line.includes('table_name') && line.includes('schema'));
         if (!headerLine) return results;
-        
+
         const headers = ['Table Name', 'Schema'];
-        
+
         // Extract table rows - assuming format is index, table_name, schema
-        const rows = lines.filter(line => 
+        const rows = lines.filter(line =>
           line.match(/^\d+\s+\S+\s+/)  // Starts with digit followed by whitespace and text
         ).map(line => {
           // Split by first two occurrences of multiple whitespace
           const parts = line.split(/\s{2,}/, 3);
           if (parts.length < 3) return ['', '']; // Skip malformed lines
-          
+
           // Skip the first element (index) and return table_name and schema
           return [parts[1].trim(), parts[2].trim()];
         });
-        
+
         return (
           <div className="overflow-x-auto border rounded-md my-4">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
                   {headers.map((header, i) => (
-                    <th 
-                      key={i} 
+                    <th
+                      key={i}
                       className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
                       {header}
@@ -688,7 +688,7 @@ const SqlResults: React.FC<{ content: string }> = ({ content }) => {
         return <pre className="p-4 bg-gray-50 dark:bg-gray-800 rounded-md overflow-x-auto">{results}</pre>;
       }
     }
-    
+
     // Default formatting if not a table
     return <pre className="p-4 bg-gray-50 dark:bg-gray-800 rounded-md overflow-x-auto text-gray-800 dark:text-gray-200">{results}</pre>;
   };
@@ -709,9 +709,9 @@ const SqlResults: React.FC<{ content: string }> = ({ content }) => {
 // Database Schema Component
 const DatabaseSchemaExplanation: React.FC<{ content: string }> = ({ content }) => {
   // Check if this is a database schema explanation
-  const isSchemaExplanation = content.includes('database schema') || 
-                              content.includes('Table:') ||
-                              (content.includes('table') && content.includes('column'));
+  const isSchemaExplanation = content.includes('database schema') ||
+    content.includes('Table:') ||
+    (content.includes('table') && content.includes('column'));
 
   if (!isSchemaExplanation) {
     return <EnhancedMarkdown content={content} />;
@@ -735,22 +735,22 @@ const DatabaseSchemaExplanation: React.FC<{ content: string }> = ({ content }) =
 // Thinking Process Component
 const ThinkingProcess: React.FC<{ thinking: string }> = ({ thinking }) => {
   const [expanded, setExpanded] = useState(false);
-  
+
   if (!thinking) return null;
-  
+
   return (
     <div className="mt-4">
-      <button 
+      <button
         onClick={() => setExpanded(!expanded)}
         className="text-sm text-blue-500 hover:text-blue-700 flex items-center gap-1"
       >
         {expanded ? 'Hide' : 'Show'} thinking process
-        {expanded ? 
-          <ChevronUp className="h-4 w-4" /> : 
+        {expanded ?
+          <ChevronUp className="h-4 w-4" /> :
           <ChevronDown className="h-4 w-4" />
         }
       </button>
-      
+
       {expanded && (
         <div className="mt-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-md text-sm whitespace-pre-wrap font-mono text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
           {thinking}
@@ -763,59 +763,59 @@ const ThinkingProcess: React.FC<{ thinking: string }> = ({ thinking }) => {
 // Enhanced Agent Box Component that properly extracts and displays <think> content
 const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
   const [isOpen, setIsOpen] = useState(false);
-  
+
   // Extract thinking process from the content if present
   const extractContent = (content: string): { mainContent: string, thinking: string | null } => {
     const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
     const thinking = thinkMatch ? thinkMatch[1].trim() : null;
-    
+
     // Remove <think> section from content
     const mainContent = content.replace(/<think>[\s\S]*?<\/think>/, '').trim();
-    
+
     return { mainContent, thinking };
   };
-  
+
   // Extract code blocks from content
   const extractCodeBlocks = (content: string): { cleanContent: string, codeBlocks: CodeBlock[] } => {
     const codeBlocks: CodeBlock[] = [];
     const codeRegex = /```(\w*)\n([\s\S]*?)```/g;
     let codeMatch;
-    
+
     // Find all code blocks
     while ((codeMatch = codeRegex.exec(content)) !== null) {
       const language = codeMatch[1] || 'plaintext';
       const code = codeMatch[2].trim();
       codeBlocks.push({ language, code });
     }
-    
+
     // Remove code blocks from content
     const cleanContent = content.replace(/```(\w*)\n[\s\S]*?```/g, '');
-    
+
     return { cleanContent, codeBlocks };
   };
-  
+
   const { mainContent, thinking } = extractContent(section.content);
   const { cleanContent, codeBlocks } = extractCodeBlocks(mainContent);
-  
+
   // Determine if content contains SQL-related information
   const isSqlQuery = section.content.includes('SELECT') && section.content.includes('FROM');
   const isSqlResults = section.content.includes('Results for query:');
-  const isDatabaseExplanation = section.agentName === "SQL Generator" || 
-                               section.content.includes('database schema') || 
-                               (section.content.includes('table') && section.content.includes('column'));
+  const isDatabaseExplanation = section.agentName === "SQL Generator" ||
+    section.content.includes('database schema') ||
+    (section.content.includes('table') && section.content.includes('column'));
 
   // Assign type if not already specified
-  const sectionType = section.type || 
-                     (isSqlQuery ? 'sql' : 
-                      isSqlResults ? 'sql-results' :
-                      isDatabaseExplanation ? 'explanation' : 
-                      section.agentName === "Analysis Summary" ? 'summary' : 
-                      section.agentName === "Generated Code" ? 'code' : 
-                      'default');
+  const sectionType = section.type ||
+    (isSqlQuery ? 'sql' :
+      isSqlResults ? 'sql-results' :
+        isDatabaseExplanation ? 'explanation' :
+          section.agentName === "Analysis Summary" ? 'summary' :
+            section.agentName === "Generated Code" ? 'code' :
+              'default');
 
   // Get background color based on section type
   const getBgColor = () => {
-    switch(sectionType) {
+    switch (sectionType) {
       case 'sql':
         return 'bg-blue-50 dark:bg-blue-900/20';
       case 'sql-results':
@@ -832,7 +832,7 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
   };
 
   return (
-    <Collapsible 
+    <Collapsible
       className={`w-full border rounded-lg my-2 overflow-hidden ${isOpen ? 'shadow-md' : ''} transition-all`}
       open={isOpen}
       onOpenChange={setIsOpen}
@@ -877,7 +877,7 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
             {cleanContent && (
               <EnhancedMarkdown content={cleanContent} />
             )}
-            
+
             {/* Code blocks */}
             {codeBlocks.length > 0 && (
               <div className="space-y-3">
@@ -921,12 +921,12 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
                         </svg>
                       </button>
                     </div>
-                    <SyntaxHighlighter 
-                      language={block.language || 'plaintext'} 
+                    <SyntaxHighlighter
+                      language={block.language || 'plaintext'}
                       style={nord}
                       showLineNumbers={block.language === 'python' || block.language === 'javascript' || block.language === 'typescript' || block.language === 'sql'}
-                      customStyle={{ 
-                        margin: 0, 
+                      customStyle={{
+                        margin: 0,
                         fontSize: '0.9rem',
                         color: '#333333',
                         fontWeight: 500
@@ -940,7 +940,7 @@ const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
             )}
           </div>
         )}
-        
+
         {/* Display thinking process */}
         {thinking && <ThinkingProcess thinking={thinking} />}
       </CollapsibleContent>
@@ -955,19 +955,19 @@ const extractSqlQuery = (content: string): string => {
   if (selectMatch) {
     return selectMatch[0].trim();
   }
-  
+
   // Try to extract from code block
   const codeBlockMatch = content.match(/```sql\s*([\s\S]*?)\s*```/);
   if (codeBlockMatch) {
     return codeBlockMatch[1].trim();
   }
-  
+
   // Try to extract generated code section
   const generatedCodeMatch = content.match(/Generated Code:([\s\S]*?)(?=>>|$)/);
   if (generatedCodeMatch) {
     return generatedCodeMatch[1].trim();
   }
-  
+
   // Fallback to the original content
   return content;
 };
@@ -977,7 +977,7 @@ const VisualizationGallery: React.FC<{
   visualizations: string[];
 }> = ({ visualizations }) => {
   if (!visualizations || visualizations.length === 0) return null;
-  
+
   const visualizationItems: VisualizationInfo[] = visualizations.map(path => ({
     path,
     filename: path.split('/').pop() || path
@@ -986,7 +986,7 @@ const VisualizationGallery: React.FC<{
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {visualizationItems.map((viz, index) => (
-        <MarkdownImage 
+        <MarkdownImage
           key={index}
           src={viz.path}
           alt={viz.filename.replace(/\.(png|jpg|jpeg|gif)$/i, '').replace(/_/g, ' ')}
@@ -999,19 +999,19 @@ const VisualizationGallery: React.FC<{
 // Process the agent responses from raw JSON
 const processAgentResponses = (responses: AgentResponse[]): AgentSection[] => {
   const sections: AgentSection[] = [];
-  
+
   responses.forEach(response => {
     let agentName = response.agent;
     let icon: React.ReactNode;
     let order = 100;
     let type: 'sql' | 'code' | 'summary' | 'explanation' | 'default' = 'default';
-    
+
     // Process the content to extract thinking and main content
     const thinkMatch = response.content.match(/<think>([\s\S]*?)<\/think>/);
     const thinking = thinkMatch ? thinkMatch[1].trim() : undefined;
-    
+
     // Assign appropriate icon based on agent type
-    switch(agentName) {
+    switch (agentName) {
       case 'Expert Selector':
         icon = <Search className="h-5 w-5 text-blue-500" />;
         order = 1;
@@ -1037,7 +1037,7 @@ const processAgentResponses = (responses: AgentResponse[]): AgentSection[] => {
       default:
         icon = <Bot className="h-5 w-5" />;
     }
-    
+
     // Add the section with all extracted information
     sections.push({
       agentName,
@@ -1049,7 +1049,7 @@ const processAgentResponses = (responses: AgentResponse[]): AgentSection[] => {
       thinking
     });
   });
-  
+
   // Sort by order
   return sections.sort((a, b) => a.order - b.order);
 };
@@ -1061,11 +1061,11 @@ const parseAgentSections = (output: string): {
 } => {
   // Regular expressions to identify agent sections
   const agentRegex = /Calling Model: ([^\n]+)\n\n([\s\S]*?)(?=Calling Model:|I now have the final answer:|Generated Code:|Chain Summary|$)/g;
-  
+
   const sections: AgentSection[] = [];
   const visualizationPaths: string[] = [];
   let match;
-  
+
   // Find all agent sections
   while ((match = agentRegex.exec(output)) !== null) {
     const modelName = match[1].trim();
@@ -1074,7 +1074,7 @@ const parseAgentSections = (output: string): {
     let icon = <Bot className="h-5 w-5" />;
     let order = 100; // Default order (will be sorted later)
     let type: 'sql' | 'sql-results' | 'code' | 'summary' | 'explanation' | 'default' = 'default';
-    
+
     // Extract agent name from the content and assign order
     if (content.includes("Selecting the expert")) {
       agentName = "Expert Selector";
@@ -1092,7 +1092,7 @@ const parseAgentSections = (output: string): {
       agentName = "Code Generator";
       icon = <Code className="h-5 w-5 text-green-500" />;
       order = 5;
-      
+
       // Check if this is SQL code generator
       if (content.includes("SELECT") && content.includes("FROM")) {
         type = 'sql';
@@ -1114,7 +1114,7 @@ const parseAgentSections = (output: string): {
       type = 'explanation';
       order = 2;
     }
-    
+
     // Handle SQL-specific content
     if (content.includes("Results for query:")) {
       type = 'sql-results';
@@ -1126,7 +1126,7 @@ const parseAgentSections = (output: string): {
         type = 'sql';
       }
     }
-    
+
     sections.push({
       agentName,
       modelName,
@@ -1136,14 +1136,14 @@ const parseAgentSections = (output: string): {
       type
     });
   }
-  
+
   // Look for summary section
   const summaryRegex = /I now have the final answer:([\s\S]*?)(?=Here is the final code|Chain Summary|$)/;
   const summaryMatch = summaryRegex.exec(output);
   if (summaryMatch) {
     // Check if it's a SQL result
     const summaryContent = summaryMatch[1].trim();
-    
+
     if (summaryContent.includes("Results for query:")) {
       sections.push({
         agentName: "SQL Results",
@@ -1164,13 +1164,13 @@ const parseAgentSections = (output: string): {
       });
     }
   }
-  
+
   // Look for final code section - special handling for SQL
   const codeRegex = /Here is the final code that accomplishes the task:([\s\S]*?)(?=Chain Summary|$)/;
   const codeMatch = codeRegex.exec(output);
   if (codeMatch) {
     const codeContent = codeMatch[1].trim();
-    
+
     // Check if this is SQL code
     if (codeContent.includes("SELECT") && codeContent.includes("FROM")) {
       sections.push({
@@ -1192,7 +1192,7 @@ const parseAgentSections = (output: string): {
       });
     }
   }
-  
+
   // Look for chain summary
   const chainRegex = /Chain Summary[\s\S]*?$/;
   const chainMatch = chainRegex.exec(output);
@@ -1206,14 +1206,14 @@ const parseAgentSections = (output: string): {
       order: 9
     });
   }
-  
+
   return { sections, visualizationPaths: visualizationPaths };
 };
 
 // Function to fix image paths in markdown content
 const fixMarkdownImagePaths = (content: string): string => {
   if (!content) return '';
-  
+
   // Replace relative image paths with absolute URLs
   let fixedContent = content.replace(
     /!\[(.*?)\]\((visualization\/[^)]+)\)/g,
@@ -1221,7 +1221,7 @@ const fixMarkdownImagePaths = (content: string): string => {
       return `![${alt}](/visualization/${path.replace('visualization/', '')})`;
     }
   );
-  
+
   // Also fix paths starting with /visualization/
   fixedContent = fixedContent.replace(
     /!\[(.*?)\]\((\/visualization\/[^)]+)\)/g,
@@ -1229,7 +1229,7 @@ const fixMarkdownImagePaths = (content: string): string => {
       return `![${alt}](${path})`;
     }
   );
-  
+
   // Fix any paths that don't start with http or /
   fixedContent = fixedContent.replace(
     /!\[(.*?)\]\((?!http|\/)(.*?\.(?:png|jpg|jpeg|gif|svg))\)/g,
@@ -1237,7 +1237,7 @@ const fixMarkdownImagePaths = (content: string): string => {
       return `![${alt}](/${path})`;
     }
   );
-  
+
   return fixedContent;
 };
 
@@ -1252,20 +1252,20 @@ const FileSelector: React.FC<{
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Fetch existing files when component mounts
   useEffect(() => {
     const fetchFiles = async () => {
       if (!userId) return;
-      
+
       setIsLoading(true);
       setError(null);
       try {
         const response = await axios.get(`http://localhost:5000/list_files/${userId}`);
-        setFiles(response.data.files.filter((f: ExistingFile) => 
-          f.file_type === 'csv' || f.file_type === 'db' || 
-          f.file_type === 'sqlite' || f.file_type === 'sqlite3' || 
-          f.file_type === 'json' || f.file_type === 'xml' || f.file_type === 'pdf' || f.file_type=== 'docx' || f.file_type === 'doc' || f.file_type === 'txt'
+        setFiles(response.data.files.filter((f: ExistingFile) =>
+          f.file_type === 'csv' || f.file_type === 'db' ||
+          f.file_type === 'sqlite' || f.file_type === 'sqlite3' ||
+          f.file_type === 'json' || f.file_type === 'xml' || f.file_type === 'pdf' || f.file_type === 'docx' || f.file_type === 'doc' || f.file_type === 'txt'
         ));
       } catch (err: any) {
         console.error('Error fetching files:', err);
@@ -1274,7 +1274,7 @@ const FileSelector: React.FC<{
         setIsLoading(false);
       }
     };
-    
+
     if (userId) {
       fetchFiles();
     }
@@ -1282,23 +1282,23 @@ const FileSelector: React.FC<{
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files || !event.target.files[0] || !userId) return;
-    
+
     const file = event.target.files[0];
     const fileType = file.name.split('.').pop()?.toLowerCase();
-    
+
     // Check if file type is supported
     if (!['csv', 'db', 'sqlite', 'sqlite3', 'json', 'xml', 'pdf', 'docx', 'doc', 'txt'].includes(fileType || '')) {
       setError('Unsupported file type. Please upload CSV, JSON, XML, SQLite database, or document files (PDF, DOCX, DOC, TXT).');
       return;
     }
-    
+
     setUploadingFile(true);
     setUploadProgress(0);
     setError(null);
-    
+
     const formData = new FormData();
     formData.append('file', file);
-    
+
     try {
       // Upload with progress tracking
       const response = await axios.post(
@@ -1313,19 +1313,19 @@ const FileSelector: React.FC<{
           }
         }
       );
-      
+
       if (response.data.file_id) {
         // Successfully uploaded
         setUploadProgress(100);
-        
+
         // Refresh file list
         const filesResponse = await axios.get(`http://localhost:5000/list_files/${userId}`);
-        setFiles(filesResponse.data.files.filter((f: ExistingFile) => 
-          f.file_type === 'csv' || f.file_type === 'db' || 
-          f.file_type === 'sqlite' || f.file_type === 'sqlite3' || 
+        setFiles(filesResponse.data.files.filter((f: ExistingFile) =>
+          f.file_type === 'csv' || f.file_type === 'db' ||
+          f.file_type === 'sqlite' || f.file_type === 'sqlite3' ||
           f.file_type === 'json' || f.file_type === 'xml'
         ));
-        
+
         // Select the newly uploaded file
         const newFile: SelectedFile = {
           type: 'existing',
@@ -1333,9 +1333,9 @@ const FileSelector: React.FC<{
           fileType: fileType || '',
           fileName: file.name
         };
-        
+
         onFileSelect(newFile);
-        
+
         // Show preview if available
         if (response.data.preview) {
           setFilePreview(response.data.preview);
@@ -1352,7 +1352,7 @@ const FileSelector: React.FC<{
 
 
   function getFileIcon(file_type: string): React.ReactNode {
-    switch(file_type.toLowerCase()) {
+    switch (file_type.toLowerCase()) {
       case 'csv':
         return <FileText className="h-4 w-4 mr-2 text-blue-500" />;
       case 'json':
@@ -1380,7 +1380,7 @@ const FileSelector: React.FC<{
             <TabsTrigger value="upload">Upload New File</TabsTrigger>
             <TabsTrigger value="existing">Existing Files</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="upload" className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="file-upload">Upload CSV, JSON, XML, or Database File</Label>
@@ -1403,7 +1403,7 @@ const FileSelector: React.FC<{
               </div>
             </div>
           </TabsContent>
-          
+
           <TabsContent value="existing" className="space-y-4">
             {isLoading ? (
               <div className="flex justify-center p-4">
@@ -1442,7 +1442,7 @@ const FileSelector: React.FC<{
             )}
           </TabsContent>
         </Tabs>
-        
+
         {error && (
           <Alert variant="destructive" className="mt-4">
             <AlertCircle className="h-4 w-4" />
@@ -1450,7 +1450,7 @@ const FileSelector: React.FC<{
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        
+
         {filePreview && (
           <div className="mt-4">
             <h3 className="text-md font-medium mb-2">Data Preview</h3>
@@ -1459,7 +1459,7 @@ const FileSelector: React.FC<{
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
                     {filePreview.columns.map((col, idx) => (
-                      <th 
+                      <th
                         key={idx}
                         className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                       >
@@ -1472,7 +1472,7 @@ const FileSelector: React.FC<{
                   {filePreview.rows.slice(0, 5).map((row, idx) => (
                     <tr key={idx} className={idx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
                       {row.map((cell, cellIdx) => (
-                        <td 
+                        <td
                           key={cellIdx}
                           className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
                         >
@@ -1503,32 +1503,32 @@ const NumberSelector: React.FC<{
       onChange(value + 1);
     }
   };
-  
+
   const handleDecrement = () => {
     if (value > min) {
       onChange(value - 1);
     }
   };
-  
+
   return (
     <div className="flex items-center space-x-2 border rounded-md p-1">
-      <Button 
-        variant="ghost" 
-        size="sm" 
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={handleDecrement}
         disabled={value <= min}
         className="h-8 w-8 p-0 flex items-center justify-center"
       >
         <Minus className="h-3 w-3" />
       </Button>
-      
+
       <div className="flex-1 text-center font-medium min-w-[40px]">
         {value}
       </div>
-      
-      <Button 
-        variant="ghost" 
-        size="sm" 
+
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={handleIncrement}
         disabled={value >= max}
         className="h-8 w-8 p-0 flex items-center justify-center"
@@ -1548,9 +1548,9 @@ const ReportItem: React.FC<{
 }> = ({ report, onSelect, isSelected, onDelete }) => {
   // Format the date for display
   const formattedDate = new Date(report.created_at).toLocaleString();
-  
+
   return (
-    <div 
+    <div
       className={`p-4 border rounded-lg mb-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex justify-between ${isSelected ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/10' : ''}`}
       onClick={onSelect}
     >
@@ -1572,8 +1572,8 @@ const ReportItem: React.FC<{
             {report.visualizations.length} visualization{report.visualizations.length !== 1 ? 's' : ''}
           </Badge>
         )}
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           size="sm"
           onClick={(e) => {
             e.stopPropagation();
@@ -1594,7 +1594,7 @@ const AnalysisConfig: React.FC<{
   const [generateReport, setGenerateReport] = useState(false);
   const [questionCount, setQuestionCount] = useState(3);
   const [diagramEnabled, setDiagramEnabled] = useState(false); // Added state
-  
+
   useEffect(() => {
     onConfigChange({
       generateReport,
@@ -1602,7 +1602,7 @@ const AnalysisConfig: React.FC<{
       diagram_enabled: diagramEnabled // New property added to config
     });
   }, [generateReport, questionCount, diagramEnabled, onConfigChange]);
-  
+
   return (
     <Card>
       <CardHeader>
@@ -1613,19 +1613,19 @@ const AnalysisConfig: React.FC<{
         <div className="space-y-4">
           {/* Report Generation Option */}
           <div className="flex items-center space-x-2">
-            <Checkbox 
-              id="generate-report" 
+            <Checkbox
+              id="generate-report"
               checked={generateReport}
               onCheckedChange={(checked) => setGenerateReport(checked === true)}
             />
-            <label 
-              htmlFor="generate-report" 
+            <label
+              htmlFor="generate-report"
               className="text-sm font-medium leading-none cursor-pointer"
             >
               Generate Comprehensive Report
             </label>
           </div>
-          
+
           {generateReport && (
             <div className="pl-6 space-y-2">
               <div className="flex items-center space-x-2">
@@ -1646,16 +1646,16 @@ const AnalysisConfig: React.FC<{
               </p>
             </div>
           )}
-          
+
           {/* Diagram Generation Option - NEW */}
           <div className="flex items-center space-x-2 mt-2 pt-2 border-t">
-            <Checkbox 
-              id="enable-diagram" 
+            <Checkbox
+              id="enable-diagram"
               checked={diagramEnabled}
               onCheckedChange={(checked) => setDiagramEnabled(checked === true)}
             />
-            <label 
-              htmlFor="enable-diagram" 
+            <label
+              htmlFor="enable-diagram"
               className="text-sm font-medium leading-none cursor-pointer"
             >
               Generate Flow Diagram
@@ -1699,7 +1699,7 @@ const AnalysisPanel: React.FC<{
   const [agentSections, setAgentSections] = useState<AgentSection[]>([]);
   const [extractedVisualizations, setExtractedVisualizations] = useState<string[]>([]);
   const [mermaidDiagrams, setMermaidDiagrams] = useState<string[]>([]); // New state for Mermaid diagrams
-  const [activeTab, setActiveTab] = useState<'analysis' | 'reports'>('analysis');
+  const [activeTab, setActiveTab] = useState<'analysis' | 'reports' | 'history'>('analysis');
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [selectedReportContent, setSelectedReportContent] = useState<string | null>(null);
@@ -1707,12 +1707,27 @@ const AnalysisPanel: React.FC<{
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [reportToDelete, setReportToDelete] = useState<string | null>(null);
-  
+  const [queryHistory, setQueryHistory] = useState<{
+    id: number;
+    chain_id: number;
+    query: string;
+    filename: string;
+    file_id: number;
+    timestamp: string;
+  }[]>([]);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState<number | null>(null);
+  const [historyResult, setHistoryResult] = useState<{
+    sections: AgentSection[];
+    visualizations: string[];
+  }>({ sections: [], visualizations: [] });
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isLoadingHistoryItem, setIsLoadingHistoryItem] = useState(false);
+
   // Fetch saved reports when userId changes or when activeTab changes to 'reports'
   useEffect(() => {
     const fetchReports = async () => {
       if (!userId) return;
-      
+
       setIsLoadingReports(true);
       try {
         const response = await axios.get(`http://localhost:5000/list_reports/${userId}`);
@@ -1725,12 +1740,12 @@ const AnalysisPanel: React.FC<{
         setIsLoadingReports(false);
       }
     };
-    
+
     if (activeTab === 'reports') {
       fetchReports();
     }
   }, [userId, activeTab]);
-  
+
   // Reset states when selected file changes
   useEffect(() => {
     setQuestion('');
@@ -1744,30 +1759,30 @@ const AnalysisPanel: React.FC<{
     setSelectedReportId(null);
     setSelectedReportContent(null);
   }, [selectedFile]);
-  
+
   // Parse agent sections and visualizations when result changes
   useEffect(() => {
     if (result && result.output && !result.is_report) {
       const { sections, visualizationPaths } = parseAgentSections(result.output);
       setAgentSections(sections);
-      
+
       // Combine manually extracted visualization paths with those returned from API
       const allVisualizations = [
         ...(result.visualizations || []),
         ...visualizationPaths
       ];
-      
+
       // Remove duplicates and filter out any empty strings
       const uniqueVisualizations = [...new Set(allVisualizations)].filter(path => path);
-      
+
       // Ensure all paths have proper prefix
       const formattedVisualizations = uniqueVisualizations.map(path => {
         if (path.startsWith('http')) return path;
         return path.startsWith('/') ? path : `/${path}`;
       });
-      
+
       setExtractedVisualizations(formattedVisualizations);
-      
+
       // Set Mermaid diagrams
       if (result.mermaid_diagrams && result.mermaid_diagrams.length > 0) {
         setMermaidDiagrams(result.mermaid_diagrams);
@@ -1775,14 +1790,14 @@ const AnalysisPanel: React.FC<{
     } else if (result && result.is_report) {
       // For report responses, just use the visualizations from the API
       setExtractedVisualizations(result.visualizations || []);
-      
+
       // Set Mermaid diagrams
       if (result.mermaid_diagrams && result.mermaid_diagrams.length > 0) {
         setMermaidDiagrams(result.mermaid_diagrams);
       }
     }
   }, [result]);
-  
+
   // Fetch report content when selectedReportId changes
   useEffect(() => {
     const fetchReportContent = async () => {
@@ -1790,7 +1805,7 @@ const AnalysisPanel: React.FC<{
         setSelectedReportContent(null);
         return;
       }
-      
+
       try {
         const response = await axios.get(`http://localhost:5000/get_report/${userId}/${selectedReportId}`);
         if (response.data.success) {
@@ -1802,10 +1817,10 @@ const AnalysisPanel: React.FC<{
         setSelectedReportContent(null);
       }
     };
-    
+
     fetchReportContent();
   }, [userId, selectedReportId]);
-  
+
   // Process and fix image paths in report content
   useEffect(() => {
     if (reportContent) {
@@ -1815,13 +1830,183 @@ const AnalysisPanel: React.FC<{
       }
     }
   }, [reportContent]);
+  // Fetch user query history
+  // Fetch user query history
+  const fetchUserHistory = useCallback(async () => {
+    if (!userId) return;
+
+    setIsLoadingHistory(true);
+    try {
+      const response = await axios.get(`http://localhost:5000/get_user_history/${userId}`);
+      if (response.data.success) {
+        setQueryHistory(response.data.history);
+      } else {
+        // Handle successful request but with error in response
+        setQueryHistory([]);
+        setError(response.data.error || 'Failed to load query history');
+      }
+    } catch (err) {
+      console.error('Error fetching user history:', err);
+      // Handle 404 separately to give a more helpful message
+      if (
+        typeof err === "object" &&
+        err !== null &&
+        "response" in err &&
+        typeof (err as any).response === "object" &&
+        (err as any).response !== null &&
+        "status" in (err as any).response &&
+        (err as any).response.status === 404
+      ) {
+        setError('History feature is not available or no history exists yet');
+      } else {
+        setError('Failed to load query history');
+      }
+      // Always set an empty array when error occurs
+      setQueryHistory([]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [userId]);
+
+  // Fetch specific history item
+  // Fetch specific history item
+  const fetchHistoryItem = async (chainId: number) => {
+    setIsLoadingHistoryItem(true);
+    setError(null);
+
+    try {
+      const response = await axios.get(`http://localhost:5000/get_history_result/${chainId}`);
+      if (response.data.success) {
+        // Update the AgentSection interface to include 'sql-results' type
+        interface HistorySection {
+          agentName: string;
+          modelName: string;
+          content: string;
+          icon: React.ReactNode;
+          order: number;
+          type: 'sql' | 'code' | 'summary' | 'explanation' | 'default' | 'sql-results';
+        }
+
+        // Process the sections similar to how we process agent responses
+        const processedSections = response.data.sections.map((section: any) => {
+          let icon: React.ReactNode;
+          let order = 100;
+          let type: 'sql' | 'code' | 'summary' | 'explanation' | 'default' | 'sql-results' = 'default';
+
+          // Assign appropriate icon and order based on agent type
+          switch (section.agent) {
+            case 'Expert Selector':
+              icon = <Search className="h-5 w-5 text-blue-500" />;
+              order = 1;
+              break;
+            case 'Analyst Selector':
+              icon = <Zap className="h-5 w-5 text-yellow-500" />;
+              order = 2;
+              break;
+            case 'Planner':
+              icon = <Coffee className="h-5 w-5 text-amber-500" />;
+              order = 3;
+              break;
+            case 'Code Generator':
+              icon = <Code className="h-5 w-5 text-green-500" />;
+              type = 'code';
+              order = 5;
+              break;
+            case 'Solution Summarizer':
+              icon = <Sparkles className="h-5 w-5 text-purple-500" />;
+              type = 'summary';
+              order = 7;
+              break;
+            case 'SQL Analyst':
+              icon = <Database className="h-5 w-5 text-blue-500" />;
+              type = 'sql';
+              order = 3;
+              break;
+            case 'SQL Generator':
+              icon = <Database className="h-5 w-5 text-blue-500" />;
+              type = 'sql';
+              order = 4;
+              break;
+            case 'SQL Executor':
+              icon = <Table className="h-5 w-5 text-blue-500" />;
+              type = 'sql-results';
+              order = 5;
+              break;
+            case 'Code Debugger':
+              icon = <Terminal className="h-5 w-5 text-red-500" />;
+              order = 6;
+              break;
+            case 'Data Cleaning Expert':
+              icon = <Sparkles className="h-5 w-5 text-green-500" />;
+              order = 4;
+              break;
+            case 'Research Specialist':
+              icon = <BookOpen className="h-5 w-5 text-purple-500" />;
+              order = 3;
+              break;
+            case 'Data Analyst':
+              icon = <BarChart className="h-5 w-5 text-indigo-500" />;
+              order = 4;
+              break;
+            case 'Data Analyst DF':
+              icon = <BarChart className="h-5 w-5 text-indigo-500" />;
+              order = 4;
+              break;
+            case 'Data Analyst Generic':
+              icon = <BarChart className="h-5 w-5 text-indigo-500" />;
+              order = 4;
+              break;
+            case 'Diagram Generator':
+              icon = <BarChart className="h-5 w-5 text-blue-500" />;
+              order = 8;
+              break;
+            default:
+              icon = <Bot className="h-5 w-5" />;
+          }
+
+          // Check content for SQL queries or results
+          const isSqlQuery = section.content.includes('SELECT') && section.content.includes('FROM');
+          const isSqlResults = section.content.includes('Results for query:');
+          const isDatabaseExplanation = section.content.includes('database schema') ||
+            (section.content.includes('table') && section.content.includes('column'));
+
+          // Override type if needed
+          if (type === 'default') {
+            if (isSqlQuery) type = 'sql';
+            else if (isSqlResults) type = 'sql-results';
+            else if (isDatabaseExplanation) type = 'explanation';
+          }
+
+          return {
+            agentName: section.agent,
+            modelName: section.model,
+            content: section.content,
+            icon,
+            order,
+            type
+          };
+        });
+
+        setHistoryResult({
+          sections: processedSections.sort((a: HistorySection, b: HistorySection) => a.order - b.order),
+          visualizations: response.data.visualizations || []
+        });
+        setSelectedHistoryItem(chainId);
+      }
+    } catch (err: unknown) {
+      console.error('Error fetching history item:', err);
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+    } finally {
+      setIsLoadingHistoryItem(false);
+    }
+  };
 
   // Save the current report to the database
   const saveReport = async () => {
     if (!userId || !selectedFile || !selectedFile.fileId || !selectedFile.fileName || !reportContent) {
       return;
     }
-    
+
     setIsSavingReport(true);
     try {
       const response = await axios.post(`http://localhost:5000/save_report/${userId}/${selectedFile.fileId}`, {
@@ -1831,11 +2016,11 @@ const AnalysisPanel: React.FC<{
         reportFile: result?.report_file,
         questionCount: config.questionCount
       });
-      
+
       if (response.data.success) {
         // Show success message or notification
         console.log('Report saved successfully!');
-        
+
         // Update reports list if we're in the reports tab
         if (activeTab === 'reports') {
           const reportsResponse = await axios.get(`http://localhost:5000/list_reports/${userId}`);
@@ -1850,17 +2035,17 @@ const AnalysisPanel: React.FC<{
       setIsSavingReport(false);
     }
   };
-  
+
   // Delete a report from the database
   const deleteReport = async (reportId: string) => {
     if (!userId) return;
-    
+
     try {
       const response = await axios.delete(`http://localhost:5000/delete_report/${userId}/${reportId}`);
       if (response.data.success) {
         // Update reports list
         setSavedReports(prevReports => prevReports.filter(report => report.id !== reportId));
-        
+
         // If the deleted report was selected, clear the selection
         if (selectedReportId === reportId) {
           setSelectedReportId(null);
@@ -1876,10 +2061,10 @@ const AnalysisPanel: React.FC<{
   };
 
   const handleAnalysis = async () => {
-    if (!userId || !selectedFile || 
-        (!question && !config.generateReport) || 
-        isProcessing) return;
-    
+    if (!userId || !selectedFile ||
+      (!question && !config.generateReport) ||
+      isProcessing) return;
+
     setIsProcessing(true);
     setError(null);
     setResult(null);
@@ -1888,7 +2073,7 @@ const AnalysisPanel: React.FC<{
     setMermaidDiagrams([]); // Clear Mermaid diagrams
     setReportContent(null); // Clear previous report content
     setActiveTab('analysis'); // Switch to analysis tab
-    
+
     try {
       // Process the question with the file ID
       if (selectedFile.type === 'existing' && selectedFile.fileId) {
@@ -1901,7 +2086,7 @@ const AnalysisPanel: React.FC<{
             diagram_enabled: config.diagram_enabled // Pass diagram parameter
           }
         );
-        
+
         if (response.data.success) {
           console.log('Visualizations from backend:', response.data.visualizations);
           console.log('Mermaid diagrams from backend:', response.data.mermaid_diagrams);
@@ -1911,16 +2096,16 @@ const AnalysisPanel: React.FC<{
             // Only keep cleaned_data_file if it's actually in the response
             cleaned_data_file: response.data.cleaned_data_file || undefined
           }));
-          
+
           console.log('API Response:', response.data); // Helpful for debugging
-          
+
           // If this is a report or if there's a report file, fetch its content
           if (response.data.is_report || response.data.report_file) {
             try {
               const reportResponse = await axios.get(
                 `http://localhost:5000/report/${userId}/${selectedFile.fileId}`
               );
-              
+
               if (reportResponse.data.success && reportResponse.data.report_content) {
                 setReportContent(reportResponse.data.report_content);
               }
@@ -1928,33 +2113,33 @@ const AnalysisPanel: React.FC<{
               console.error("Failed to fetch report content:", reportErr);
             }
           }
-          
+
           // Set Mermaid diagrams
           if (response.data.mermaid_diagrams && response.data.mermaid_diagrams.length > 0) {
             setMermaidDiagrams(response.data.mermaid_diagrams);
           }
-          
+
           // For question responses (not reports), parse the output to extract sections
           if (!response.data.is_report) {
             const { sections, visualizationPaths } = parseAgentSections(response.data.output);
             setAgentSections(sections);
-            
+
             // Combine manually extracted visualization paths with those returned from API
             const allVisualizations = [
               ...(response.data.visualizations || []),
               ...visualizationPaths
             ];
-            
+
             // Remove duplicates and filter out any empty strings
             const uniqueVisualizations = [...new Set(allVisualizations)]
               .filter(path => path);
-            
+
             // Ensure all paths have proper prefix
             const formattedVisualizations = uniqueVisualizations.map(path => {
               if (path.startsWith('http')) return path;
               return path.startsWith('/') ? path : `/${path}`;
             });
-            
+
             setExtractedVisualizations(formattedVisualizations);
           } else {
             // For report responses, just use the visualizations from the API
@@ -1973,7 +2158,7 @@ const AnalysisPanel: React.FC<{
       setIsProcessing(false);
     }
   };
-  
+
   const MermaidDiagram: React.FC<{ source: string }> = ({ source }) => {
     const [diagram, setDiagram] = useState<string>("");
     const [loading, setLoading] = useState(true);
@@ -1982,7 +2167,7 @@ const AnalysisPanel: React.FC<{
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [zoomLevel, setZoomLevel] = useState(1);
     const dialogContainerRef = useRef<HTMLDivElement>(null);
-    
+
     // Initialize mermaid only once
     useEffect(() => {
       mermaid.initialize({
@@ -1993,37 +2178,37 @@ const AnalysisPanel: React.FC<{
         fontFamily: 'inherit',
       });
     }, []);
-    
+
     // Fetch and render diagram when source changes
     useEffect(() => {
       if (!source) return;
-      
+
       const fetchAndRenderDiagram = async () => {
         setLoading(true);
         try {
           const filename = source.split('/').pop();
           const response = await fetch(`http://localhost:5000/mermaid/${filename}`);
-          
+
           if (!response.ok) {
             throw new Error(`Failed to fetch diagram: ${response.status}`);
           }
-          
+
           const text = await response.text();
           setDiagram(text);
-          
+
           // Wait for next render cycle before rendering mermaid
           setTimeout(() => {
             if (containerRef.current && text) {
               try {
                 // Clear previous content
                 containerRef.current.innerHTML = '';
-                
+
                 // Create a div for mermaid to render into
                 const renderDiv = document.createElement('div');
                 renderDiv.className = 'mermaid';
                 renderDiv.textContent = text;
                 containerRef.current.appendChild(renderDiv);
-                
+
                 // Let mermaid process all diagrams
                 mermaid.init(undefined, '.mermaid');
                 setError(null);
@@ -2040,70 +2225,70 @@ const AnalysisPanel: React.FC<{
           setLoading(false);
         }
       };
-      
+
       fetchAndRenderDiagram();
     }, [source]);
-  
+
     // Re-render mermaid diagram in dialog when it opens
     useEffect(() => {
       if (isDialogOpen && dialogContainerRef.current && diagram) {
         // Clear previous content
         dialogContainerRef.current.innerHTML = '';
-        
+
         // Create a div for mermaid to render into
         const renderDiv = document.createElement('div');
         renderDiv.className = 'mermaid-dialog';
         renderDiv.textContent = diagram;
         dialogContainerRef.current.appendChild(renderDiv);
-        
+
         // Let mermaid process all diagrams
         mermaid.init(undefined, '.mermaid-dialog');
       }
     }, [isDialogOpen, diagram, zoomLevel]);
-  
+
     // Handle zoom in/out
     const handleZoomIn = () => {
       setZoomLevel(prev => Math.min(prev + 0.25, 3));
     };
-  
+
     const handleZoomOut = () => {
       setZoomLevel(prev => Math.max(prev - 0.25, 0.5));
     };
-  
+
     const handleResetZoom = () => {
       setZoomLevel(1);
     };
-  
+
     // Download diagram as SVG
     const handleDownload = () => {
       if (dialogContainerRef.current) {
         // Find the SVG element
         const svgElement = dialogContainerRef.current.querySelector('svg');
-        
+
         if (svgElement) {
           // Create a serialized SVG string
           const svgData = new XMLSerializer().serializeToString(svgElement);
-          
+
           // Create a Blob with the SVG data
           const blob = new Blob([svgData], { type: 'image/svg+xml' });
-          
+
           // Create a download link
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
           link.download = `mermaid-diagram-${Date.now()}.svg`;
-          
+
           // Trigger download
           document.body.appendChild(link);
           link.click();
-          
+
           // Clean up
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
         }
       }
     };
-    
+
     return (
       <div className="border rounded-lg p-4 my-4">
         <div className="flex items-center justify-between mb-2">
@@ -2112,9 +2297,9 @@ const AnalysisPanel: React.FC<{
             <h3 className="font-medium">Analysis Flow Diagram</h3>
           </div>
           {!loading && !error && (
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setIsDialogOpen(true)}
               className="text-xs"
             >
@@ -2123,7 +2308,7 @@ const AnalysisPanel: React.FC<{
             </Button>
           )}
         </div>
-        
+
         {loading ? (
           <div className="flex justify-center p-8 text-muted-foreground">
             <Loader2 className="h-8 w-8 animate-spin" />
@@ -2137,14 +2322,14 @@ const AnalysisPanel: React.FC<{
             </pre>
           </div>
         ) : (
-          <div 
+          <div
             className="overflow-auto bg-white dark:bg-gray-900 p-4 rounded-md cursor-pointer"
             onClick={() => setIsDialogOpen(true)}
           >
             <div ref={containerRef} className="mermaid-container" />
           </div>
         )}
-        
+
         {/* Dialog for expanded view */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-5xl w-full max-h-[90vh]">
@@ -2154,7 +2339,7 @@ const AnalysisPanel: React.FC<{
                 Analysis Flow Diagram
               </DialogTitle>
             </DialogHeader>
-            
+
             {/* Zoom controls */}
             <div className="flex items-center justify-between mb-2">
               <div className="flex space-x-1">
@@ -2173,11 +2358,11 @@ const AnalysisPanel: React.FC<{
                 Download SVG
               </Button>
             </div>
-            
+
             {/* Diagram container with zoom */}
             <div className="relative w-full h-[calc(100vh-200px)] bg-white dark:bg-gray-900 rounded-md overflow-auto">
-              <div 
-                ref={dialogContainerRef} 
+              <div
+                ref={dialogContainerRef}
                 style={{
                   transform: `scale(${zoomLevel})`,
                   transformOrigin: 'top left',
@@ -2192,38 +2377,38 @@ const AnalysisPanel: React.FC<{
     );
   };
 
-// Add Data Cleaning Result Component
-const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedDataFile }) => {
-  return (
-    <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 mt-4">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center text-green-700 dark:text-green-300 text-lg">
-          <CheckCircle2 className="h-5 w-5 mr-2" />
-          Data Cleaning Completed
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="mb-4">
-          Your data has been successfully cleaned and is ready for further analysis or machine learning tasks.
-        </p>
-        <Button 
-          variant="outline" 
-          className="border-green-500 text-green-600 hover:bg-green-50 mt-2"
-          onClick={() => window.open(`http://localhost:5000/cleaned_data.csv`, '_blank')}
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Download Cleaned Data
-        </Button>
-      </CardContent>
-    </Card>
-  );
-};
+  // Add Data Cleaning Result Component
+  const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedDataFile }) => {
+    return (
+      <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 mt-4">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center text-green-700 dark:text-green-300 text-lg">
+            <CheckCircle2 className="h-5 w-5 mr-2" />
+            Data Cleaning Completed
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4">
+            Your data has been successfully cleaned and is ready for further analysis or machine learning tasks.
+          </p>
+          <Button
+            variant="outline"
+            className="border-green-500 text-green-600 hover:bg-green-50 mt-2"
+            onClick={() => window.open(`http://localhost:5000/cleaned_data.csv`, '_blank')}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Download Cleaned Data
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  };
   // Get the Analysis Summary section if available
   const analysisSummary = agentSections.find(section => section.agentName === "Analysis Summary");
-  
+
   // Sort sections by the order property
   const sortedSections = [...agentSections].sort((a, b) => a.order - b.order);
-  
+
   // Handler for deleting a report with confirmation
   const handleConfirmDelete = (reportId: string) => {
     setReportToDelete(reportId);
@@ -2231,10 +2416,10 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
   };
 
   // Check if this is a database file
-  const isDatabaseFile = selectedFile?.fileType === 'db' || 
-                        selectedFile?.fileType === 'sqlite' || 
-                        selectedFile?.fileType === 'sqlite3';
-  
+  const isDatabaseFile = selectedFile?.fileType === 'db' ||
+    selectedFile?.fileType === 'sqlite' ||
+    selectedFile?.fileType === 'sqlite3';
+
   // Prepare suggested questions based on file type
   const suggestedQuestions = isDatabaseFile ? [
     "Tell me about this database",
@@ -2249,15 +2434,22 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
     "Calculate the average values by category",
     "Clean this data and suggest ML models" // Added data cleaning suggestion
   ];
-  
+
+  // Fetch history when the tab changes to 'history'
+  useEffect(() => {
+    if (activeTab === 'history') {
+      fetchUserHistory();
+    }
+  }, [activeTab, fetchUserHistory]);
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle>Ask Questions About Your Data</CardTitle>
           <CardDescription>
-            {config.generateReport 
-              ? "Generate a comprehensive analysis report" 
+            {config.generateReport
+              ? "Generate a comprehensive analysis report"
               : "Ask specific questions about your data"}
           </CardDescription>
         </CardHeader>
@@ -2271,13 +2463,13 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                     id="question"
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
-                    placeholder={isDatabaseFile ? 
-                      "e.g., Show me the top 5 products by price" : 
+                    placeholder={isDatabaseFile ?
+                      "e.g., Show me the top 5 products by price" :
                       "e.g., Clean this data and suggest ML models"}
                     disabled={isProcessing}
                     className="flex-1"
                   />
-                  <Button 
+                  <Button
                     onClick={handleAnalysis}
                     disabled={!question || isProcessing}
                   >
@@ -2289,15 +2481,15 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                   </Button>
                 </div>
               </div>
-              
+
               {/* Suggested questions */}
               <div className="space-y-2">
                 <Label className="text-sm text-muted-foreground">Suggested questions:</Label>
                 <div className="flex flex-wrap gap-2">
                   {suggestedQuestions.map((sq, i) => (
-                    <Badge 
-                      key={i} 
-                      variant="outline" 
+                    <Badge
+                      key={i}
+                      variant="outline"
                       className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
                       onClick={() => setQuestion(sq)}
                     >
@@ -2326,7 +2518,7 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                   </div>
                 )}
               </Button>
-              
+
               <div>
                 <p className="text-sm text-muted-foreground">
                   This will generate a comprehensive report with {config.questionCount} insightful questions and visualizations.
@@ -2336,7 +2528,7 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
           )}
         </CardContent>
       </Card>
-      
+
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -2344,10 +2536,10 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
+
       {/* Tab navigation for Analysis and Reports */}
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'analysis' | 'reports')}>
-        <TabsList className="grid w-full grid-cols-2">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'analysis' | 'reports' | 'history')}>
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="analysis" className="flex items-center space-x-2">
             <Sparkles className="h-4 w-4" />
             <span>Current Analysis</span>
@@ -2356,8 +2548,12 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
             <History className="h-4 w-4" />
             <span>Saved Reports {savedReports.length > 0 && `(${savedReports.length})`}</span>
           </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center space-x-2">
+            <Archive className="h-4 w-4" />
+            <span>Query History</span>
+          </TabsTrigger>
         </TabsList>
-        
+
         {/* Current Analysis Tab Content */}
         <TabsContent value="analysis">
           {isProcessing && (
@@ -2369,15 +2565,15 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
               </div>
             </div>
           )}
-        
-          {result?.cleaned_data_file && 
-          (sortedSections.some(section => 
-            section.agentName === "Data Cleaning Expert" || 
-            section.agentName === "Data Quality Analyzer" ||
-            section.agentName === "Data Cleaning Planner"
-          )) && (
-            <DataCleaningResult cleanedDataFile={result.cleaned_data_file} />
-          )}
+
+          {result?.cleaned_data_file &&
+            (sortedSections.some(section =>
+              section.agentName === "Data Cleaning Expert" ||
+              section.agentName === "Data Quality Analyzer" ||
+              section.agentName === "Data Cleaning Planner"
+            )) && (
+              <DataCleaningResult cleanedDataFile={result.cleaned_data_file} />
+            )}
           {/* Display the ordered agent sections for question responses */}
           {sortedSections.length > 0 && (
             <Card>
@@ -2393,57 +2589,57 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
               <CardContent>
                 <div className="space-y-4">
                   {/* Expert Selector */}
-                  {sortedSections.filter(section => 
-                    section.agentName === "Expert Selector" || 
+                  {sortedSections.filter(section =>
+                    section.agentName === "Expert Selector" ||
                     section.agentName === "Expert Selector Response"
                   ).map((section, index) => (
                     <AgentBox key={`expert-${index}`} section={section} />
                   ))}
-                  
+
                   {/* Analyst Selector */}
-                  {sortedSections.filter(section => 
-                    section.agentName === "Analyst Selector" || 
+                  {sortedSections.filter(section =>
+                    section.agentName === "Analyst Selector" ||
                     section.agentName === "Analyst Selector Response"
                   ).map((section, index) => (
                     <AgentBox key={`analyst-${index}`} section={section} />
                   ))}
-                  
+
                   {/* SQL Generator */}
-                  {sortedSections.filter(section => 
+                  {sortedSections.filter(section =>
                     section.agentName === "SQL Generator"
                   ).map((section, index) => (
                     <AgentBox key={`sql-gen-${index}`} section={section} />
                   ))}
-                  
+
                   {/* Data Quality Analyzer - New for Data Cleaning */}
-                  {sortedSections.filter(section => 
+                  {sortedSections.filter(section =>
                     section.agentName === "Data Quality Analyzer"
                   ).map((section, index) => (
                     <AgentBox key={`quality-${index}`} section={section} />
                   ))}
-                  
+
                   {/* Data Cleaning Planner - New for Data Cleaning */}
-                  {sortedSections.filter(section => 
+                  {sortedSections.filter(section =>
                     section.agentName === "Data Cleaning Planner"
                   ).map((section, index) => (
                     <AgentBox key={`cleaning-plan-${index}`} section={section} />
                   ))}
-                  
+
                   {/* Code Generator */}
-                  {sortedSections.filter(section => 
+                  {sortedSections.filter(section =>
                     section.agentName === "Code Generator" ||
                     section.agentName === "Planner"
                   ).map((section, index) => (
                     <AgentBox key={`code-gen-${index}`} section={section} />
                   ))}
-                  
+
                   {/* ML Model Suggester - New for Data Cleaning */}
-                  {sortedSections.filter(section => 
+                  {sortedSections.filter(section =>
                     section.agentName === "ML Model Suggester"
                   ).map((section, index) => (
                     <AgentBox key={`ml-suggest-${index}`} section={section} />
                   ))}
-                  
+
                   {/* Summary Results + Plot */}
                   {((analysisSummary && !result?.is_report) || (result && mermaidDiagrams.length > 0)) && (
                     <div className="space-y-4">
@@ -2492,10 +2688,10 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                       )}
                     </div>
                   )}
-                  
+
                   {/* Remaining sections (Code Debugger, Generated Code, Execution Summary) */}
-                  {sortedSections.filter(section => 
-                    section.agentName !== "Expert Selector" && 
+                  {sortedSections.filter(section =>
+                    section.agentName !== "Expert Selector" &&
                     section.agentName !== "Expert Selector Response" &&
                     section.agentName !== "Analyst Selector" &&
                     section.agentName !== "Analyst Selector Response" &&
@@ -2513,7 +2709,7 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
               </CardContent>
             </Card>
           )}
-          
+
           {/* Full report section */}
           {reportContent && (
             <Card>
@@ -2528,8 +2724,8 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                   </CardDescription>
                   <div className="flex space-x-2">
                     {/* Save report button */}
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={saveReport}
                       disabled={isSavingReport}
@@ -2541,9 +2737,9 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                       )}
                       Save Report
                     </Button>
-                    
-                    <Button 
-                      variant="outline" 
+
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => setShowFullReport(!showFullReport)}
                     >
@@ -2556,12 +2752,12 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                 <div className={`${!showFullReport ? "max-h-[600px] overflow-y-auto pr-2" : ""}`}>
                   <EnhancedMarkdown content={reportContent} />
                 </div>
-                
+
                 {/* Download options */}
                 {result?.report_file && (
                   <div className="flex justify-end mt-4">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       onClick={() => window.open(`http://localhost:5000/${result.report_file}`, '_blank')}
                       className="flex items-center"
                     >
@@ -2574,7 +2770,7 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
             </Card>
           )}
         </TabsContent>
-        
+
         {/* Reports Tab Content */}
         <TabsContent value="reports">
           <Card>
@@ -2613,7 +2809,7 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                       )}
                     </div>
                   </div>
-                  
+
                   <div className="md:col-span-3">
                     {selectedReportId ? (
                       selectedReportContent ? (
@@ -2623,8 +2819,8 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                               {savedReports.find(r => r.id === selectedReportId)?.file_name || 'Report'}
                             </h3>
                             {selectedReportId && (
-                              <Button 
-                                variant="outline" 
+                              <Button
+                                variant="outline"
                                 size="sm"
                                 onClick={() => {
                                   const report = savedReports.find(r => r.id === selectedReportId);
@@ -2639,11 +2835,11 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                               </Button>
                             )}
                           </div>
-                          
+
                           <div className="max-h-[700px] overflow-y-auto px-2">
                             <EnhancedMarkdown content={selectedReportContent} />
                           </div>
-                          
+
                           {/* Visualizations section */}
                           {selectedReportId && savedReports.find(r => r.id === selectedReportId)?.visualizations && savedReports.find(r => r.id === selectedReportId)!.visualizations.length > 0 && (
                             <div className="space-y-2 border-t pt-4 mt-4">
@@ -2651,8 +2847,8 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
                                 <ImageIcon className="h-4 w-4 mr-2 text-blue-500" />
                                 Visualizations
                               </h4>
-                              <VisualizationGallery 
-                                visualizations={savedReports.find(r => r.id === selectedReportId)?.visualizations || []} 
+                              <VisualizationGallery
+                                visualizations={savedReports.find(r => r.id === selectedReportId)?.visualizations || []}
                               />
                             </div>
                           )}
@@ -2683,8 +2879,110 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
             </CardContent>
           </Card>
         </TabsContent>
+        {/* History Tab Content */}
+        <TabsContent value="history">
+          <Card>
+            <CardHeader>
+              <CardTitle>Query History</CardTitle>
+              <CardDescription>
+                View your previous data analysis queries
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingHistory ? (
+                <div className="flex justify-center items-center p-10">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="md:col-span-1 space-y-4">
+                    <h3 className="font-medium">Recent Queries</h3>
+                    <div className="max-h-[500px] overflow-y-auto pr-2">
+                      {queryHistory.length > 0 ? (
+                        queryHistory.map((item) => (
+                          <div
+                            key={item.id}
+                            className={`p-4 border rounded-lg mb-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${selectedHistoryItem === item.chain_id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/10' : ''
+                              }`}
+                            onClick={() => fetchHistoryItem(item.chain_id)}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <Search className="h-4 w-4 text-blue-500" />
+                              <div className="truncate font-medium">{item.query}</div>
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-1">
+                              {new Date(item.timestamp).toLocaleString()}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {item.filename}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center p-4 border rounded-lg">
+                          <p className="text-muted-foreground">
+                            No query history yet. Ask questions to build your history.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-3">
+                    {selectedHistoryItem ? (
+                      isLoadingHistoryItem ? (
+                        <div className="flex items-center justify-center h-[300px]">
+                          <div className="text-center">
+                            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                            <p className="text-muted-foreground">
+                              Loading query results...
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <h3 className="font-medium text-lg">
+                            Query Results
+                          </h3>
+
+                          {/* Agent Sections */}
+                          <div className="space-y-4">
+                            {historyResult.sections.map((section, index) => (
+                              <AgentBox key={`history-section-${index}`} section={section} />
+                            ))}
+                          </div>
+
+                          {/* Visualizations */}
+                          {historyResult.visualizations.length > 0 && (
+                            <div className="space-y-2 border-t pt-4 mt-4">
+                              <h4 className="font-medium flex items-center">
+                                <ImageIcon className="h-4 w-4 mr-2 text-blue-500" />
+                                Visualizations
+                              </h4>
+                              <VisualizationGallery
+                                visualizations={historyResult.visualizations}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )
+                    ) : (
+                      <div className="flex items-center justify-center h-[300px]">
+                        <div className="text-center">
+                          <History className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                          <p className="text-muted-foreground">
+                            Select a query from history to view its results
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
-      
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <DialogContent>
@@ -2695,13 +2993,13 @@ const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedData
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setShowDeleteConfirm(false)}
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               variant="destructive"
               onClick={() => reportToDelete && deleteReport(reportToDelete)}
             >
@@ -2721,12 +3019,12 @@ export default function InsightAIPage() {
     questionCount: 3,
     diagram_enabled: false
   });
-  
+
   // Determine if the selected file is a document (PDF, DOCX, etc.)
-  const isDocumentFile = selectedFile?.fileType === 'pdf' || 
-                         selectedFile?.fileType === 'docx' || 
-                         selectedFile?.fileType === 'doc' || 
-                         selectedFile?.fileType === 'txt';
+  const isDocumentFile = selectedFile?.fileType === 'pdf' ||
+    selectedFile?.fileType === 'docx' ||
+    selectedFile?.fileType === 'doc' ||
+    selectedFile?.fileType === 'txt';
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -2734,13 +3032,13 @@ export default function InsightAIPage() {
         <Database className="h-8 w-8 mr-3 text-blue-500" />
         InsightAI Data Analysis
       </h1>
-      
+
       <div className="max-w-4xl mx-auto space-y-6">
-        <FileSelector 
-          userId={user?.id} 
+        <FileSelector
+          userId={user?.id}
           onFileSelect={setSelectedFile}
         />
-        
+
         {selectedFile && (
           <>
             <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-lg flex items-center">
@@ -2751,7 +3049,7 @@ export default function InsightAIPage() {
                   <FileJson className="h-5 w-5 text-blue-500" />
                 ) : selectedFile.fileType === 'xml' ? (
                   <FileCode className="h-5 w-5 text-blue-500" />
-                ) :  selectedFile.fileType === 'pdf' ? (
+                ) : selectedFile.fileType === 'pdf' ? (
                   <FileText className="h-5 w-5 text-red-500" />
                 ) : selectedFile.fileType === 'docx' || selectedFile.fileType === 'doc' ? (
                   <FileText className="h-5 w-5 text-blue-500" />
@@ -2762,15 +3060,15 @@ export default function InsightAIPage() {
               <div>
                 <p className="font-medium">{selectedFile.fileName || 'Unknown file'}</p>
                 <p className="text-sm text-muted-foreground">
-                  Type: {selectedFile.fileType?.toUpperCase() || 'Unknown'} • 
+                  Type: {selectedFile.fileType?.toUpperCase() || 'Unknown'} •
                   ID: {selectedFile.fileId || 'New file'}
                 </p>
               </div>
             </div>
-            
+
             {isDocumentFile ? (
               // Document Analysis Panel for document files (PDF, DOCX, etc.)
-              <DocumentAnalysisPanel 
+              <DocumentAnalysisPanel
                 userId={user?.id}
                 selectedFile={selectedFile}
               />
@@ -2778,7 +3076,7 @@ export default function InsightAIPage() {
               // Standard data analysis for structured data files
               <>
                 <AnalysisConfig onConfigChange={setConfig} />
-                <AnalysisPanel 
+                <AnalysisPanel
                   userId={user?.id}
                   selectedFile={selectedFile}
                   config={config}
@@ -2787,7 +3085,7 @@ export default function InsightAIPage() {
             )}
 
             {/* <AnalysisConfig onConfigChange={setConfig} /> */}
-            
+
             {/* <AnalysisPanel 
               userId={user?.id}
               selectedFile={selectedFile}
@@ -2836,28 +3134,28 @@ const DocumentAnalysisPanel: React.FC<{
     imageSummaries: []
   });
 
-  
+
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
-    
+
     if (polling && processId) {
       intervalId = setInterval(async () => {
         try {
           const response = await axios.get(
             `http://localhost:5000/check-document-processing/${processId}`
           );
-          
+
           setProcessingStatus({
             status: response.data.status,
             progress: response.data.progress * 100,
             message: response.data.message
           });
-          
+
           // Parse verbose output if available
           if (verboseMode && response.data.verbose_output) {
             parseVerboseOutput(response.data.verbose_output);
           }
-          
+
           if (response.data.status === 'completed') {
             setPolling(false);
             setIsProcessing(false);
@@ -2873,7 +3171,7 @@ const DocumentAnalysisPanel: React.FC<{
         }
       }, 2000);
     }
-    
+
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
@@ -2883,22 +3181,22 @@ const DocumentAnalysisPanel: React.FC<{
     // Parse INFO messages
     const infoRegex = /\[INFO\](.*?)(?=\[INFO\]|\[TEXT SUMMARIES\]|\[TABLE SUMMARIES\]|\[IMAGE SUMMARIES\]|$)/gs;
     const infoMatches = [...output.matchAll(infoRegex)].map(match => match[1].trim());
-    
+
     // Parse TEXT SUMMARIES
     const textSummariesMatch = output.match(/\[TEXT SUMMARIES\]\s*\n\s*(.*?)(?=\[TABLE SUMMARIES\]|$)/s);
-    const textSummaries = textSummariesMatch ? 
+    const textSummaries = textSummariesMatch ?
       JSON.parse(textSummariesMatch[1].trim().replace(/^\'|\'$/g, '"').replace(/\'/g, '"')) : [];
-    
+
     // Parse TABLE SUMMARIES
     const tableSummariesMatch = output.match(/\[TABLE SUMMARIES\]\s*\n\s*(.*?)(?=\[IMAGE SUMMARIES\]|$)/s);
-    const tableSummaries = tableSummariesMatch ? 
+    const tableSummaries = tableSummariesMatch ?
       JSON.parse(tableSummariesMatch[1].trim().replace(/^\'|\'$/g, '"').replace(/\'/g, '"')) : [];
-    
+
     // Parse IMAGE SUMMARIES
     const imageSummariesMatch = output.match(/\[IMAGE SUMMARIES\]\s*\n\s*(.*?)(?=\[WARNING\]|$)/s);
-    const imageSummaries = imageSummariesMatch ? 
+    const imageSummaries = imageSummariesMatch ?
       JSON.parse(imageSummariesMatch[1].trim().replace(/^\'|\'$/g, '"').replace(/\'/g, '"')) : [];
-    
+
     setVerboseOutput({
       infoMessages: infoMatches,
       textSummaries: textSummaries,
@@ -2906,23 +3204,23 @@ const DocumentAnalysisPanel: React.FC<{
       imageSummaries: imageSummaries
     });
   };
-  
+
 
   const startProcessing = async () => {
     if (!userId || !selectedFile?.fileId) return;
-    
+
     setIsProcessing(true);
     setError(null);
-    
+
     try {
       const response = await axios.post(
         `http://localhost:5000/process-document/${userId}/${selectedFile.fileId}`,
-        { 
+        {
           model_name: modelName,
           verbose: verboseMode
         }
       );
-      
+
       if (response.data.process_id) {
         setProcessId(response.data.process_id);
         setPolling(true);
@@ -2940,20 +3238,20 @@ const DocumentAnalysisPanel: React.FC<{
   // Check processing status
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
-    
+
     if (polling && processId) {
       intervalId = setInterval(async () => {
         try {
           const response = await axios.get(
             `http://localhost:5000/check-document-processing/${processId}`
           );
-          
+
           setProcessingStatus({
             status: response.data.status,
             progress: response.data.progress * 100,
             message: response.data.message
           });
-          
+
           if (response.data.status === 'completed') {
             setPolling(false);
             setIsProcessing(false);
@@ -2969,7 +3267,7 @@ const DocumentAnalysisPanel: React.FC<{
         }
       }, 2000);
     }
-    
+
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
@@ -2978,15 +3276,15 @@ const DocumentAnalysisPanel: React.FC<{
   // Query the processed document
   const handleQuery = async () => {
     if (!userId || !selectedFile?.fileId || !query) return;
-    
+
     setError(null);
-    
+
     try {
       const response = await axios.post(
         `http://localhost:5000/query-document/${userId}/${selectedFile.fileId}`,
         { query }
       );
-      
+
       if (response.data.success) {
         setQueryResult(response.data);
       } else {
@@ -3015,8 +3313,8 @@ const DocumentAnalysisPanel: React.FC<{
               {/* Model Selection */}
               <div className="space-y-2">
                 <Label htmlFor="model-select">AI Model</Label>
-                <Select 
-                  value={modelName} 
+                <Select
+                  value={modelName}
                   onValueChange={setModelName}
                 >
                   <SelectTrigger id="model-select">
@@ -3032,23 +3330,23 @@ const DocumentAnalysisPanel: React.FC<{
                   </SelectContent>
                 </Select>
               </div>
-              
+
               {/* Verbose Mode Toggle */}
               <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="verbose-mode" 
+                <Checkbox
+                  id="verbose-mode"
                   checked={verboseMode}
                   onCheckedChange={(checked) => setVerboseMode(checked === true)}
                 />
-                <label 
-                  htmlFor="verbose-mode" 
+                <label
+                  htmlFor="verbose-mode"
                   className="text-sm font-medium leading-none cursor-pointer"
                 >
                   Verbose Mode (Detailed Processing Information)
                 </label>
               </div>
-              
-              <Button 
+
+              <Button
                 className="w-full"
                 onClick={startProcessing}
               >
@@ -3079,7 +3377,7 @@ const DocumentAnalysisPanel: React.FC<{
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
-              
+
               {queryResult && (
                 <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700">
                   <CardHeader className="pb-2">
@@ -3093,14 +3391,14 @@ const DocumentAnalysisPanel: React.FC<{
                     <div className="prose prose-sm dark:prose-invert">
                       {queryResult.final_answer.includes("[FINAL ANSWER]") ? (
                         // Parse out the final answer part
-                        <EnhancedMarkdown 
-                          content={queryResult.final_answer.split("[FINAL ANSWER]")[1].trim()} 
+                        <EnhancedMarkdown
+                          content={queryResult.final_answer.split("[FINAL ANSWER]")[1].trim()}
                         />
                       ) : (
                         <EnhancedMarkdown content={queryResult.final_answer} />
                       )}
                     </div>
-                    
+
                     {/* Images Section - Display with better formatting */}
                     {queryResult.images && queryResult.images.length > 0 && (
                       <div className="mt-6 space-y-4 border-t pt-4">
@@ -3112,10 +3410,13 @@ const DocumentAnalysisPanel: React.FC<{
                           {queryResult.images.map((img, idx) => (
                             <div key={idx} className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
                               <div className="relative w-full h-64">
-                                <img 
-                                  src={`data:image/jpeg;base64,${img.data}`} 
-                                  alt={img.summary || `Document image ${idx+1}`}
-                                  className="object-contain w-full h-full"
+                                <Image
+                                  src={`data:image/jpeg;base64,${img.data}`}
+                                  alt={img.summary || `Document image ${idx + 1}`}
+                                  fill
+                                  className="object-contain"
+                                  sizes="(max-width: 768px) 100vw, 50vw"
+                                  priority={idx === 0}
                                 />
                               </div>
                               {img.summary && (
@@ -3135,7 +3436,7 @@ const DocumentAnalysisPanel: React.FC<{
           )}
         </CardContent>
       </Card>
-      
+
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -3145,98 +3446,98 @@ const DocumentAnalysisPanel: React.FC<{
       )}
 
       {/* Add this to the DocumentAnalysisPanel's return statement after the error Alert */}
-{verboseMode && isProcessing && verboseOutput && (
-  <div className="space-y-4 mt-8">
-    <h3 className="text-xl font-semibold flex items-center">
-      <Terminal className="h-5 w-5 mr-2 text-blue-500" />
-      Verbose Processing Output
-    </h3>
-    
-    {/* INFO Messages */}
-    {verboseOutput.infoMessages.length > 0 && (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-md flex items-center">
-            <Info className="h-5 w-5 mr-2 text-blue-500" />
-            Document Info
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {verboseOutput.infoMessages.map((info, index) => (
-              <div key={index} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md">
-                <pre className="whitespace-pre-wrap text-sm font-mono">{info}</pre>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    )}
-    
-    {/* Text Summaries */}
-    {verboseOutput.textSummaries.length > 0 && (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-md flex items-center">
-            <AlignLeft className="h-5 w-5 mr-2 text-green-500" />
-            Text Summaries
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {verboseOutput.textSummaries.map((summary, index) => (
-              <div key={index} className="bg-green-50 dark:bg-green-900/10 p-4 rounded-md">
-                <p className="whitespace-pre-wrap text-sm">{summary}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    )}
-    
-    {/* Table Summaries */}
-    {verboseOutput.tableSummaries.length > 0 && (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-md flex items-center">
-            <Table className="h-5 w-5 mr-2 text-amber-500" />
-            Table Summaries
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {verboseOutput.tableSummaries.map((summary, index) => (
-              <div key={index} className="bg-amber-50 dark:bg-amber-900/10 p-4 rounded-md">
-                <p className="whitespace-pre-wrap text-sm">{summary}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    )}
-    
-    {/* Image Summaries */}
-    {verboseOutput.imageSummaries.length > 0 && (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-md flex items-center">
-            <ImageIcon className="h-5 w-5 mr-2 text-purple-500" />
-            Image Summaries
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {verboseOutput.imageSummaries.map((summary, index) => (
-              <div key={index} className="bg-purple-50 dark:bg-purple-900/10 p-4 rounded-md border border-purple-100 dark:border-purple-800">
-                <p className="whitespace-pre-wrap text-sm">{summary}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    )}
-  </div>
-)}
+      {verboseMode && isProcessing && verboseOutput && (
+        <div className="space-y-4 mt-8">
+          <h3 className="text-xl font-semibold flex items-center">
+            <Terminal className="h-5 w-5 mr-2 text-blue-500" />
+            Verbose Processing Output
+          </h3>
+
+          {/* INFO Messages */}
+          {verboseOutput.infoMessages.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-md flex items-center">
+                  <Info className="h-5 w-5 mr-2 text-blue-500" />
+                  Document Info
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {verboseOutput.infoMessages.map((info, index) => (
+                    <div key={index} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md">
+                      <pre className="whitespace-pre-wrap text-sm font-mono">{info}</pre>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Text Summaries */}
+          {verboseOutput.textSummaries.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-md flex items-center">
+                  <AlignLeft className="h-5 w-5 mr-2 text-green-500" />
+                  Text Summaries
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {verboseOutput.textSummaries.map((summary, index) => (
+                    <div key={index} className="bg-green-50 dark:bg-green-900/10 p-4 rounded-md">
+                      <p className="whitespace-pre-wrap text-sm">{summary}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Table Summaries */}
+          {verboseOutput.tableSummaries.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-md flex items-center">
+                  <Table className="h-5 w-5 mr-2 text-amber-500" />
+                  Table Summaries
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {verboseOutput.tableSummaries.map((summary, index) => (
+                    <div key={index} className="bg-amber-50 dark:bg-amber-900/10 p-4 rounded-md">
+                      <p className="whitespace-pre-wrap text-sm">{summary}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Image Summaries */}
+          {verboseOutput.imageSummaries.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-md flex items-center">
+                  <ImageIcon className="h-5 w-5 mr-2 text-purple-500" />
+                  Image Summaries
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {verboseOutput.imageSummaries.map((summary, index) => (
+                    <div key={index} className="bg-purple-50 dark:bg-purple-900/10 p-4 rounded-md border border-purple-100 dark:border-purple-800">
+                      <p className="whitespace-pre-wrap text-sm">{summary}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   );
 };

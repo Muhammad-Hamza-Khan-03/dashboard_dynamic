@@ -95,7 +95,7 @@ def init_db():
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
               );
               ''')
-    
+
     c.execute('''CREATE TABLE IF NOT EXISTS  user_files 
               (file_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT REFERENCES users(user_id),
@@ -109,19 +109,20 @@ def init_db():
     FOREIGN KEY (user_id) REFERENCES users(user_id)
     );
               ''')
+
     conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
-    
+
     # Check if parent_file_id column exists
     c.execute("PRAGMA table_info(user_files)")
     columns = [row[1] for row in c.fetchall()]
-    
+
     if 'parent_file_id' not in columns:
         # Add parent_file_id column
         c.execute('''ALTER TABLE user_files 
                     ADD COLUMN parent_file_id INTEGER 
                     REFERENCES user_files(file_id)''')
-    
+
     c.execute('''
     CREATE TABLE IF NOT EXISTS  structured_file_storage (
     unique_key TEXT PRIMARY KEY,
@@ -131,7 +132,7 @@ def init_db():
     FOREIGN KEY (file_id) REFERENCES user_files(file_id)
     );
               ''')
-    
+
     c.execute('''CREATE TABLE IF NOT EXISTS  unstructured_file_storage (
     file_id INTEGER REFERENCES user_files(file_id),
     file_path TEXT,
@@ -142,7 +143,7 @@ def init_db():
     FOREIGN KEY (file_id) REFERENCES user_files(file_id)
     );
     ''')
-    
+
     c.execute('''CREATE TABLE IF NOT EXISTS  dashboard_store (
         dashboard_id INTEGER PRIMARY KEY AUTOINCREMENT,
         file_id INTEGER REFERENCES user_files(file_id),
@@ -157,24 +158,24 @@ def init_db():
         html_content TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
-    
+
     # Check if the column 'dashboard_name' exists before adding it
     c.execute("PRAGMA table_info(graph_cache)")
     columns = [row[1] for row in c.fetchall()]
-    
+
     if 'dashboard_name' not in columns:
         c.execute('''ALTER TABLE graph_cache ADD COLUMN dashboard_name TEXT''')
-    
+
     if 'image_blob' not in columns:
         c.execute('''ALTER TABLE graph_cache ADD COLUMN image_blob BLOB''')
-    
+
     if 'isImageSuccess' not in columns:
         c.execute('''ALTER TABLE graph_cache ADD COLUMN isImageSuccess INTEGER DEFAULT 0''')
-    
+
     c.execute('''CREATE INDEX IF NOT EXISTS idx_graph_cache_dashboard 
         ON graph_cache(dashboard_name, isImageSuccess);
      ''')
-    c.execute("""
+    c.execute(""" 
             CREATE TABLE IF NOT EXISTS dashboard_exports (
                 export_id TEXT PRIMARY KEY,
                 user_id TEXT,
@@ -185,7 +186,7 @@ def init_db():
             )
         """)
 
-    c.execute("""
+    c.execute(""" 
             CREATE TABLE IF NOT EXISTS dashboards (
                 id TEXT PRIMARY KEY,
                 user_id TEXT,
@@ -198,11 +199,11 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
         """)
-    
+
     # Add document processing tables
     with connection_pool.get_connection() as conn:
         c = conn.cursor()
-        
+
         # Table for document chunks and embeddings
         c.execute('''
             CREATE TABLE IF NOT EXISTS document_chunks (
@@ -218,7 +219,7 @@ def init_db():
                 FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
             )
         ''')
-        
+
         # Table for document images
         c.execute('''
             CREATE TABLE IF NOT EXISTS document_images (
@@ -231,7 +232,7 @@ def init_db():
                 FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
             )
         ''')
-        
+
         c.execute('''
     CREATE TABLE IF NOT EXISTS document_processing (
         process_id TEXT PRIMARY KEY,
@@ -244,8 +245,21 @@ def init_db():
         completed_at TIMESTAMP,
         FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
     )
+    ''')
+        c.execute('''
+    CREATE TABLE IF NOT EXISTS user_query_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        chain_id INTEGER NOT NULL,
+        query_text TEXT NOT NULL,
+        filename TEXT,
+        file_id INTEGER,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+    )
 ''')
-        
+        c.execute('CREATE INDEX IF NOT EXISTS idx_query_history_user ON user_query_history(user_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_query_history_chain ON user_query_history(chain_id)')
         # Create indexes for efficient querying
         c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_file_id ON document_chunks(file_id)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc_id ON document_chunks(doc_id)')
@@ -484,86 +498,98 @@ def process_question(user_id, file_id):
         generate_report = data.get('generate_report', False)
         report_questions = data.get('report_questions', 3)
         diagram_enabled = data.get('diagram_enabled', False)  # Get diagram parameter
-        
+
         if not question and not generate_report:
             return jsonify({'error': 'Question or report generation required'}), 400
-            
+
         # Set matplotlib backend explicitly
         import matplotlib
         matplotlib.use('Agg')
-        
+
         # Create visualization directory
         viz_dir = os.path.join('visualization')
         os.makedirs(viz_dir, exist_ok=True)
-        
+
         # Set environment variable so InsightAI knows where to save visualizations
         os.environ['VISUALIZATION_DIR'] = viz_dir
-            
+
         # Create InsightAI instance with diagram_enabled parameter
         insight, error = create_insight_instance(
-            file_id, 
-            user_id, 
+            file_id,
+            user_id,
             report_enabled=generate_report,
             report_questions=report_questions,
             diagram_enabled=diagram_enabled
         )
-        
+
         if error:
             return jsonify({'error': error}), 500
-            
+
         if not insight:
             return jsonify({'error': 'Failed to create analysis instance'}), 500
-        
+
         # Handle report generation and question answering separately
         if generate_report:
             # Generate a report - use a separate output buffer
             report_buffer = io.StringIO()
             with redirect_stdout(report_buffer):
                 insight.pd_agent_converse()
-            
+
             # Find all generated visualizations
             viz_files = []
             mermaid_files = []  # New array for Mermaid diagrams
-            
+
             if os.path.exists(viz_dir):
                 # Get only the most recent .png files based on modification time
-                all_files = [(f, os.path.getmtime(os.path.join(viz_dir, f))) 
-                            for f in os.listdir(viz_dir) if f.endswith(('.png', '.mmd'))]  # Include .mmd files
-                
+                all_files = [
+                    (f, os.path.getmtime(os.path.join(viz_dir, f)))
+                    for f in os.listdir(viz_dir) if f.endswith(('.png', '.mmd'))
+                ]  # Include .mmd files
+
                 # Sort by modification time, newest first
                 all_files.sort(key=lambda x: x[1], reverse=True)
-                
+
                 # Separate PNG and MMD files
                 for f, _ in all_files[:20]:  # Increase limit to capture more files
                     if f.endswith('.png'):
                         viz_files.append(f)
                     elif f.endswith('.mmd'):
                         mermaid_files.append(f)
-            
+
             # Check for report file
             report_file = None
-            report_files = [f for f in os.listdir() if f.startswith('data_analysis_report_') and f.endswith('.md')]
-            
+            report_files = [
+                f for f in os.listdir()
+                if f.startswith('data_analysis_report_') and f.endswith('.md')
+            ]
+
             # Check for cleaned data file (for Data Cleaning agent)
             cleaned_data_file = None
             if os.path.exists('cleaned_data.csv'):
                 cleaned_data_file = 'cleaned_data.csv'
-            
+
             if report_files:
                 # Sort by modification time to get the most recent
-                report_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+                report_files.sort(
+                    key=lambda f: os.path.getmtime(f),
+                    reverse=True
+                )
                 report_file = report_files[0]
-                
+
                 # Copy report to visualization directory for easier access
                 source_path = report_file
                 dest_path = os.path.join(viz_dir, report_file)
                 import shutil
                 shutil.copy2(source_path, dest_path)
-            
+
             # Create visualization paths with proper format for frontend
-            visualization_paths = [os.path.join('visualization', f) for f in viz_files]
-            mermaid_paths = [os.path.join('visualization', f) for f in mermaid_files]
-            
+            visualization_paths = [
+                os.path.join('visualization', f) for f in viz_files
+            ]
+            mermaid_paths = [
+                os.path.join('visualization', f) for f in mermaid_files
+            ]
+
             return jsonify({
                 'success': True,
                 'output': "Report generated successfully",
@@ -578,12 +604,9 @@ def process_question(user_id, file_id):
             question_buffer = io.StringIO()
             with redirect_stdout(question_buffer):
                 insight.pd_agent_converse(question)
-            
+
             result = question_buffer.getvalue()
-            
-            # Find visualizations created by this specific question
-            # Modify around line 680 in backend.py (in the process_question function)
-            # Find visualizations created by this specific question
+
             viz_files = []
             mermaid_files = []  # Array for Mermaid diagrams
 
@@ -591,16 +614,20 @@ def process_question(user_id, file_id):
             if os.path.exists(viz_dir):
                 # Get files with .png and .mmd extensions
                 current_time = time.time()
-                recent_files = [(f, os.path.getmtime(os.path.join(viz_dir, f))) 
-                                for f in os.listdir(viz_dir) if f.endswith(('.png', '.mmd'))]
-                
+                recent_files = [
+                    (f, os.path.getmtime(os.path.join(viz_dir, f)))
+                    for f in os.listdir(viz_dir) if f.endswith(('.png', '.mmd'))
+                ]
+
                 # Filter for recent files
                 one_minute_ago = current_time - 60
-                recent_files = [(f, t) for f, t in recent_files if t > one_minute_ago]
-                
+                recent_files = [
+                    (f, t) for f, t in recent_files if t > one_minute_ago
+                ]
+
                 # Sort by modification time, newest first
                 recent_files.sort(key=lambda x: x[1], reverse=True)
-                
+
                 # Separate PNG and MMD files
                 for f, _ in recent_files[:20]:
                     if f.endswith('.png'):
@@ -613,16 +640,20 @@ def process_question(user_id, file_id):
             if os.path.exists(static_viz_dir):
                 # Get only .mmd files from this directory
                 current_time = time.time()
-                static_recent_files = [(f, os.path.getmtime(os.path.join(static_viz_dir, f))) 
-                                    for f in os.listdir(static_viz_dir) if f.endswith('.mmd')]
-                
+                static_recent_files = [
+                    (f, os.path.getmtime(os.path.join(static_viz_dir, f)))
+                    for f in os.listdir(static_viz_dir) if f.endswith('.mmd')
+                ]
+
                 # Filter for recent files
                 one_minute_ago = current_time - 60
-                static_recent_files = [(f, t) for f, t in static_recent_files if t > one_minute_ago]
-                
+                static_recent_files = [
+                    (f, t) for f, t in static_recent_files if t > one_minute_ago
+                ]
+
                 # Sort by modification time, newest first
                 static_recent_files.sort(key=lambda x: x[1], reverse=True)
-                
+
                 # Add .mmd files to mermaid_files list with adjusted paths
                 for f, _ in static_recent_files[:10]:
                     # Check if we already found this file in the other directory
@@ -633,41 +664,167 @@ def process_question(user_id, file_id):
             print("Found mermaid files:", mermaid_files)
 
             # Create visualization paths with proper format for frontend
-            visualization_paths = [os.path.join('visualization', f) for f in viz_files]
-            mermaid_paths = [os.path.join('visualization', f) for f in mermaid_files]  # Keep the same path structure
+            visualization_paths = [
+                os.path.join('visualization', f) for f in viz_files
+            ]
+            mermaid_paths = [
+                os.path.join('visualization', f) for f in mermaid_files
+            ]
             # Check for cleaned data file (for Data Cleaning agent)
             cleaned_data_file = None
             if os.path.exists('cleaned_data.csv'):
                 cleaned_data_file = 'cleaned_data.csv'
-            
+
             # Create visualization paths
-            visualization_paths = [os.path.join('visualization', f) for f in viz_files]
+            visualization_paths = [
+                os.path.join('visualization', f) for f in viz_files
+            ]
             mermaid_paths = [f for f in mermaid_files]
-            
+
+            try:
+                # determine chain_id
+                chain_id = None
+                if hasattr(insight, 'chain_id'):
+                    chain_id = insight.chain_id
+                else:
+                    match = re.search(r'chain_id:\s*(\d+)', result)
+                    if match:
+                        chain_id = int(match.group(1))
+                if chain_id:
+                    conn_hist = sqlite3.connect('user_files.db')
+                    c_hist = conn_hist.cursor()
+                    # fetch filename
+                    c_hist.execute(
+                        "SELECT filename FROM user_files WHERE file_id = ? AND user_id = ?",
+                        (file_id, user_id)
+                    )
+                    row = c_hist.fetchone()
+                    filename = row[0] if row else None
+                    c_hist.execute("""
+                        INSERT INTO user_query_history
+                        (user_id, chain_id, query_text, filename, file_id)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (
+                        user_id,
+                        chain_id,
+                        question,
+                        filename,
+                        file_id
+                    ))
+                    conn_hist.commit()
+                    conn_hist.close()
+            except Exception as history_err:
+                app.logger.error(f"Error saving query to history: {history_err}")
+
             # Important: Close any open matplotlib figures to prevent leaks
             import matplotlib.pyplot as plt
             plt.close('all')
-            
+
             return jsonify({
                 'success': True,
                 'output': result,
                 'visualizations': visualization_paths,
-                'mermaid_diagrams': mermaid_paths, 
-                'cleaned_data_file': cleaned_data_file, 
-                'is_report': False 
+                'mermaid_diagrams': mermaid_paths,
+                'cleaned_data_file': cleaned_data_file,
+                'is_report': False
             })
-            
     except Exception as e:
         app.logger.error(f"Error processing question: {str(e)}")
         app.logger.error(traceback.format_exc())
-        
+
         # Close any open matplotlib figures even on error
         try:
             import matplotlib.pyplot as plt
             plt.close('all')
         except:
             pass
+
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/get_user_history/<user_id>', methods=['GET'])
+def get_user_history(user_id):
+    """Get the query history for a user"""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+
+        # Get the most recent queries for this user
+        c.execute("""
+            SELECT id, chain_id, query_text, filename, file_id, timestamp
+            FROM user_query_history
+            WHERE user_id = ?
+            ORDER BY timestamp DESC
+            LIMIT 20
+        """, (user_id,))
+        
+        history = []
+        for row in c.fetchall():
+            id, chain_id, query_text, filename, file_id, timestamp = row
+            history.append({
+                'id': id,
+                'chain_id': chain_id,
+                'query': query_text,
+                'filename': filename,
+                'file_id': file_id,
+                'timestamp': timestamp
+            })
+        
+        # Return success even if history is empty
+        return jsonify({'success': True, 'history': history})
+    except Exception as e:
+        app.logger.error(f"Error retrieving user history: {str(e)}")
+        return jsonify({'error': str(e), 'success': False}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+@app.route('/get_history_result/<chain_id>', methods=['GET'])
+def get_history_result(chain_id):
+    """Get the detailed results for a specific chain_id"""
+    try:
+        # Read the consolidated log file
+        with open('insightai_consolidated_log.json', 'r') as f:
+            log_data = json.load(f)
+        
+        # Look for the chain_id in the log
+        if str(chain_id) in log_data:
+            chain_data = log_data[str(chain_id)]
+            chain_details = chain_data.get('chain_details', [])
             
+            # Process the chain details
+            sections = []
+            visualizations = []
+            
+            for agent_data in chain_details:
+                agent_name = agent_data.get('agent', 'Unknown')
+                model_name = agent_data.get('model', 'Unknown')
+                content = agent_data.get('content', '')
+                
+                sections.append({
+                    'agent': agent_name,
+                    'model': model_name,
+                    'content': content,
+                    'timestamp': agent_data.get('timestamp', '')
+                })
+                
+                # Look for visualizations in the content
+                viz_match = re.findall(r'Visualization saved as \'([^\']+)\'', content)
+                visualizations.extend(viz_match)
+            
+            return jsonify({
+                'success': True,
+                'chain_id': chain_id,
+                'sections': sections,
+                'visualizations': visualizations,
+                'chain_summary': chain_data.get('chain_summary', {})
+            })
+        else:
+            return jsonify({
+                'error': f'Chain ID {chain_id} not found in logs',
+                'available_chains': list(log_data.keys())
+            }), 404
+            
+    except Exception as e:
+        app.logger.error(f"Error retrieving history result: {str(e)}")
         return jsonify({'error': str(e)}), 500
 @app.route('/cleaned_data.csv')
 def serve_cleaned_data():
