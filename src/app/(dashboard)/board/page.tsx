@@ -22,7 +22,8 @@ import SaveDashboardButton from './save-dashboard-button';
 import { BrainCircuit } from 'lucide-react';
 import AiDashboardModal, { AiDashboardConfig } from './ai-dashboard/aiDashboardModal'
 import { toast } from '@/components/ui/use-toast';
-
+import EnhancedExportModal from './EnhancedExportModal';
+import EnhancedExportButton from './EnhancedExportButton';
 // Interfaces
 interface Position {
   x: number;
@@ -715,7 +716,7 @@ const BoardMain: React.FC = () => {
     disabled={!selectedDashboard}
   />
 
-{/* <EnhancedExportButton
+<EnhancedExportButton
     userId={userId}
     currentDashboardId={selectedDashboard}
     currentDashboardName={dashboards.find(d => d.id === selectedDashboard)?.name || 'Dashboard'}
@@ -725,7 +726,7 @@ const BoardMain: React.FC = () => {
     statCards={statCards}
     disabled={!selectedDashboard}
     usePreRendered={true} // Enable pre-rendered export by default
-  />*/}
+  />
             </div> 
           </div>
         </div>

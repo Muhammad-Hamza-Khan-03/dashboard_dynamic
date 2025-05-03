@@ -1236,7 +1236,7 @@ const handleColumnChange = useCallback((
                     onClick={() => setSelectedFile(null)}
                     className="text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                   >
-                    Clear selection
+                    Refresh Dataset
                   </Button>
                 </div>
               )}
