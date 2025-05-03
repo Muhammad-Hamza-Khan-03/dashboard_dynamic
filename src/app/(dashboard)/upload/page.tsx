@@ -1,5 +1,3 @@
-//page.tsx
-
 "use client"
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from 'next/dynamic';
@@ -38,6 +36,8 @@ import RenameFileDialog from "./renameFileDialog";
 import { FileEdit } from "lucide-react";
 import StatisticsCalculatorStandalone from "./Calulator";
 import ColumnManagementDialog from "./columnManagementDialog";
+import LoadingScreen from "./LoadingScreen";
+
 
 // Update the dynamic import with proper typing
 const DataTable = dynamic<React.ComponentProps<typeof import('@/components/data-table').DataTable>>(() =>
@@ -150,6 +150,11 @@ const DataTablePage: React.FC = () => {
   const [isRenameFileDialogOpen, setIsRenameFileDialogOpen] = useState(false);
   const [isColumnManagementOpen, setIsColumnManagementOpen] = useState(false);
 const [activeColumn, setActiveColumn] = useState<string>('');
+
+const [initialLoading, setInitialLoading] = useState(true);
+const isInitialRender = useRef(true);
+
+
   const [activeRow, setActiveRow] = useState<{
     data: any;
     index: number;
@@ -161,6 +166,39 @@ const [activeColumn, setActiveColumn] = useState<string>('');
     setData(newData);
     dataRef.current = newData;
   },[]);
+
+  useEffect(() => {
+    // Set initial loading state
+    if (isInitialRender.current) {
+      isInitialRender.current = false;
+      setInitialLoading(true);
+      
+      // Set a timeout to ensure loading screen shows for at least 1.5 seconds
+      // This provides a smoother transition even if data loads quickly
+      const minLoadingTime = setTimeout(() => {
+        setInitialLoading(false);
+      }, 1500);
+      
+      return () => clearTimeout(minLoadingTime);
+    }
+  }, []);
+
+  useEffect(() => {
+    // When fileList is loaded and we have user data, turn off initial loading state
+    if (user && fileList && !fileListLoading) {
+      setInitialLoading(false);
+    }
+  }, [user, fileList, fileListLoading]);
+
+  useEffect(() => {
+    if (loading) {
+      // If we're loading data after initial render, show loading state
+      setInitialLoading(true);
+    } else if (data.length > 0 || unstructuredContent) {
+      // Data has loaded, hide loading screen
+      setInitialLoading(false);
+    }
+  }, [loading, data, unstructuredContent]);
 
   useEffect(() => {
     if ( user && fileList && fileList.length > 0 && !selectedFile) {
@@ -293,15 +331,22 @@ const fetchFileData = useCallback(async (fileId: string, filename: string, page:
   }
 
   setLoading(true);
+  setInitialLoading(true); // Show loading screen while fetching data
   setError(null);
 
   try {
     // Create request URL with sheet name as query parameter if provided
+
+
     let url = `http://localhost:5000/get-file/${user.id}/${fileId}`;
     const params = new URLSearchParams({
       page: page.toString(),
       page_size: '50'
     });
+    
+    // Wait 5 seconds before fetching data to allow loading screen to appear
+    setTimeout(async () => {
+     }, 500);
     
     if (sheetName) {
       params.append('sheet_name', sheetName);
@@ -1087,6 +1132,9 @@ const handleColumnChange = useCallback((
     );
   }
 
+  if (initialLoading) {
+    return <LoadingScreen message="Loading your data dashboard..." />;
+  }
   return (
     // Main container - Adding a subtle background and better spacing
     <div className="max-w-screen-2xl mx-auto w-full pb-10 min-h-screen p-6 bg-gray-50">

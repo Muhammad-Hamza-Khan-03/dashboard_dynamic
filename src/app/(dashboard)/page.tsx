@@ -1,24 +1,73 @@
 "use client"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { BarChart3, LineChart, PieChart, Users, Upload, LayoutDashboard, Search } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import NavButton from "@/components/nav-button"
+import { useEffect, useRef, useState } from "react"
+import LoadingScreen from "@/app/(dashboard)/upload/LoadingScreen"
 
 export default function HomePage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("Loading page...");
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const currentNavigation = useRef<string | null>(null);
+  
+  // Monitor pathname changes to detect when navigation completes
+  useEffect(() => {
+    if (isLoading && pathname === currentNavigation.current) {
+      // Add a small delay to ensure components have mounted
+      setTimeout(() => {
+        setIsLoading(false);
+        currentNavigation.current = null;
+      }, 500);
+    }
+  }, [pathname, isLoading]);
+
+  // Add safety timeout to ensure loading eventually stops
+  useEffect(() => {
+    if (isLoading) {
+      // Set a maximum loading time of 10 seconds
+      loadingTimeoutRef.current = setTimeout(() => {
+        setIsLoading(false);
+        currentNavigation.current = null;
+      }, 10000);
+    }
+
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, [isLoading]);
+
+  const handleNavigation = (href: string) => {
+    if (href === pathname) return;
+    
+    // Set message based on destination
+    let message = "Loading page...";
+    if (href === "/upload") {
+      message = "Loading data dashboard...";
+    } else if (href === "/board") {
+      message = "Preparing dashboard visualizations...";
+    } else if (href === "/Chat") {
+      message = "Loading InSightAI...";
+    }
+    
+    // Set loading state
+    currentNavigation.current = href;
+    setLoadingMessage(message);
+    setIsLoading(true);
+    
+    // Navigate
+    router.push(href);
+  };
+  
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 items-center">
-          
-          <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
-            <div className="w-full flex-1 md:w-auto md:flex-none">
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                <Users className="h-4 w-4" />
-                <span className="sr-only">Toggle user menu</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      {isLoading && <LoadingScreen message={loadingMessage} />}
+      
       <main className="flex-1">
         <section className="w-full py-12 md:py-24 lg:py-32 xl:py-48">
           <div className="container px-4 md:px-6">
@@ -32,10 +81,26 @@ export default function HomePage() {
                 </p>
               </div>
               <div className="space-x-4">
-                <Link href="/upload">
-                  <Button>Get Started</Button>
-                </Link>
-                <Button variant="outline">Learn More</Button>
+                {/* Replace the nested link with a single button */}
+                <div className="inline-block">
+                  <Button 
+                    onClick={() => handleNavigation("/upload")}
+                    className="mr-2"
+                  >
+                    Get Started
+                  </Button>
+                  
+                  <div 
+                    onClick={() => handleNavigation("/upload")} 
+                    className="inline-block cursor-pointer"
+                  >
+                    <NavButton
+                      href={"/upload"}
+                      label={"Data Upload"}
+                      isActive={pathname === "/upload"}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -110,18 +175,9 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-        
       </main>
-      <footer className="flex flex-col gap-2 sm:flex-row py-6 w-full shrink-0 items-center px-4 md:px-6 border-t">
-        <p className="text-xs text-gray-500 dark:text-gray-400">© 2024 InsighAI dashboard</p>
-        <nav className="sm:ml-auto flex gap-4 sm:gap-6">
-          <Link className="text-xs hover:underline underline-offset-4" href="#">
-            Terms of Service
-          </Link>
-          <Link className="text-xs hover:underline underline-offset-4" href="#">
-            Privacy
-          </Link>
-        </nav>
+      <footer className="flex justify-end flex-col gap-2 sm:flex-row py-6 w-full shrink-0 items-center px-4 md:px-6 border-t">
+        <p className="text-sm text-gray-500 dark:text-gray-400">© 2024 InsighAI dashboard</p>
       </footer>
     </div>
   )

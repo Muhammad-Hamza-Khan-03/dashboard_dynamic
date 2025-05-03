@@ -6157,7 +6157,6 @@ def query_document(user_id, file_id):
             'query': query,
             'final_answer': final_answer,
             'images': image_data,
-            # 'include_images': include_images
         })
         
     except Exception as e:
