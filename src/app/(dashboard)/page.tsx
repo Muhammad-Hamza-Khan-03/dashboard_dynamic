@@ -4,7 +4,7 @@ import { BarChart3, LineChart, PieChart, Users, Upload, LayoutDashboard, Search 
 import { usePathname, useRouter } from "next/navigation"
 import NavButton from "@/components/nav-button"
 import { useEffect, useRef, useState } from "react"
-import LoadingScreen from "@/app/(dashboard)/upload/LoadingScreen"
+import LoadingScreen from "@/app/(dashboard)/LoadingScreen"
 
 export default function HomePage() {
   const router = useRouter();

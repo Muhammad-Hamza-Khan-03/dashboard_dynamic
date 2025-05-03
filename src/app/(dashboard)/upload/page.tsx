@@ -36,7 +36,7 @@ import RenameFileDialog from "./renameFileDialog";
 import { FileEdit } from "lucide-react";
 import StatisticsCalculatorStandalone from "./Calulator";
 import ColumnManagementDialog from "./columnManagementDialog";
-import LoadingScreen from "./LoadingScreen";
+import LoadingScreen from "../LoadingScreen";
 
 
 // Update the dynamic import with proper typing

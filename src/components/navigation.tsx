@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import  {useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Menu,Loader2 } from "lucide-react";
-import LoadingScreen from "@/app/(dashboard)/upload/LoadingScreen";
+import LoadingScreen from "@/app/(dashboard)/LoadingScreen";
 const routes = [
     {
         
