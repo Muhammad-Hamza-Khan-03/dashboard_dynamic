@@ -4620,6 +4620,7 @@ def serve_graph(graph_id):
 def check_dashboard_images(user_id, dashboard_id):
     """
     Check if a dashboard has pre-rendered images available.
+    Enhanced to better detect saved images.
     """
     try:
         # Get dashboard name
@@ -4650,7 +4651,7 @@ def check_dashboard_images(user_id, dashboard_id):
         # Count charts with pre-rendered images for this dashboard
         c.execute("""
             SELECT COUNT(*) FROM graph_cache
-            WHERE dashboard_name = ? AND isImageSuccess = 1
+            WHERE dashboard_name = ? AND isImageSuccess = 1 AND image_blob IS NOT NULL
         """, (dashboard_name,))
         
         count = c.fetchone()[0]
@@ -4663,9 +4664,22 @@ def check_dashboard_images(user_id, dashboard_id):
         
         total = c.fetchone()[0]
         
+        # Check local image directory
+        import os
+        image_dir = os.path.join('static', 'chart_images')
+        local_images = 0
+        
+        if os.path.exists(image_dir):
+            local_files = [f for f in os.listdir(image_dir) if f.endswith('.png')]
+            local_images = len(local_files)
+        
+        # Consider both database and local files
+        has_saved_images = count > 0 or local_images > 0
+        
         return jsonify({
-            'hasSavedImages': count > 0,
+            'hasSavedImages': has_saved_images,
             'savedImageCount': count,
+            'localImageCount': local_images,
             'totalCharts': total
         })
         
@@ -4969,7 +4983,7 @@ def export_dashboard_pre_rendered(user_id):
         app.logger.info(f"Exporting dashboard with pre-rendered images")
         
         # Ensure we have at least one dashboard ID
-        if not dashboard_ids or not isinstance(dashboard_ids, list):
+        if not dashboard_ids:
             return jsonify({'error': 'No dashboards selected for export'}), 400
         
         # Create directories for exports
@@ -4982,15 +4996,6 @@ def export_dashboard_pre_rendered(user_id):
         os.makedirs(temp_dir, exist_ok=True)
         
         export_path = os.path.join(export_dir, f"{export_name.replace(' ', '_')}_{export_id}.pdf")
-        
-        # Import required libraries
-        from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.lib import colors
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.units import mm, inch
-        from reportlab.lib.utils import ImageReader
-        from io import BytesIO
-        from PIL import Image
         
         # Create PDF canvas
         c = canvas.Canvas(export_path, pagesize=landscape(A4))
@@ -5035,28 +5040,47 @@ def export_dashboard_pre_rendered(user_id):
                 chart_id = chart_node.get('id')
                 if not chart_id:
                     continue
-                
-                db_cursor.execute("""
-                    SELECT image_blob 
-                    FROM graph_cache 
-                    WHERE graph_id = ? AND dashboard_name = ? AND isImageSuccess = 1
-                """, (chart_id, dashboard_name))
-                
-                result = db_cursor.fetchone()
-                if not result or not result[0]:
-                    app.logger.warning(f"No pre-rendered image found for chart {chart_id}")
-                    continue
-                
-                image_blob = result[0]
-                
-                # Save to temporary file
                 image_key = f"chart_{chart_id}"
-                image_file_path = os.path.join(temp_dir, f"{image_key}.png")
-                with open(image_file_path, 'wb') as f:
-                    f.write(image_blob)
+                image_path_found = False
                 
-                # Store the file path
-                image_files[image_key] = image_file_path
+                # First check if local file exists (preferred)
+                local_img_path = os.path.join('static', 'chart_images', f"{image_key}.png")
+                if os.path.exists(local_img_path):
+                    # Copy to temp dir to keep consistent processing
+                    temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
+                    import shutil
+                    shutil.copy2(local_img_path, temp_img_path)
+                    
+                    # Store the file path
+                    image_files[image_key] = temp_img_path
+                    image_path_found = True
+                    app.logger.info(f"Using local image file: {local_img_path}")
+                
+                # If not found locally, try database
+                if not image_path_found:
+                    db_cursor.execute("""
+                        SELECT image_blob 
+                        FROM graph_cache 
+                        WHERE graph_id = ? AND dashboard_name = ? AND isImageSuccess = 1
+                    """, (chart_id, dashboard_name))
+
+                    result = db_cursor.fetchone()
+                    if not result or not result[0]:
+                        app.logger.warning(f"No pre-rendered image found for chart {chart_id}")
+                        continue
+
+                    image_blob = result[0]
+
+                    # Save to temporary file
+                    image_key = f"chart_{chart_id}"
+                    image_file_path = os.path.join(temp_dir, f"{image_key}.png")
+                    with open(image_file_path, 'wb') as f:
+                        f.write(image_blob)
+
+                    # Store the file path
+                    image_files[image_key] = image_file_path
+                    image_path_found = True
+                    app.logger.info(f"Using database image for chart: {chart_id}")
         
         # Fetch non-chart elements (which would use captureElementAsImage on frontend)
         non_chart_images = data.get('node_images', {})
@@ -5362,7 +5386,8 @@ def save_dashboard(user_id, dashboard_id):
         results = {
             'success': 0,
             'failed': 0,
-            'chart_ids': []
+            'chart_ids': [],
+            'image_paths': []  # Store local image paths
         }
         
         # Process each chart
@@ -5390,19 +5415,30 @@ def save_dashboard(user_id, dashboard_id):
             html_content = result[1]
             
             try:
-                # Generate image from HTML content using pyppeteer
-                # This has to be done asynchronously
-                image_data = asyncio.run(generate_chart_image(html_content))
+                # Generate image using the new function that returns both image data and path
+                image_data, img_path = generate_chart_image(html_content, chart_id)
                 
-                # Save the image to database
+                # Save the image to database (ensure it's properly stored)
                 c.execute("""
                     UPDATE graph_cache 
                     SET dashboard_name = ?, image_blob = ?, isImageSuccess = 1
                     WHERE graph_id = ?
-                """, (dashboard_name, image_data, chart_id))
+                """, (dashboard_name, sqlite3.Binary(image_data), chart_id))
+                
+                # Verify the update was successful
+                c.execute("""
+                    SELECT image_blob, isImageSuccess FROM graph_cache WHERE graph_id = ?
+                """, (chart_id,))
+                
+                verify_result = c.fetchone()
+                if verify_result and verify_result[0] and verify_result[1] == 1:
+                    app.logger.info(f"Successfully saved chart {chart_id} to database")
+                else:
+                    app.logger.warning(f"Chart {chart_id} was not properly saved to database")
                 
                 results['success'] += 1
                 results['chart_ids'].append(chart_id)
+                results['image_paths'].append(img_path)
                 
             except Exception as e:
                 app.logger.error(f"Error capturing chart {chart_id}: {str(e)}")
@@ -5431,20 +5467,29 @@ def save_dashboard(user_id, dashboard_id):
     finally:
         if 'conn' in locals():
             conn.close()
-            
-# nest_asyncio.apply()
 
-async def generate_chart_image(html_content):
+def generate_chart_image(html_content, chart_id):
     """
-    Generate an image from HTML content using pyppeteer without using tkinter.
+    Generate an image from HTML content using imgkit (wkhtmltoimage).
+    Saves both to database and local temp directory.
     
     Args:
         html_content: The HTML content of the chart
+        chart_id: The ID of the chart for file naming
         
     Returns:
-        Binary image data (PNG)
+        Binary image data (PNG) and the local file path
     """
-    import pyppeteer # type: ignore
+    import imgkit
+    import os
+    
+    # Create export directories if they don't exist
+    temp_dir = os.path.join('static', 'chart_images')
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    # Generate file paths
+    html_path = os.path.join(temp_dir, f"chart_{chart_id}.html")
+    img_path = os.path.join(temp_dir, f"chart_{chart_id}.png")
     
     # Full HTML template with necessary scripts
     full_html = f"""
@@ -5477,41 +5522,36 @@ async def generate_chart_image(html_content):
     </html>
     """
     
-    # Launch browser with minimal dependencies
-    browser = await pyppeteer.launch({
-        'headless': True,
-        'args': [
-            '--no-sandbox', 
-            '--disable-setuid-sandbox', 
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-software-rasterizer'
-        ]
-    })
+    # Write the HTML content to the file
+    with open(html_path, 'w', encoding='utf-8') as html_file:
+        html_file.write(full_html)
     
     try:
-        page = await browser.newPage()
-        await page.setViewport({'width': 1000, 'height': 600})
-        await page.setContent(full_html)
-        await page.waitForSelector('#chart-container')
-        await page.waitForTimeout(2000)
+        # Configure imgkit with options for better rendering
+        options = {
+            'width': 1000,
+            'height': 600,
+            'quality': 100,
+            'enable-javascript': '',
+            'javascript-delay': 3000,  # Increased delay for better rendering
+            'no-stop-slow-scripts': '',
+            'disable-smart-width': ''
+        }
         
-        screenshot = await page.screenshot({
-            'type': 'png',
-            'fullPage': False,
-            'clip': {
-                'x': 0,
-                'y': 0,
-                'width': 1000,
-                'height': 600
-            }
-        })
+        # Generate the image
+        imgkit.from_file(html_path, img_path, options=options)
         
-        return screenshot
+        # Read the generated image
+        with open(img_path, 'rb') as f:
+            image_data = f.read()
         
-    finally:
-        await browser.close()
-
+        app.logger.info(f"Successfully generated chart image: {img_path}")
+        return image_data, img_path
+        
+    except Exception as e:
+        app.logger.error(f"Error generating chart image: {str(e)}")
+        raise
+        
 # calculator statistics here
 # Add these routes to your Flask application
 # Helper functions integrated with existing database structure
@@ -6319,8 +6359,28 @@ def query_document(user_id, file_id):
     except Exception as e:
         app.logger.error(f"Error querying document: {str(e)}")
         return jsonify({'error': str(e)}), 500
-    
+
+def check_wkhtmltopdf_installed():
+    """Checks if wkhtmltopdf is installed and works properly."""
+    import subprocess
+    try:
+        result = subprocess.run(['wkhtmltopdf', '-V'], 
+                                stdout=subprocess.PIPE, 
+                                stderr=subprocess.PIPE,
+                                text=True)
+        if result.returncode == 0:
+            app.logger.info(f"wkhtmltopdf found: {result.stdout.strip()}")
+            return True
+        else:
+            app.logger.error(f"wkhtmltopdf error: {result.stderr}")
+            return False
+    except Exception as e:
+        app.logger.error(f"wkhtmltopdf not found: {e}")
+        app.logger.error("Please install wkhtmltopdf using: apt-get install wkhtmltopdf")
+        return False
+
 if __name__ == '__main__':
+    check_wkhtmltopdf_installed()
     app.run(debug=False, port=5000)
     init_db()   
     # Start the background worker
