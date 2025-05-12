@@ -5293,44 +5293,483 @@ def export_dashboard_pre_rendered(user_id):
         if 'conn' in locals():
             conn.close()
 
-@app.route('/download-export/<export_id>', methods=['GET'])
-def download_export(export_id):
-    """Serve the exported PDF for download."""
+# @app.route('/download-export/<export_id>', methods=['GET'])
+# def download_export(export_id):
+#     """Serve the exported PDF for download."""
+#     try:
+#         conn = sqlite3.connect('user_files.db')
+#         cursor = conn.cursor()
+#         cursor.execute("SELECT export_path, export_name FROM dashboard_exports WHERE export_id = ?", (export_id,))
+#         result = cursor.fetchone()
+#         conn.close()
+        
+#         if not result:
+#             return "Export not found", 404
+            
+#         export_path, export_name = result
+        
+#         if not os.path.exists(export_path):
+#             return "Export file not found", 404
+            
+#         # Make sure filename is safe
+#         download_name = secure_filename(export_name)
+#         if not download_name:
+#             download_name = f"dashboard_export_{export_id}.pdf"
+#         else:
+#             if not download_name.lower().endswith('.pdf'):
+#                 download_name += '.pdf'
+            
+#         # Serve file for download
+#         from flask import send_file
+#         return send_file(
+#             export_path,
+#             mimetype='application/pdf',
+#             as_attachment=True,
+#             download_name=download_name
+#         )
+        
+#     except Exception as e:
+#         app.logger.error(f"Error downloading export: {str(e)}")
+#         return str(e), 500
+
+@app.route('/export-dashboard-mdx/<user_id>', methods=['POST'])
+def export_dashboard_mdx(user_id):
+    """Generate an MDX export of dashboard with images and layout."""
     try:
+        data = request.json
+        dashboard_ids = data.get('dashboard_ids', [])
+        export_name = data.get('export_name', 'Dashboard Export')
+        use_relative_positioning = data.get('use_relative_positioning', True)
+        
+        # Get node images and positions
+        node_images = data.get('node_images', {})
+        node_positions = data.get('node_positions', {})
+        
+        app.logger.info(f"Exporting dashboard as MDX with {len(node_images)} images")
+        
+        # Ensure we have at least one dashboard ID
+        if not dashboard_ids or not isinstance(dashboard_ids, list):
+            return jsonify({'error': 'No dashboards selected for export'}), 400
+        
+        # Create directories for exports
+        export_id = str(uuid.uuid4())
+        export_dir = os.path.join('static', 'exports')
+        mdx_assets_dir = os.path.join(export_dir, f"mdx_assets_{export_id}")
+        os.makedirs(export_dir, exist_ok=True)
+        os.makedirs(mdx_assets_dir, exist_ok=True)
+        
+        # Create the MDX file
+        mdx_filename = f"{export_name.replace(' ', '_')}_{export_id}.mdx"
+        mdx_path = os.path.join(export_dir, mdx_filename)
+        
+        # Dashboard info
+        dashboards_info = data.get('dashboards', [])
+        dashboard_name = None
+        for dash in dashboards_info:
+            if dash.get('id') == dashboard_ids[0]:  # Get name of the first dashboard
+                dashboard_name = dash.get('name')
+                break
+        
+        if not dashboard_name:
+            dashboard_name = f"Dashboard-{dashboard_ids[0]}"
+        
+        # File paths for images in the MDX file
+        image_files = {}
+        
+        # Map node types to their positions array
+        node_type_map = {
+            'chart': node_positions.get('charts', []),
+            'textbox': node_positions.get('textBoxes', []),
+            'datatable': node_positions.get('dataTables', []),
+            'statcard': node_positions.get('statCards', [])
+        }
+        
+        # First, check for pre-rendered chart images in static/chart_images
+        charts_dir = os.path.join('static', 'chart_images')
+        if os.path.exists(charts_dir):
+            for node_type, nodes in node_type_map.items():
+                for node in nodes:
+                    node_id = node.get('id')
+                    if not node_id:
+                        continue
+                    
+                    image_key = f"{node_type}_{node_id}"
+                    local_img_path = os.path.join(charts_dir, f"{image_key}.png")
+                    
+                    if os.path.exists(local_img_path):
+                        # Copy to MDX assets directory
+                        mdx_img_path = os.path.join(mdx_assets_dir, f"{image_key}.png")
+                        import shutil
+                        shutil.copy2(local_img_path, mdx_img_path)
+                        
+                        # Store relative path for MDX
+                        image_files[image_key] = f"mdx_assets_{export_id}/{image_key}.png"
+                        app.logger.info(f"Using pre-rendered image for {image_key}")
+        
+        # For chart images not found locally, check database
         conn = sqlite3.connect('user_files.db')
-        cursor = conn.cursor()
-        cursor.execute("SELECT export_path, export_name FROM dashboard_exports WHERE export_id = ?", (export_id,))
-        result = cursor.fetchone()
+        c = conn.cursor()
+        
+        for node in node_type_map.get('chart', []):
+            chart_id = node.get('id')
+            if not chart_id:
+                continue
+                
+            image_key = f"chart_{chart_id}"
+            
+            # Skip if we already have this image
+            if image_key in image_files:
+                continue
+            
+            c.execute("""
+                SELECT image_blob 
+                FROM graph_cache 
+                WHERE graph_id = ? AND dashboard_name = ? AND isImageSuccess = 1
+            """, (chart_id, dashboard_name))
+            
+            result = c.fetchone()
+            if result and result[0]:
+                # Save blob to MDX assets directory
+                mdx_img_path = os.path.join(mdx_assets_dir, f"{image_key}.png")
+                with open(mdx_img_path, 'wb') as f:
+                    f.write(result[0])
+                
+                # Store relative path for MDX
+                image_files[image_key] = f"mdx_assets_{export_id}/{image_key}.png"
+                app.logger.info(f"Using database image for {image_key}")
+        
+        # Process any remaining node images from the request
+        for image_key, image_data in node_images.items():
+            # Skip if we already have this image
+            if image_key in image_files:
+                continue
+                
+            try:
+                # Parse the node type and ID
+                parts = image_key.split('_', 1)
+                if len(parts) != 2:
+                    continue
+                    
+                node_type, node_id = parts
+                
+                # Skip if invalid node type
+                if node_type not in node_type_map:
+                    continue
+                
+                # Remove data:image/png;base64, prefix
+                if image_data.startswith('data:image/png;base64,'):
+                    image_data = image_data[len('data:image/png;base64,'):]
+                
+                # Decode base64 to bytes
+                try:
+                    img_bytes = base64.b64decode(image_data)
+                except Exception as e:
+                    app.logger.error(f"Error decoding base64 for {image_key}: {str(e)}")
+                    continue
+                
+                # Save to MDX assets directory
+                mdx_img_path = os.path.join(mdx_assets_dir, f"{image_key}.png")
+                with open(mdx_img_path, 'wb') as f:
+                    f.write(img_bytes)
+                
+                # Store relative path for MDX
+                image_files[image_key] = f"mdx_assets_{export_id}/{image_key}.png"
+                app.logger.info(f"Using captured image for {image_key}")
+                
+            except Exception as e:
+                app.logger.error(f"Error processing image {image_key}: {str(e)}")
+        
+        app.logger.info(f"Processed {len(image_files)} images for MDX export")
+        
+        # Start generating MDX content
+        mdx_content = []
+        
+        # Add frontmatter with metadata
+        mdx_content.append("---")
+        mdx_content.append(f"title: '{export_name}'")
+        mdx_content.append(f"date: '{datetime.datetime.now().strftime('%Y-%m-%d')}'")
+        mdx_content.append(f"description: 'Dashboard export from {dashboard_name}'")
+        mdx_content.append("---")
+        mdx_content.append("")
+        
+        # Process each dashboard
+        for dashboard_index, dashboard_id in enumerate(dashboard_ids):
+            # Find the dashboard name
+            dashboard_name = f"Dashboard Export - {export_name}"
+            for dash in dashboards_info:
+                if dash.get('id') == dashboard_id:
+                    dashboard_name = dash.get('name', dashboard_name)
+            
+            # Add dashboard title
+            mdx_content.append(f"# {dashboard_name}")
+            mdx_content.append(f"*Exported: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}*")
+            mdx_content.append("")
+            
+            # Add a divider
+            mdx_content.append("---")
+            mdx_content.append("")
+            
+            # Build a list of all node positions from the different node types
+            all_nodes = []
+            
+            # Process charts
+            for chart in node_positions.get('charts', []):
+                node_id = chart.get('id')
+                image_key = f"chart_{node_id}"
+                
+                if image_key in image_files or node_id:
+                    all_nodes.append({
+                        'type': 'chart',
+                        'id': node_id,
+                        'position': chart.get('position', {}),
+                        'title': chart.get('title', ''),
+                        'description': chart.get('description', ''),
+                        'image_path': image_files.get(image_key)
+                    })
+            
+            # Process text boxes
+            for textbox in node_positions.get('textBoxes', []):
+                node_id = textbox.get('id')
+                image_key = f"textbox_{node_id}"
+                
+                all_nodes.append({
+                    'type': 'textbox',
+                    'id': node_id,
+                    'position': textbox.get('position', {}),
+                    'content': textbox.get('content', ''),
+                    'image_path': image_files.get(image_key)
+                })
+            
+            # Process data tables
+            for table in node_positions.get('dataTables', []):
+                node_id = table.get('id')
+                image_key = f"datatable_{node_id}"
+                
+                all_nodes.append({
+                    'type': 'datatable',
+                    'id': node_id,
+                    'position': table.get('position', {}),
+                    'title': table.get('title', ''),
+                    'columns': table.get('columns', []),
+                    'data': table.get('data', []),
+                    'image_path': image_files.get(image_key)
+                })
+            
+            # Process stat cards
+            for card in node_positions.get('statCards', []):
+                node_id = card.get('id')
+                image_key = f"statcard_{node_id}"
+                
+                all_nodes.append({
+                    'type': 'statcard',
+                    'id': node_id,
+                    'position': card.get('position', {}),
+                    'title': card.get('title', ''),
+                    'column': card.get('column', ''),
+                    'statType': card.get('statType', ''),
+                    'image_path': image_files.get(image_key)
+                })
+            
+            # Sort nodes by position for layout
+            if use_relative_positioning:
+                # Sort by Y position first (top to bottom), then X (left to right)
+                all_nodes.sort(key=lambda node: (
+                    node.get('position', {}).get('y', 0),
+                    node.get('position', {}).get('x', 0)
+                ))
+            
+            # Generate grid layout for MDX
+            mdx_content.append("<div className=\"dashboard-grid\">")
+            
+            # Process nodes
+            for node in all_nodes:
+                mdx_lines = generate_node_mdx(node, use_relative_positioning)
+                mdx_content.extend(mdx_lines)
+            
+            # Close grid layout
+            mdx_content.append("</div>")
+            mdx_content.append("")
+            
+            # Add some CSS for the dashboard grid
+            mdx_content.append("```css")
+            mdx_content.append(".dashboard-grid {")
+            mdx_content.append("  display: grid;")
+            mdx_content.append("  grid-template-columns: repeat(12, 1fr);")
+            mdx_content.append("  gap: 1rem;")
+            mdx_content.append("}")
+            mdx_content.append("```")
+            mdx_content.append("")
+            
+            # Add page break between dashboards
+            if dashboard_index < len(dashboard_ids) - 1:
+                mdx_content.append("<div className=\"page-break\"></div>")
+                mdx_content.append("")
+        
+        # Write MDX content to file
+        with open(mdx_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(mdx_content))
+        
         conn.close()
         
-        if not result:
-            return "Export not found", 404
-            
-        export_path, export_name = result
+        # Record the export in the database
+        conn = sqlite3.connect('user_files.db')
+        cursor = conn.cursor()
         
-        if not os.path.exists(export_path):
-            return "Export file not found", 404
-            
-        # Make sure filename is safe
-        download_name = secure_filename(export_name)
-        if not download_name:
-            download_name = f"dashboard_export_{export_id}.pdf"
-        else:
-            if not download_name.lower().endswith('.pdf'):
-                download_name += '.pdf'
-            
-        # Serve file for download
-        from flask import send_file
-        return send_file(
-            export_path,
-            mimetype='application/pdf',
-            as_attachment=True,
-            download_name=download_name
-        )
+        # Save export record
+        cursor.execute("""
+            INSERT INTO dashboard_exports (
+                export_id, user_id, dashboard_ids, export_name, export_path, created_at
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (export_id, user_id, json.dumps(dashboard_ids), export_name, mdx_path))
+        
+        conn.commit()
+        conn.close()
+        
+        # Return download URL
+        return jsonify({
+            'success': True,
+            'export_id': export_id,
+            'export_name': export_name,
+            'download_url': f'/download-export/{export_id}'
+        })
         
     except Exception as e:
-        app.logger.error(f"Error downloading export: {str(e)}")
-        return str(e), 500
+        app.logger.error(f"Error exporting dashboard to MDX: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+        
+def generate_node_mdx(node, use_relative_positioning):
+    """Generate MDX content for a node."""
+    node_type = node.get('type')
+    mdx_lines = []
+    
+    # Calculate column span based on width
+    col_span = 12
+    if use_relative_positioning and 'position' in node and 'width' in node['position']:
+        # Translate width to grid column span (12 column grid)
+        width = node['position']['width'] or 400
+        col_span = max(1, min(12, round((width / 1200) * 12)))
+    
+    # Start div with appropriate column span
+    mdx_lines.append(f"  <div className=\"col-span-{col_span} mb-4\">")
+    
+    if node_type == 'chart':
+        # Chart component with image
+        title = node.get('title', '')
+        description = node.get('description', '')
+        image_path = node.get('image_path', '')
+        
+        if image_path:
+            mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
+            mdx_lines.append(f"      <h3 className=\"text-lg font-semibold mb-1\">{title}</h3>")
+            if description:
+                mdx_lines.append(f"      <p className=\"text-sm text-gray-500 mb-3\">{description}</p>")
+            mdx_lines.append(f"      <img src=\"/{image_path}\" alt=\"{title}\" className=\"w-full\" />")
+            mdx_lines.append(f"    </div>")
+        else:
+            mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
+            mdx_lines.append(f"      <h3 className=\"text-lg font-semibold\">{title}</h3>")
+            if description:
+                mdx_lines.append(f"      <p className=\"text-sm text-gray-500\">{description}</p>")
+            mdx_lines.append(f"      <p className=\"italic text-gray-400\">Chart image not available</p>")
+            mdx_lines.append(f"    </div>")
+    
+    elif node_type == 'textbox':
+        # Text box with content
+        content = node.get('content', '')
+        image_path = node.get('image_path')
+        
+        # If we have an image, use it, otherwise use the content directly
+        if image_path:
+            mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
+            mdx_lines.append(f"      <img src=\"/{image_path}\" alt=\"Text content\" className=\"w-full\" />")
+            mdx_lines.append(f"    </div>")
+        else:
+            mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
+            # Convert content to markdown
+            content_lines = content.split('\n')
+            for line in content_lines:
+                if line.strip():
+                    mdx_lines.append(f"      <p>{line}</p>")
+                else:
+                    mdx_lines.append(f"      <br />")
+            mdx_lines.append(f"    </div>")
+    
+    elif node_type == 'datatable':
+        # Data table component
+        title = node.get('title', '')
+        image_path = node.get('image_path')
+        
+        if image_path:
+            # Use image if available
+            mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
+            mdx_lines.append(f"      <h3 className=\"text-lg font-semibold mb-3\">{title}</h3>")
+            mdx_lines.append(f"      <img src=\"/{image_path}\" alt=\"{title}\" className=\"w-full\" />")
+            mdx_lines.append(f"    </div>")
+        else:
+            # Otherwise try to generate a markdown table
+            columns = node.get('columns', [])
+            data = node.get('data', [])
+            
+            if columns and data:
+                mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
+                mdx_lines.append(f"      <h3 className=\"text-lg font-semibold mb-3\">{title}</h3>")
+                
+                # Create markdown table
+                mdx_lines.append(f"      <table className=\"w-full\">")
+                mdx_lines.append(f"        <thead>")
+                mdx_lines.append(f"          <tr>")
+                for col in columns:
+                    mdx_lines.append(f"            <th className=\"text-left p-2 border-b\">{col}</th>")
+                mdx_lines.append(f"          </tr>")
+                mdx_lines.append(f"        </thead>")
+                mdx_lines.append(f"        <tbody>")
+                
+                # Add up to 10 rows (to keep MDX size reasonable)
+                for i, row in enumerate(data[:10]):
+                    mdx_lines.append(f"          <tr>")
+                    for col in columns:
+                        cell_value = row.get(col, "")
+                        mdx_lines.append(f"            <td className=\"p-2 border-b\">{cell_value}</td>")
+                    mdx_lines.append(f"          </tr>")
+                
+                if len(data) > 10:
+                    mdx_lines.append(f"          <tr>")
+                    mdx_lines.append(f"            <td colSpan=\"{len(columns)}\" className=\"p-2 text-center text-gray-500\">")
+                    mdx_lines.append(f"              ... {len(data) - 10} more rows")
+                    mdx_lines.append(f"            </td>")
+                    mdx_lines.append(f"          </tr>")
+                
+                mdx_lines.append(f"        </tbody>")
+                mdx_lines.append(f"      </table>")
+                mdx_lines.append(f"    </div>")
+            else:
+                mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
+                mdx_lines.append(f"      <h3 className=\"text-lg font-semibold\">{title}</h3>")
+                mdx_lines.append(f"      <p className=\"italic text-gray-400\">Table data not available</p>")
+                mdx_lines.append(f"    </div>")
+    
+    elif node_type == 'statcard':
+        # Stat card component
+        title = node.get('title', '')
+        image_path = node.get('image_path')
+        
+        if image_path:
+            mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
+            mdx_lines.append(f"      <h3 className=\"text-lg font-semibold mb-2\">{title}</h3>")
+            mdx_lines.append(f"      <img src=\"/{image_path}\" alt=\"{title}\" className=\"w-full\" />")
+            mdx_lines.append(f"    </div>")
+        else:
+            mdx_lines.append(f"    <div className=\"border rounded-lg p-4 bg-blue-50\">")
+            mdx_lines.append(f"      <h3 className=\"text-lg font-semibold\">{title}</h3>")
+            mdx_lines.append(f"      <p className=\"text-3xl font-bold text-blue-600 my-2\">{node.get('statType', '')}</p>")
+            mdx_lines.append(f"      <p className=\"text-sm text-gray-500\">Column: {node.get('column', '')}</p>")
+            mdx_lines.append(f"    </div>")
+    
+    # Close the div
+    mdx_lines.append("  </div>")
+    
+    return mdx_lines
 
 # New endpoint to get a list of dashboards for export selection
 @app.route('/get-dashboards/<user_id>', methods=['GET'])
@@ -6360,6 +6799,54 @@ def query_document(user_id, file_id):
         app.logger.error(f"Error querying document: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/download-export/<export_id>', methods=['GET'])
+def download_export(export_id):
+    """Serve the exported PDF or MDX for download."""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT export_path, export_name FROM dashboard_exports WHERE export_id = ?", (export_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return "Export not found", 404
+            
+        export_path, export_name = result
+        
+        if not os.path.exists(export_path):
+            return "Export file not found", 404
+            
+        # Make sure filename is safe
+        download_name = secure_filename(export_name)
+        if not download_name:
+            download_name = f"dashboard_export_{export_id}"
+        
+        # Determine the file extension and mimetype
+        if export_path.lower().endswith('.pdf'):
+            mimetype = 'application/pdf'
+            if not download_name.lower().endswith('.pdf'):
+                download_name += '.pdf'
+        elif export_path.lower().endswith('.mdx'):
+            mimetype = 'text/markdown'
+            if not download_name.lower().endswith('.mdx'):
+                download_name += '.mdx'
+        else:
+            # Default case
+            mimetype = 'application/octet-stream'
+            
+        # Serve file for download
+        from flask import send_file
+        return send_file(
+            export_path,
+            mimetype=mimetype,
+            as_attachment=True,
+            download_name=download_name
+        )
+        
+    except Exception as e:
+        app.logger.error(f"Error downloading export: {str(e)}")
+        return str(e), 500
 def check_wkhtmltopdf_installed():
     """Checks if wkhtmltopdf is installed and works properly."""
     import subprocess

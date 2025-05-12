@@ -1,3 +1,4 @@
+// Modified EnhancedExportModal.tsx
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -5,7 +6,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Loader, Camera, FileDown, Info } from 'lucide-react';
+import { AlertCircle, Loader, Camera, FileDown, Info, FileText } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -24,9 +27,6 @@ interface ExportModalProps {
   hasSavedImages?: boolean;
 }
 
-/**
- * Modal for configuring dashboard export options with pre-rendered image support
- */
 const EnhancedExportModal: React.FC<ExportModalProps> = ({
   isOpen,
   onClose,
@@ -47,6 +47,7 @@ const EnhancedExportModal: React.FC<ExportModalProps> = ({
   const [exportName, setExportName] = useState('');
   const [useRelativePositioning, setUseRelativePositioning] = useState(true);
   const [internalError, setInternalError] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState('pdf'); // New: default to PDF, can be 'pdf' or 'mdx'
   
   // Initialize default values when the modal opens
   useEffect(() => {
@@ -54,6 +55,7 @@ const EnhancedExportModal: React.FC<ExportModalProps> = ({
       setExportName(`${currentDashboardName} Export`);
       setUseRelativePositioning(true);
       setInternalError(null);
+      setExportFormat('pdf'); // Reset format when reopening
     }
   }, [isOpen, currentDashboardName]);
   
@@ -69,6 +71,7 @@ const EnhancedExportModal: React.FC<ExportModalProps> = ({
     onExport({
       exportName: exportName,
       useRelativePositioning: useRelativePositioning,
+      exportFormat: exportFormat, // Include the export format in the config
     });
   };
   
@@ -78,14 +81,14 @@ const EnhancedExportModal: React.FC<ExportModalProps> = ({
   const dataTableCount = dataTables.length;
   const statCardCount = statCards.length;
   const totalCount = chartCount + textBoxCount + dataTableCount + statCardCount;
-
+  
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Export Dashboard as PDF</DialogTitle>
+          <DialogTitle>Export Dashboard</DialogTitle>
         </DialogHeader>
-        
+        <h1>EnhancedExportModal Openened</h1>
         <div className="py-4 space-y-5">
           {/* Export Name */}
           <div>
@@ -97,6 +100,39 @@ const EnhancedExportModal: React.FC<ExportModalProps> = ({
               placeholder="Enter a name for this export"
               className="mt-1"
             />
+          </div>
+          
+          
+          {/* Export Format Selection */}
+          <div>
+            <Label htmlFor="export-format">Export Format</Label>
+            <Select 
+              value={exportFormat} 
+              onValueChange={setExportFormat}
+            >
+              <SelectTrigger id="export-format" className="mt-1">
+                <SelectValue placeholder="Select format" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pdf">
+                  <div className="flex items-center gap-2">
+                    <FileDown className="h-4 w-4" />
+                    <span>PDF Document</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="mdx">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    <span>MDX (Markdown + JSX)</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-500 mt-1">
+              {exportFormat === 'pdf' ? 
+                'Creates a PDF document with all dashboard elements' : 
+                'Creates an MDX file with images and JSX layout for React'}
+            </p>
           </div>
           
           {/* Pre-rendered images status */}
@@ -152,7 +188,7 @@ const EnhancedExportModal: React.FC<ExportModalProps> = ({
                 checked={useRelativePositioning} 
                 onCheckedChange={(checked) => setUseRelativePositioning(!!checked)} 
               />
-              <Label htmlFor="relative-positioning">Use relative positioning (recommended)</Label>
+              <Label htmlFor="relative-positioning">Use relative positioning nckjdnjk(recommended)</Label>
             </div>
             <p className="text-xs text-gray-500 mt-1 ml-6">
               Preserves the layout of your dashboard elements relative to each other
@@ -199,8 +235,12 @@ const EnhancedExportModal: React.FC<ExportModalProps> = ({
               </>
             ) : (
               <>
-                <FileDown className="h-4 w-4 mr-2" />
-                Export PDF
+                {exportFormat === 'pdf' ? (
+                  <FileDown className="h-4 w-4 mr-2" />
+                ) : (
+                  <FileText className="h-4 w-4 mr-2" />
+                )}
+                Export {exportFormat.toUpperCase()}
               </>
             )}
           </Button>
