@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Average Sepal Length Card</title>
   <style>
     * {
@@ -11,16 +11,19 @@
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
-    
+
+    html, body {
+      height: 100%;
+      width: 100%;
+    }
+
     body {
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 100vh;
-      background-color: #f0f4f8;
-      padding: 20px;
+      background-color: white; /* Removed gray */
     }
-    
+
     .stat-card {
       position: relative;
       background-color: white;
@@ -28,23 +31,23 @@
       border: 1px solid #e2e8f0;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
       padding: 20px;
-      width: 270px;
-      height: 110px;
+      width: 100%;
+      height: 100%;
     }
-    
+
     .stat-card-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       margin-bottom: 12px;
     }
-    
+
     .stat-card-title {
       color: #64748b;
       font-size: 14px;
       font-weight: 500;
     }
-    
+
     .download-btn {
       background: none;
       border: none;
@@ -55,16 +58,16 @@
       justify-content: center;
       transition: color 0.2s;
     }
-    
+
     .download-btn:hover {
       color: #475569;
     }
-    
+
     .download-icon {
       width: 16px;
       height: 16px;
     }
-    
+
     .stat-card-value {
       font-size: 28px;
       font-weight: 700;
@@ -90,28 +93,22 @@
   <script>
     function downloadCard() {
       const card = document.getElementById('sepal-length-card');
-      
-      // Ensure we're getting the exact dimensions of just the card
       const cardWidth = card.offsetWidth;
       const cardHeight = card.offsetHeight;
-      
-      // Create a canvas with the exact card dimensions
+
       const canvas = document.createElement('canvas');
       canvas.width = cardWidth;
       canvas.height = cardHeight;
-      
+
       const ctx = canvas.getContext('2d');
-      
-      // Draw white background for the card
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // Add border with rounded corners
+
+      // Draw border with rounded corners
+      const radius = 8;
       ctx.strokeStyle = '#e2e8f0';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      // Using path for older browsers that don't support roundRect
-      const radius = 8;
       ctx.moveTo(radius, 0);
       ctx.lineTo(canvas.width - radius, 0);
       ctx.arcTo(canvas.width, 0, canvas.width, radius, radius);
@@ -123,34 +120,18 @@
       ctx.arcTo(0, 0, radius, 0, radius);
       ctx.closePath();
       ctx.stroke();
-      
-      // Draw shadow (simulate box-shadow)
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.05)';
-      ctx.shadowBlur = 4;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 2;
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
-      
-      // Reset shadow for text drawing
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-      
+
       // Draw title
       ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
       ctx.fillStyle = '#64748b';
       ctx.textAlign = 'left';
       ctx.fillText('Average Sepal Length', 20, 30);
-      
+
       // Draw value
       ctx.font = 'bold 28px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
       ctx.fillStyle = '#0ea5e9';
-      ctx.textAlign = 'left';
       ctx.fillText('5.01', 20, 70);
-      
-      // Create download link
+
       const link = document.createElement('a');
       link.download = 'average-sepal-length.png';
       link.href = canvas.toDataURL('image/png', 1.0);
