@@ -54,6 +54,44 @@ const EnhancedExportButton: React.FC<ExportButtonProps> = ({
     checkSavedImages();
   }, [userId, currentDashboardId]);
 
+function calculateStatValue(card: { data: never[]; column: any; statType: any; }) {
+  const data = card.data || [];
+  const column = card.column;
+  const statType = card.statType;
+  
+  if (!data.length || !column) return "N/A";
+  
+  try {
+    // Extract values from the data
+    const values = data.map(item => item[column]).filter(val => val !== null && val !== undefined);
+    
+    if (!values.length) return "N/A";
+    
+    switch (statType) {
+      case 'count':
+        return values.length.toFixed(2);
+      case 'sum':
+        return values.reduce((sum, val) => sum + Number(val), 0).toFixed(2);
+      case 'mean':
+        return (values.reduce((sum, val) => sum + Number(val), 0) / values.length).toFixed(2);
+      case 'mode':
+        const counts: Record<string | number, number> = {};
+        values.forEach(val => { counts[val] = (counts[val] || 0) + 1; });
+        const mode = Object.entries(counts).reduce((a, b) => a[1] > b[1] ? a : b)[0];
+        return mode;
+      case 'max':
+        return Math.max(...values.map(v => Number(v))).toFixed(2);
+      case 'min':
+        return Math.min(...values.map(v => Number(v))).toFixed(2);
+      default:
+        return "N/A";
+    }
+  } catch (e) {
+    console.error("Error calculating stat value:", e);
+    return "Error";
+  }
+}
+
 const handleExport = async (exportConfig: any) => {
   if (!userId || !currentDashboardId) return;
   
@@ -62,6 +100,21 @@ const handleExport = async (exportConfig: any) => {
     setExportError(null);
     setExportProgress('Preparing export process...');
     
+    const statCardData = statCards.map(card => ({
+      id: card.id,
+      title: card.title,
+      value: calculateStatValue(card),  // New helper function to calculate the value
+      statType: card.statType,
+      column: card.column
+    }));
+
+    const dataTableData = dataTables.map(table => ({
+      id: table.id,
+      title: table.title,
+      columns: table.columns,
+      data: table.data
+    }));
+
     // For visual feedback, make sure there's a small delay
     await new Promise(resolve => setTimeout(resolve, 300));
     
@@ -97,6 +150,8 @@ const handleExport = async (exportConfig: any) => {
       use_relative_positioning: exportConfig.useRelativePositioning,
       export_format: exportConfig.exportFormat,
       node_images: nodeImages,
+      stat_card_data: statCardData,
+      data_table_data: dataTableData,
       node_positions: {
         charts: charts.map(chart => ({
           id: chart.id,
@@ -159,6 +214,7 @@ const handleExport = async (exportConfig: any) => {
     setIsExporting(false);
   }
 };
+
 
   // Helper function to capture node images
   async function captureNodeImages() {

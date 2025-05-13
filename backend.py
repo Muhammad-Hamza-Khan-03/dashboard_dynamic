@@ -4979,6 +4979,7 @@ def export_dashboard_pre_rendered(user_id):
         
         # Get node positions
         node_positions = data.get('node_positions', {})
+        stat_card_data = data.get('stat_card_data', [])
         
         app.logger.info(f"Exporting dashboard with pre-rendered images")
         
@@ -5034,7 +5035,8 @@ def export_dashboard_pre_rendered(user_id):
             
             # Get all chart IDs for this dashboard that have pre-rendered images
             chart_nodes = [n for n in node_type_map.get('chart', []) if n.get('id')]
-            
+            stat_nodes = [n for n in node_type_map.get('statcard', []) if n.get('id')]
+
             # Get pre-rendered images from database
             for chart_node in chart_nodes:
                 chart_id = chart_node.get('id')
@@ -5081,6 +5083,88 @@ def export_dashboard_pre_rendered(user_id):
                     image_files[image_key] = image_file_path
                     image_path_found = True
                     app.logger.info(f"Using database image for chart: {chart_id}")
+        
+        for node in node_type_map.get('datatable', []):
+            node_id = node.get('id')
+            if not node_id:
+                continue
+                
+            # Construct image key and file path
+            image_key = f"datatable_{node_id}"
+            local_img_path = os.path.join('static', 'data_table_images', f"{image_key}.png")
+            
+            if os.path.exists(local_img_path):
+                # Copy to temp directory
+                temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
+                import shutil
+                shutil.copy2(local_img_path, temp_img_path)
+                
+                # Store file path for layout
+                image_files[image_key] = temp_img_path
+                app.logger.info(f"Using local data table image: {local_img_path}")
+            else:
+                # If local file doesn't exist and we have data, generate it on-the-fly
+                data_table_info = next((table for table in data.get('data_table_data', []) if table.get('id') == node_id), None)
+                if data_table_info:
+                    try:
+                        img_path = generate_data_table_image(data_table_info)
+                        temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
+                        import shutil
+                        if img_path != temp_img_path:  # Only copy if paths are different
+                            shutil.copy2(img_path, temp_img_path)
+                        image_files[image_key] = temp_img_path
+                        app.logger.info(f"Generated data table image on-the-fly: {node_id}")
+                    except Exception as e:
+                        app.logger.error(f"Error generating data table image: {str(e)}")
+        
+
+        # Process stat cards
+            for stat_node in stat_nodes:
+                stat_id = stat_node.get('id')
+                if not stat_id:
+                    continue
+                image_key = f"statcard_{stat_id}"
+                
+                # First check if local file exists
+                local_img_path = os.path.join('static', 'stat_card_images', f"{image_key}.png")
+                if os.path.exists(local_img_path):
+                    # Copy to temp dir
+                    temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
+                    import shutil
+                    shutil.copy2(local_img_path, temp_img_path)
+                    image_files[image_key] = temp_img_path
+                    app.logger.info(f"Using local stat card image: {local_img_path}")
+                    continue
+                
+                # Check database
+                db_cursor.execute("""
+                    SELECT image_blob 
+                    FROM graph_cache 
+                    WHERE graph_id = ? AND dashboard_name = ? AND isImageSuccess = 1
+                """, (image_key, dashboard_name))
+                
+                result = db_cursor.fetchone()
+                if result and result[0]:
+                    # Save to temporary file
+                    image_file_path = os.path.join(temp_dir, f"{image_key}.png")
+                    with open(image_file_path, 'wb') as f:
+                        f.write(result[0])
+                    image_files[image_key] = image_file_path
+                    app.logger.info(f"Using database image for stat card: {stat_id}")
+                    continue
+                
+                # Generate on-the-fly if we have data
+                stat_card_info = next((card for card in stat_card_data if card.get('id') == stat_id), None)
+                if stat_card_info:
+                    try:
+                        image_data, img_path = generate_stat_card_image(stat_card_info)
+                        temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
+                        with open(temp_img_path, 'wb') as f:
+                            f.write(image_data)
+                        image_files[image_key] = temp_img_path
+                        app.logger.info(f"Generated stat card image on-the-fly: {stat_id}")
+                    except Exception as e:
+                        app.logger.error(f"Error generating stat card image: {str(e)}")
         
         # Fetch non-chart elements (which would use captureElementAsImage on frontend)
         non_chart_images = data.get('node_images', {})
@@ -5344,6 +5428,7 @@ def export_dashboard_mdx(user_id):
         # Get node images and positions
         node_images = data.get('node_images', {})
         node_positions = data.get('node_positions', {})
+        stat_card_data = data.get('stat_card_data', [])
         
         app.logger.info(f"Exporting dashboard as MDX with {len(node_images)} images")
         
@@ -5384,6 +5469,73 @@ def export_dashboard_mdx(user_id):
             'statcard': node_positions.get('statCards', [])
         }
         
+        stat_cards_dir = os.path.join('static', 'stat_card_images')
+        if os.path.exists(stat_cards_dir):
+            for node in node_type_map.get('datatable', []):
+                node_id = node.get('id')
+                if not node_id:
+                    continue
+
+                image_key = f"datatable_{node_id}"
+                local_img_path = os.path.join('static', 'data_table_images', f"{image_key}.png")
+
+                if os.path.exists(local_img_path):
+                    # Copy to MDX assets directory
+                    mdx_img_path = os.path.join(mdx_assets_dir, f"{image_key}.png")
+                    import shutil
+                    shutil.copy2(local_img_path, mdx_img_path)
+
+                    # Store relative path for MDX
+                    image_files[image_key] = f"mdx_assets_{export_id}/{image_key}.png"
+                    app.logger.info(f"Using local image for {image_key}")
+                else:
+                    # If local file doesn't exist and we have data, generate it on-the-fly
+                    data_table_info = next((table for table in data.get('data_table_data', []) if table.get('id') == node_id), None)
+                    if data_table_info:
+                        try:
+                            img_path = generate_data_table_image(data_table_info)
+                            mdx_img_path = os.path.join(mdx_assets_dir, f"{image_key}.png")
+                            import shutil
+                            if img_path != mdx_img_path:  # Only copy if paths are different
+                                shutil.copy2(img_path, mdx_img_path)
+                            image_files[image_key] = f"mdx_assets_{export_id}/{image_key}.png"
+                            app.logger.info(f"Generated image for {image_key}")
+                        except Exception as e:
+                            app.logger.error(f"Error generating data table image: {str(e)}")
+
+            for node in node_type_map.get('statcard', []):
+                node_id = node.get('id')
+                if not node_id:
+                    continue
+
+                image_key = f"statcard_{node_id}"
+                local_img_path = os.path.join('static', 'stat_card_images', f"{image_key}.png")
+
+                if os.path.exists(local_img_path):
+                    # Copy to MDX assets directory
+                    mdx_img_path = os.path.join(mdx_assets_dir, f"{image_key}.png")
+                    import shutil
+                    shutil.copy2(local_img_path, mdx_img_path)
+
+                    # Store relative path for MDX
+                    image_files[image_key] = f"mdx_assets_{export_id}/{image_key}.png"
+                    app.logger.info(f"Using local image for {image_key}")
+                else:
+                    # If local file doesn't exist and we have data, generate it on-the-fly
+                    stat_card_info = next((card for card in stat_card_data if card.get('id') == node_id), None)
+                    if stat_card_info:
+                        try:
+                            img_path = generate_stat_card_image(stat_card_info)
+                            mdx_img_path = os.path.join(mdx_assets_dir, f"{image_key}.png")
+                            import shutil
+                            if img_path != mdx_img_path:  # Only copy if paths are different
+                                shutil.copy2(img_path, mdx_img_path)
+                            image_files[image_key] = f"mdx_assets_{export_id}/{image_key}.png"
+                            app.logger.info(f"Generated image for {image_key}")
+                        except Exception as e:
+                            app.logger.error(f"Error generating stat card image: {str(e)}")
+        
+
         # First, check for pre-rendered chart images in static/chart_images
         charts_dir = os.path.join('static', 'chart_images')
         if os.path.exists(charts_dir):
@@ -5637,7 +5789,215 @@ def export_dashboard_mdx(user_id):
         app.logger.error(f"Error exporting dashboard to MDX: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
+def generate_data_table_image(data_table_data):
+    """
+    Generate an image of a data table using the HTML template.
+    Returns local file path only (doesn't store in database)
+    """
+    import imgkit
+    import os
+    from string import Template
+    
+    # Create directories if they don't exist
+    temp_dir = os.path.join('static', 'data_table_images')
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    # Generate file paths
+    table_id = data_table_data.get('id', str(uuid.uuid4()))
+    html_path = os.path.join(temp_dir, f"data_table_{table_id}.html")
+    img_path = os.path.join(temp_dir, f"datatable_{table_id}.png")
+    
+    # Read the HTML template
+    with open('dt.html', 'r') as template_file:
+        template_html = template_file.read()
+    
+    # Get data table values
+    title = data_table_data.get('title', 'Data Table')
+    columns = data_table_data.get('columns', [])
+    data = data_table_data.get('data', [])
+    
+    # Limit the number of rows to display for better rendering
+    max_rows = 10
+    display_data = data[:max_rows]
+    
+    # Create rows HTML
+    rows_html = ""
+    for row in display_data:
+        row_html = "<tr>"
+        for col in columns:
+            cell_value = row.get(col, "")
+            row_html += f"<td>{cell_value}</td>"
+        row_html += "</tr>"
+        rows_html += row_html
+    
+    # Create columns HTML
+    columns_html = ""
+    for col in columns:
+        columns_html += f"<th>{col}</th>"
+    
+    # Calculate pagination text
+    total_rows = len(data)
+    showing_to = min(max_rows, total_rows)
+    pagination_text = f"Showing 1 to {showing_to} of {total_rows} entries"
+    
+    # Replace placeholders in template
+    modified_html = template_html
+    
+    # Replace table title
+    modified_html = modified_html.replace('<div class="table-title">Data Table</div>', f'<div class="table-title">{title}</div>')
+    
+    # Replace table headers
+    thead_pattern = '<tr>\n          <th>Petal width</th>\n          <th>Petal length</th>\n        </tr>'
+    thead_replacement = f'<tr>\n          {columns_html}\n        </tr>'
+    modified_html = modified_html.replace(thead_pattern, thead_replacement)
+    
+    # Replace table rows
+    tbody_pattern = '<tr><td>0.2</td><td>1.4</td></tr>\n        <tr><td>0.2</td><td>1.4</td></tr>\n        <tr><td>0.2</td><td>1.3</td></tr>\n        <tr><td>0.2</td><td>1.5</td></tr>\n        <tr><td>0.2</td><td>1.4</td></tr>\n        <tr><td>0.4</td><td>1.7</td></tr>\n        <tr><td>0.3</td><td>1.4</td></tr>\n        <tr><td>0.2</td><td>1.5</td></tr>\n        <tr><td>0.2</td><td>1.4</td></tr>\n        <tr><td>0.1</td><td>1.5</td></tr>'
+    modified_html = modified_html.replace(tbody_pattern, rows_html)
+    
+    # Replace pagination text
+    modified_html = modified_html.replace('<div>Showing 1 to 10 of 50 entries</div>', f'<div>{pagination_text}</div>')
+    
+    # Replace download filename
+    modified_html = modified_html.replace('data-table.png', f'datatable_{table_id}.png')
+    
+    # Also update the JavaScript data array to match our actual data
+    js_data_pattern = "const data = [\n        ['0.2', '1.4'],\n        ['0.2', '1.4'],\n        ['0.2', '1.3'],\n        ['0.2', '1.5'],\n        ['0.2', '1.4'],\n        ['0.4', '1.7'],\n        ['0.3', '1.4'],\n        ['0.2', '1.5'],\n        ['0.2', '1.4'],\n        ['0.1', '1.5']\n      ];"
+    
+    js_data_rows = []
+    for row in display_data:
+        js_row = "["
+        for col in columns:
+            cell_value = str(row.get(col, ""))
+            js_row += f"'{cell_value}', "
+        js_row = js_row.rstrip(", ") + "]"
+        js_data_rows.append(js_row)
         
+    js_data_replacement = "const data = [\n        " + ",\n        ".join(js_data_rows) + "\n      ];"
+    modified_html = modified_html.replace(js_data_pattern, js_data_replacement)
+    
+    # Update the column headers in JavaScript too
+    js_header_positions = []
+    column_width = "tableWidth / " + str(len(columns))
+    for i, col in enumerate(columns):
+        position = f"{i} * {column_width} + 20"
+        js_header_positions.append((col, position))
+    
+    js_header_texts = ""
+    for col, pos in js_header_positions:
+        js_header_texts += f'ctx.fillText(\'{col}\', {pos}, 75);\n      '
+    
+    js_header_pattern = "ctx.fillText('Petal width', 20, 75);\n      ctx.fillText('Petal length', tableWidth / 2, 75);"
+    modified_html = modified_html.replace(js_header_pattern, js_header_texts.rstrip())
+    
+    # Update the row drawing in JavaScript too
+    js_row_code = ""
+    for i, col in enumerate(columns):
+        position = f"{i} * {column_width} + 20"
+        js_row_code += f'ctx.fillText(row[{i}], {position}, y);\n        '
+    
+    js_row_pattern = "ctx.fillText(row[0], 20, y);\n        ctx.fillText(row[1], tableWidth / 2, y);"
+    modified_html = modified_html.replace(js_row_pattern, js_row_code.rstrip())
+    
+    # Write the modified HTML content to file
+    with open(html_path, 'w', encoding='utf-8') as html_file:
+        html_file.write(modified_html)
+    
+    try:
+        # Configure imgkit with options for better rendering
+        options = {
+            'width': 800,  # Wider for data tables
+            'height': 600,
+            'quality': 100,
+            'enable-javascript': '',
+            'javascript-delay': 1000,
+            'no-stop-slow-scripts': '',
+            'disable-smart-width': ''
+        }
+        
+        # Generate the image
+        imgkit.from_file(html_path, img_path, options=options)
+        
+        app.logger.info(f"Successfully generated data table image: {img_path}")
+        return img_path  # Just return the path, not the image data
+        
+    except Exception as e:
+        app.logger.error(f"Error generating data table image: {str(e)}")
+        raise
+
+def generate_stat_card_image(stat_card_data):
+    """
+    Generate an image of a stat card using the HTML template.
+    Returns local file path only (doesn't store in database)
+    """
+    import imgkit
+    import os
+    from string import Template
+    
+    # Create directories if they don't exist
+    temp_dir = os.path.join('static', 'stat_card_images')
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    # Generate file paths
+    card_id = stat_card_data.get('id', str(uuid.uuid4()))
+    html_path = os.path.join(temp_dir, f"stat_card_{card_id}.html")
+    img_path = os.path.join(temp_dir, f"statcard_{card_id}.png")
+    
+    # Read the HTML template
+    with open('stat_card.html', 'r') as template_file:
+        template_html = template_file.read()
+    
+    # Get stat card values
+    title = stat_card_data.get('title', 'Stat Card')
+    value = stat_card_data.get('value', 'N/A')
+    
+    # Determine color based on stat type
+    stat_type = stat_card_data.get('statType', 'count')
+    if stat_type == 'count':
+        color = '#0ea5e9'  # Blue
+    elif stat_type == 'mean' or stat_type == 'average':
+        color = '#10b981'  # Green
+    elif stat_type == 'max':
+        color = '#ef4444'  # Red
+    elif stat_type == 'min':
+        color = '#8b5cf6'  # Purple
+    elif stat_type == 'sum':
+        color = '#f59e0b'  # Yellow
+    else:
+        color = '#64748b'  # Gray
+    
+    # Apply the template substitutions
+    html_content = template_html.replace('Average Sepal Length', title)
+    html_content = html_content.replace('5.01', str(value))
+    html_content = html_content.replace('#0ea5e9', color)
+    html_content = html_content.replace('average-sepal-length.png', f"statcard_{card_id}.png")
+    
+    # Write the HTML content to the file
+    with open(html_path, 'w', encoding='utf-8') as html_file:
+        html_file.write(html_content)
+    
+    try:
+        # Configure imgkit with options for better rendering
+        options = {
+            'width': 270,
+            'height': 110,
+            'quality': 100,
+            'enable-javascript': '',
+            'javascript-delay': 1000,
+            'no-stop-slow-scripts': '',
+            'disable-smart-width': ''
+        }
+        
+        # Generate the image
+        imgkit.from_file(html_path, img_path, options=options)
+        
+        app.logger.info(f"Successfully generated stat card image: {img_path}")
+        return img_path  # Just return the path, not the image data
+        
+    except Exception as e:
+        app.logger.error(f"Error generating stat card image: {str(e)}")
+        raise
+
 def generate_node_mdx(node, use_relative_positioning):
     """Generate MDX content for a node."""
     node_type = node.get('type')
@@ -5664,7 +6024,7 @@ def generate_node_mdx(node, use_relative_positioning):
             mdx_lines.append(f"      <h3 className=\"text-lg font-semibold mb-1\">{title}</h3>")
             if description:
                 mdx_lines.append(f"      <p className=\"text-sm text-gray-500 mb-3\">{description}</p>")
-            mdx_lines.append(f"      <img src=\"/{image_path}\" alt=\"{title}\" className=\"w-full\" />")
+            mdx_lines.append(f"      <img src=\"./{image_path}\" alt=\"{title}\" className=\"w-full\" />")
             mdx_lines.append(f"    </div>")
         else:
             mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
@@ -5682,7 +6042,7 @@ def generate_node_mdx(node, use_relative_positioning):
         # If we have an image, use it, otherwise use the content directly
         if image_path:
             mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
-            mdx_lines.append(f"      <img src=\"/{image_path}\" alt=\"Text content\" className=\"w-full\" />")
+            mdx_lines.append(f"      <img src=\"./{image_path}\" alt=\"Text content\" className=\"w-full\" />")
             mdx_lines.append(f"    </div>")
         else:
             mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
@@ -5704,7 +6064,7 @@ def generate_node_mdx(node, use_relative_positioning):
             # Use image if available
             mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
             mdx_lines.append(f"      <h3 className=\"text-lg font-semibold mb-3\">{title}</h3>")
-            mdx_lines.append(f"      <img src=\"/{image_path}\" alt=\"{title}\" className=\"w-full\" />")
+            mdx_lines.append(f"      <img src=\"./{image_path}\" alt=\"{title}\" className=\"w-full\" />")
             mdx_lines.append(f"    </div>")
         else:
             # Otherwise try to generate a markdown table
@@ -5757,7 +6117,7 @@ def generate_node_mdx(node, use_relative_positioning):
         if image_path:
             mdx_lines.append(f"    <div className=\"border rounded-lg p-4\">")
             mdx_lines.append(f"      <h3 className=\"text-lg font-semibold mb-2\">{title}</h3>")
-            mdx_lines.append(f"      <img src=\"/{image_path}\" alt=\"{title}\" className=\"w-full\" />")
+            mdx_lines.append(f"      <img src=\"./{image_path}\" alt=\"{title}\" className=\"w-full\" />")
             mdx_lines.append(f"    </div>")
         else:
             mdx_lines.append(f"    <div className=\"border rounded-lg p-4 bg-blue-50\">")
@@ -5814,7 +6174,8 @@ def save_dashboard(user_id, dashboard_id):
         data = request.json
         dashboard_name = data.get('dashboard_name', 'Unnamed Dashboard')
         charts = data.get('charts', [])
-        
+        stat_cards = data.get('stat_cards', [])
+        data_tables = data.get('data_tables', [])
         app.logger.info(f"Saving dashboard {dashboard_id} with {len(charts)} charts")
         
         # Connect to database
@@ -5826,7 +6187,12 @@ def save_dashboard(user_id, dashboard_id):
             'success': 0,
             'failed': 0,
             'chart_ids': [],
-            'image_paths': []  # Store local image paths
+            'image_paths': [],
+            
+            'stat_card_ids': [],
+            'stat_card_paths': [],  
+            'data_table_ids': [],
+            'data_table_paths': []
         }
         
         # Process each chart
@@ -5891,6 +6257,48 @@ def save_dashboard(user_id, dashboard_id):
                     WHERE graph_id = ?
                 """, (dashboard_name, chart_id))
         
+        # Process stat cards
+        for stat_card in stat_cards:
+            card_id = stat_card.get('id')
+            
+            if not card_id:
+                app.logger.warning(f"Stat card missing ID, skipping")
+                results['failed'] += 1
+                continue
+            
+            try:
+                # Generate image and save to local file system only
+                img_path = generate_stat_card_image(stat_card)
+                
+                results['success'] += 1
+                results['stat_card_ids'].append(card_id)
+                results['stat_card_paths'].append(img_path)
+                
+            except Exception as e:
+                app.logger.error(f"Error capturing stat card {card_id}: {str(e)}")
+                app.logger.error(traceback.format_exc())
+                results['failed'] += 1
+        
+        for data_table in data_tables:
+            table_id = data_table.get('id')
+            
+            if not table_id:
+                app.logger.warning(f"Data table missing ID, skipping")
+                results['failed'] += 1
+                continue
+            
+            try:
+                # Generate image and save to local file system only
+                img_path = generate_data_table_image(data_table)
+                
+                results['success'] += 1
+                results['data_table_ids'].append(table_id)
+                results['data_table_paths'].append(img_path)
+                
+            except Exception as e:
+                app.logger.error(f"Error capturing data table {table_id}: {str(e)}")
+                app.logger.error(traceback.format_exc())
+                results['failed'] += 1 
         conn.commit()
         
         return jsonify({
