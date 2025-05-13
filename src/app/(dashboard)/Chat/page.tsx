@@ -1293,7 +1293,7 @@ const FileSelector: React.FC<{
     const fileType = file.name.split('.').pop()?.toLowerCase();
 
     // Check if file type is supported
-    if (!['csv', 'db', 'sqlite', 'sqlite3', 'json', 'xml', 'pdf', 'docx', 'doc', 'txt'].includes(fileType || '')) {
+    if (!['csv', 'db', 'sqlite', 'sqlite3', 'json', 'xml', 'pdf', 'docx', 'doc', 'txt', 'xlsx', 'xls'].includes(fileType || '')) {
       setError('Unsupported file type. Please upload CSV, JSON, XML, SQLite database, or document files (PDF, DOCX, DOC, TXT).');
       return;
     }
@@ -1394,7 +1394,7 @@ const FileSelector: React.FC<{
                 <Input
                   id="file-upload"
                   type="file"
-                  accept=".csv,.db,.sqlite,.sqlite3,.json,.xml"
+                  accept=".csv,.db,.xlsx,.sqlite,.sqlite3,.json,.xml,.pdf,.txt,.docx,.doc"
                   onChange={handleFileUpload}
                   disabled={uploadingFile}
                 />
