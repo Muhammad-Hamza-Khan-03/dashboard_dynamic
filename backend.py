@@ -7276,9 +7276,10 @@ def check_wkhtmltopdf_installed():
 
 if __name__ == '__main__':
     check_wkhtmltopdf_installed()
-    app.run(debug=False, port=5000)
     init_db()   
     # Start the background worker
     start_background_worker()
     init_stats_db()   
     initialize_nltk()
+    app.run(debug=False, port=5000)
+    
