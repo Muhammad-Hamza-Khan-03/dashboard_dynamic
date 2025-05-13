@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Table with Download Feature</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #ffffff;
+      padding: 20px;
+    }
+    
+    .data-table-container {
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      width: 600px;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 20px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .table-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1e3a8a;
+    }
+    
+    .close-button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #6b7280;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    th {
+      text-align: left;
+      padding: 12px 20px;
+      color: #38bdf8;
+      font-weight: 500;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    td {
+      padding: 10px 20px;
+      border-bottom: 1px solid #e5e7eb;
+      color: #4b5563;
+    }
+    
+    tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 20px;
+      border-top: 1px solid #e5e7eb;
+      color: #6b7280;
+      font-size: 14px;
+    }
+    
+    .pagination-controls {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .pagination-button {
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #e5e7eb;
+      background-color: white;
+      color: #6b7280;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .pagination-button:hover {
+      background-color: #f9fafb;
+    }
+    
+    .download-button {
+      background-color: #0ea5e9;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      margin-top: 15px;
+    }
+    
+    .download-button:hover {
+      background-color: #0284c7;
+    }
+    
+    #generatedImage {
+      margin-top: 20px;
+      max-width: 100%;
+      display: none;
+    }
+    
+    .status-message {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #4b5563;
+    }
+  </style>
+</head>
+<body>
+  <div class="data-table-container" id="dataTable">
+    <div class="table-header">
+      <div class="table-title">Data Table</div>
+      <button class="close-button">×</button>
+    </div>
+    
+    <table>
+      <thead>
+        <tr>
+          <th>Petal width</th>
+          <th>Petal length</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>0.2</td><td>1.4</td></tr>
+        <tr><td>0.2</td><td>1.4</td></tr>
+        <tr><td>0.2</td><td>1.3</td></tr>
+        <tr><td>0.2</td><td>1.5</td></tr>
+        <tr><td>0.2</td><td>1.4</td></tr>
+        <tr><td>0.4</td><td>1.7</td></tr>
+        <tr><td>0.3</td><td>1.4</td></tr>
+        <tr><td>0.2</td><td>1.5</td></tr>
+        <tr><td>0.2</td><td>1.4</td></tr>
+        <tr><td>0.1</td><td>1.5</td></tr>
+      </tbody>
+    </table>
+    
+    <div class="pagination">
+      <div>Showing 1 to 10 of 50 entries</div>
+      <div class="pagination-controls">
+        <button class="pagination-button">&lt;</button>
+        <button class="pagination-button">&gt;</button>
+      </div>
+    </div>
+  </div>
+  
+  <button class="download-button" onclick="downloadTable()">Download as PNG</button>
+  <div class="status-message" id="statusMessage"></div>
+  <img id="generatedImage" alt="Generated Table" />
+  
+  <script>
+    function downloadTable() {
+      const table = document.getElementById('dataTable');
+      const statusMessage = document.getElementById('statusMessage');
+      const generatedImage = document.getElementById('generatedImage');
+      
+      // Get the table's dimensions - ensuring we're getting the full table
+      const tableWidth = table.offsetWidth;
+      // Making sure we capture the full table height
+      const tableHeight = table.offsetHeight;
+      
+      // Create a canvas that matches the exact table dimensions
+      const canvas = document.createElement('canvas');
+      canvas.width = tableWidth;
+      canvas.height = tableHeight;
+      
+      const ctx = canvas.getContext('2d');
+      
+      // Draw rounded rectangle for the whole table container
+      ctx.fillStyle = '#ffffff';
+      const radius = 8; // Border radius
+      
+      // Create rounded rectangle path
+      ctx.beginPath();
+      ctx.moveTo(radius, 0);
+      ctx.lineTo(tableWidth - radius, 0);
+      ctx.arcTo(tableWidth, 0, tableWidth, radius, radius);
+      ctx.lineTo(tableWidth, tableHeight - radius);
+      ctx.arcTo(tableWidth, tableHeight, tableWidth - radius, tableHeight, radius);
+      ctx.lineTo(radius, tableHeight);
+      ctx.arcTo(0, tableHeight, 0, tableHeight - radius, radius);
+      ctx.lineTo(0, radius);
+      ctx.arcTo(0, 0, radius, 0, radius);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Add shadow
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.05)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 2;
+      ctx.fill(); // Fill again with shadow to create box-shadow effect
+      
+      // Reset shadow
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      
+      // Draw the table header
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, tableWidth, 50);
+      
+      // Draw header text
+      ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+      ctx.fillStyle = '#1e3a8a';
+      ctx.textAlign = 'left';
+      ctx.fillText('Data Table', 20, 30);
+      
+      // Draw close button
+      ctx.font = '20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+      ctx.fillStyle = '#6b7280';
+      ctx.textAlign = 'right';
+      ctx.fillText('×', tableWidth - 20, 30);
+      
+      // Draw header border
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 50);
+      ctx.lineTo(tableWidth, 50);
+      ctx.stroke();
+      
+      // Draw table headers
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+      ctx.fillStyle = '#38bdf8';
+      ctx.textAlign = 'left';
+      ctx.fillText('Petal width', 20, 75);
+      ctx.fillText('Petal length', tableWidth / 2, 75);
+      
+      // Draw header border
+      ctx.beginPath();
+      ctx.moveTo(0, 90);
+      ctx.lineTo(tableWidth, 90);
+      ctx.stroke();
+      
+      // Draw table rows
+      const data = [
+        ['0.2', '1.4'],
+        ['0.2', '1.4'],
+        ['0.2', '1.3'],
+        ['0.2', '1.5'],
+        ['0.2', '1.4'],
+        ['0.4', '1.7'],
+        ['0.3', '1.4'],
+        ['0.2', '1.5'],
+        ['0.2', '1.4'],
+        ['0.1', '1.5']
+      ];
+      
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+      ctx.fillStyle = '#4b5563';
+      
+      let y = 120;
+      data.forEach(row => {
+        ctx.fillText(row[0], 20, y);
+        ctx.fillText(row[1], tableWidth / 2, y);
+        
+        // Draw row border
+        ctx.beginPath();
+        ctx.moveTo(0, y + 15);
+        ctx.lineTo(tableWidth, y + 15);
+        ctx.stroke();
+        
+        y += 40;
+      });
+      
+      // Draw pagination
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+      ctx.fillStyle = '#6b7280';
+      ctx.textAlign = 'left';
+      ctx.fillText('Showing 1 to 10 of 50 entries', 20, tableHeight - 20);
+      
+      // Draw pagination buttons
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(tableWidth - 80, tableHeight - 35, 30, 30);
+      ctx.fillRect(tableWidth - 40, tableHeight - 35, 30, 30);
+      
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.strokeRect(tableWidth - 80, tableHeight - 35, 30, 30);
+      ctx.strokeRect(tableWidth - 40, tableHeight - 35, 30, 30);
+      
+      ctx.fillStyle = '#6b7280';
+      ctx.fillText('<', tableWidth - 70, tableHeight - 15);
+      ctx.fillText('>', tableWidth - 30, tableHeight - 15);
+      
+      // Create a direct download
+      try {
+        const imageUrl = canvas.toDataURL('image/png', 1.0);
+        
+        // Create and trigger download
+        const link = document.createElement('a');
+        link.href = imageUrl;
+        link.download = 'data-table.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Show the generated image
+        generatedImage.src = imageUrl;
+        generatedImage.style.display = 'block';
+        
+        statusMessage.textContent = "Table generated! If download didn't start automatically, right-click the image below and select 'Save Image As...'";
+      } catch (err) {
+        statusMessage.textContent = "Error generating table: " + err.message;
+      }
+    }
+  </script>
+</body>
+</html>

@@ -713,6 +713,8 @@ const BoardMain: React.FC = () => {
     currentDashboardId={selectedDashboard}
     currentDashboardName={dashboards.find(d => d.id === selectedDashboard)?.name || 'Dashboard'}
     charts={charts}
+    statCards={statCards}
+    dataTables={dataTables}
     disabled={!selectedDashboard}
   />
 
