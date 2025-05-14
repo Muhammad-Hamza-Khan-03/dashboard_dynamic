@@ -171,12 +171,12 @@ const isInitialRender = useRef(true);
     // Set initial loading state
     if (isInitialRender.current) {
       isInitialRender.current = false;
-      setInitialLoading(true);
+      // setInitialLoading(true);
       
       // Set a timeout to ensure loading screen shows for at least 1.5 seconds
       // This provides a smoother transition even if data loads quickly
       const minLoadingTime = setTimeout(() => {
-        setInitialLoading(false);
+        // setInitialLoading(false);
       }, 1500);
       
       return () => clearTimeout(minLoadingTime);
@@ -186,17 +186,17 @@ const isInitialRender = useRef(true);
   useEffect(() => {
     // When fileList is loaded and we have user data, turn off initial loading state
     if (user && fileList && !fileListLoading) {
-      setInitialLoading(false);
+      // setInitialLoading(false);
     }
   }, [user, fileList, fileListLoading]);
 
   useEffect(() => {
     if (loading) {
       // If we're loading data after initial render, show loading state
-      setInitialLoading(true);
+      // setInitialLoading(true);
     } else if (data.length > 0 || unstructuredContent) {
       // Data has loaded, hide loading screen
-      setInitialLoading(false);
+      // setInitialLoading(false);
     }
   }, [loading, data, unstructuredContent]);
 
@@ -331,7 +331,7 @@ const fetchFileData = useCallback(async (fileId: string, filename: string, page:
   }
 
   setLoading(true);
-  setInitialLoading(true); // Show loading screen while fetching data
+  // setInitialLoading(true); // Show loading screen while fetching data
   setError(null);
 
   try {
@@ -1132,9 +1132,9 @@ const handleColumnChange = useCallback((
     );
   }
 
-  if (initialLoading) {
-    return <LoadingScreen message="Loading your data dashboard..." />;
-  }
+  // if (initialLoading) {
+  //   return <LoadingScreen message="Loading your data dashboard..." />;
+  // }
   return (
     // Main container - Adding a subtle background and better spacing
     <div className="max-w-screen-2xl mx-auto w-full pb-10 min-h-screen p-6 bg-gray-50">

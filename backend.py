@@ -7953,7 +7953,7 @@ def check_wkhtmltopdf_installed():
         app.logger.error("Please install wkhtmltopdf using: apt-get install wkhtmltopdf")
         return False
 
-def create_app():
+if __name__ == '__main__':
     check_wkhtmltopdf_installed()
     init_db()   
     # Start the background worker
