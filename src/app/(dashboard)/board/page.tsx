@@ -3,18 +3,16 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import useFilesList from '@/features/sqlite/api/file-list';
-import { handleUseCSV } from '@/features/sqlite/api/file-content';
+import { handleUseCSV,TableInfo } from '@/features/sqlite/api/file-content';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, FileText, Loader, Plus, PlusCircle, Type } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import DraggableChart from './drag-chart';
 import ChartModal from './chartmodal';
 import FlowBoard from './flow-board';
 import { ThemeProvider, ThemeSelector } from './theme-provider';
 import FileSelectionPopover from './FileSelectionPopover';
-import { useNodesState, useEdgesState } from '@xyflow/react';
 import { Table, Database } from 'lucide-react';
 import StatCardModal from './stat-Card-Modal';
 import DataTableModal from './dataTableSelection';
@@ -22,8 +20,8 @@ import SaveDashboardButton from './save-dashboard-button';
 import { BrainCircuit } from 'lucide-react';
 import AiDashboardModal, { AiDashboardConfig } from './ai-dashboard/aiDashboardModal'
 import { toast } from '@/components/ui/use-toast';
-import EnhancedExportModal from './EnhancedExportModal';
 import EnhancedExportButton from './EnhancedExportButton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 // Interfaces
 interface Position {
   x: number;
@@ -122,6 +120,10 @@ const BoardMain: React.FC = () => {
 
   const [showAiDashboardModal, setShowAiDashboardModal] = useState<boolean>(false);
 
+  const [sheetSelectOpen, setSheetSelectOpen] = useState<boolean>(false);
+const [availableSheets, setAvailableSheets] = useState<TableInfo[]>([]);
+const [parentFileType, setParentFileType] = useState<string>('');
+const [parentFileId, setParentFileId] = useState<string | null>(null);
   // const [nodes, setNodes] = useNodesState([]);
   // const [edges, setEdges] = useEdgesState([]);
 
@@ -438,42 +440,55 @@ const BoardMain: React.FC = () => {
     ));
   }, []);
   // File selection handler
-  const handleFileSelection = useCallback(async (fileId: string) => {
-    if (!userId) return;
+ const handleFileSelection = useCallback(async (fileId: string) => {
+  if (!userId) return;
 
-    setDataLoading(true);
-    setDataError(null);
+  setDataLoading(true);
+  setDataError(null);
 
-    try {
-      await handleUseCSV(
-        fileId,
-        userId,
-        setDataLoading,
-        setDataError,
-        (data: Record<string, unknown>[]) => {
-          if (data.length > 0) {
-            const headers = Object.keys(data[0]);
-            const columns: Column[] = headers.map(header => ({
-              header,
-              accessorKey: header,
-              isNumeric: typeof data[0][header] === 'number'
-            }));
-            setSelectedFile({
-              id: fileId,
-              data,
-              columns
-            });
-          }
+  try {
+    await handleUseCSV(
+      fileId,
+      userId,
+      setDataLoading,
+      setDataError,
+      (data: Record<string, unknown>[]) => {
+        if (data.length > 0) {
+          const headers = Object.keys(data[0]);
+          const columns: Column[] = headers.map(header => ({
+            header,
+            accessorKey: header,
+            isNumeric: typeof data[0][header] === 'number'
+          }));
+          setSelectedFile({
+            id: fileId,
+            data,
+            columns
+          });
         }
-      );
-    } catch (error) {
-      console.error('Error loading file:', error);
-      setDataError(error instanceof Error ? error.message : 'Error loading file');
-    } finally {
-      setDataLoading(false);
-    }
-  }, [userId]);
+      },
+      // Add this callback to handle parent files with tables/sheets
+      (tables: TableInfo[], fileType: string) => {
+        setAvailableSheets(tables);
+        setParentFileType(fileType);
+        setParentFileId(fileId);
+        setSheetSelectOpen(true);
+      }
+    );
+  } catch (error) {
+    console.error('Error loading file:', error);
+    setDataError(error instanceof Error ? error.message : 'Error loading file');
+  } finally {
+    setDataLoading(false);
+  }
+}, [userId]);
 
+const handleSheetSelection = useCallback(async (sheetId: string) => {
+  setSheetSelectOpen(false);
+  
+  // Now load the selected sheet
+  await handleFileSelection(sheetId);
+}, [handleFileSelection]);
 
   const handleDataTablePositionChange = useCallback((id: string, position: Position) => {
     setDataTables(prev => prev.map(table =>
@@ -888,7 +903,33 @@ const BoardMain: React.FC = () => {
           </div>
         )}
 
-        
+        {sheetSelectOpen && (
+  <Dialog open={sheetSelectOpen} onOpenChange={setSheetSelectOpen}>
+    <DialogContent className="sm:max-w-[500px]">
+      <DialogHeader>
+        <DialogTitle>Select a {parentFileType === 'xlsx' || parentFileType === 'xls' ? 'sheet' : 'table'}</DialogTitle>
+      </DialogHeader>
+      <div className="max-h-[400px] overflow-y-auto py-4">
+        <div className="space-y-2">
+          {availableSheets.map((sheet) => (
+            <Button
+              key={sheet.id}
+              variant="ghost"
+              className="w-full justify-start text-left relative py-3 px-4 hover:bg-blue-50"
+              onClick={() => handleSheetSelection(sheet.id)}
+            >
+              <FileText className="h-4 w-4 mr-3 text-blue-500" />
+              <div>
+                <p className="font-medium">{sheet.name}</p>
+                <p className="text-xs text-gray-500">{sheet.full_name}</p>
+              </div>
+            </Button>
+          ))}
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>
+)}
       </div>
 
       {/* </div> */}
