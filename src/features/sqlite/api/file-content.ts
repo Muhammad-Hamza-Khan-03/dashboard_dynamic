@@ -4,13 +4,19 @@ import { toast } from "@/components/ui/use-toast";
 interface FileData {
   [key: string]: unknown;
 }
+interface TableInfo {
+  id: string;
+  name: string;
+  full_name: string;
+}
 
 export const handleUseCSV = async (
   fileId: string,
   userId: string,
   setLoading: (loading: boolean) => void,
   setError: (error: string | null) => void,
-  onUpload: (data: FileData[]) => void
+  onUpload: (data: FileData[]) => void,
+  onTablesFound?: (tables: TableInfo[], fileType: string) => void 
 ) => {
   setLoading(true);
   setError(null);
@@ -19,11 +25,35 @@ export const handleUseCSV = async (
     const response = await axios.get(`http://localhost:5000/get-file/${userId}/${fileId}`);
     const fileData = response.data;
 
-    if (!fileData || !fileData.data) {
-      throw new Error("No data found in the file");
+    if (!fileData) {
+      throw new Error("No data returned from server");
+    }
+
+    if (fileData.type === 'structured' && fileData.tables) {
+      console.log("Found parent file with tables/sheets:", fileData.tables);
+      
+      // If callback for handling tables is provided, call it
+      if (onTablesFound) {
+        onTablesFound(fileData.tables, fileData.file_type);
+        setLoading(false);
+        return;
+      } else {
+        // If no callback is provided but we have tables, show toast message
+        if (fileData.tables.length > 0) {
+          toast({
+            title: "Sheet selection required",
+            description: `This ${fileData.file_type} file contains multiple sheets. Please select a specific sheet.`,
+          });
+          setLoading(false);
+          return;
+        }
+      }
     }
 
     if (fileData.type === 'structured') {
+      if (!fileData.data) {
+        throw new Error("No data found in the file");
+      }
       // For structured data
       if (!fileData.columns) {
         throw new Error("No columns found in structured data");
@@ -52,4 +82,4 @@ export const handleUseCSV = async (
   }
 };
 
-export type { FileData };
+export type { FileData,TableInfo };

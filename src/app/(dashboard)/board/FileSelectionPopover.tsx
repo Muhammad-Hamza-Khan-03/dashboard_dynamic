@@ -35,7 +35,13 @@ const FileSelectionPopover = ({
           <Menu className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-2" side="bottom" align="start">
+      <PopoverContent 
+        className="w-[400px] p-2" 
+        side="bottom" 
+        align="start" 
+        sideOffset={5}
+        avoidCollisions={false}
+      >
         <ScrollArea className="h-[400px] pr-3">
           {loading ? (
             <div className="flex items-center justify-center py-8">

@@ -107,18 +107,18 @@ const getDataType = (value: any): DataType => {
 
   // Check string representations
   if (typeof value === 'string') {
-    // Check for time format
-    if (isValidTime(value)) {
-      return 'Time';
+  // First check for time format
+  if (isValidTime(value)) {
+    return 'Time';
+  }
+  
+  // More strict date validation for strings
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(value) && isValidDate(new Date(value))) {
+    if (value.includes('T')) {
+      return 'DateTime';
     }
-
-    // Check for ISO date format
-    if (isValidDate(new Date(value))) {
-      if (value.includes('T')) {
-        return 'DateTime';
-      }
-      return 'Date';
-    }
+    return 'Date';
+  }
 
     // Check for single character
     if (value.length === 1) {
@@ -274,10 +274,27 @@ const calculateFieldStats = (values: any[], dataType: DataType) => {
 // Helper function to calculate frequent dates
 const calculateFrequentDates = (dates: Date[]) => {
   const frequency: { [key: string]: number } = {};
-  dates.forEach(date => {
-    const key = date.toISOString();
-    frequency[key] = (frequency[key] || 0) + 1;
+  
+  // Filter out invalid dates before processing
+  const validDates = dates.filter(date => 
+    date instanceof Date && !isNaN(date.getTime())
+  );
+  
+  // Process only valid dates
+  validDates.forEach(date => {
+    try {
+      const key = date.toISOString();
+      frequency[key] = (frequency[key] || 0) + 1;
+    } catch (error) {
+      // Silently skip any date that causes an error
+      console.warn("Skipping invalid date in frequency calculation");
+    }
   });
+  
+  // If we have no valid dates, return an empty array to avoid further errors
+  if (Object.keys(frequency).length === 0) {
+    return [];
+  }
   
   return Object.entries(frequency)
     .sort((a, b) => b[1] - a[1])
