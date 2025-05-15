@@ -3274,6 +3274,67 @@ def handle_excel_upload(file, user_id, filename, c, conn):
     except Exception as e:
         app.logger.error(f"Error in handle_excel_upload: {str(e)}")
         raise
+
+@app.route('/serve-pdf/<user_id>/<file_id>', methods=['GET'])
+def serve_pdf(user_id, file_id):
+    """Serve the PDF file directly."""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Verify user has access to the file
+        c.execute("""
+            SELECT f.unique_key, f.filename
+            FROM user_files f
+            WHERE f.file_id = ? AND f.user_id = ? AND f.file_type = 'pdf'
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return "PDF not found or access denied", 404
+            
+        unique_key, filename = result
+        
+        # Get file path
+        c.execute("""
+            SELECT file_path
+            FROM unstructured_file_storage
+            WHERE file_id = ? AND unique_key = ?
+        """, (file_id, unique_key))
+        
+        path_result = c.fetchone()
+        
+        if path_result and path_result[0]:
+            file_path = path_result[0]
+            
+            # Check if file exists
+            if os.path.exists(file_path):
+                return send_file(
+                    file_path,
+                    mimetype='application/pdf',
+                    as_attachment=False,
+                    download_name=filename
+                )
+            else:
+                # Try to find the file in the static/uploads directory
+                static_path = os.path.join('static', 'uploads', f"{unique_key}.pdf")
+                if os.path.exists(static_path):
+                    return send_file(
+                        static_path,
+                        mimetype='application/pdf',
+                        as_attachment=False,
+                        download_name=filename
+                    )
+        
+        return "PDF file not found", 404
+        
+    except Exception as e:
+        app.logger.error(f"Error serving PDF: {str(e)}")
+        return str(e), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+            
 @app.route('/get-file/<user_id>/<file_id>', methods=['GET'])
 def get_file(user_id, file_id):
     page = request.args.get('page', 1, type=int)
@@ -3387,7 +3448,7 @@ def get_file(user_id, file_id):
             })
         else:  # unstructured data
             c.execute("""
-                SELECT content FROM unstructured_file_storage
+                SELECT content, file_path FROM unstructured_file_storage
                 WHERE file_id = ? AND unique_key = ?
             """, (file_id, unique_key))
             
@@ -3395,8 +3456,24 @@ def get_file(user_id, file_id):
             if not result:
                 return jsonify({'error': 'Unstructured data not found'}), 404
                 
-            content = result[0]
+            content,file_path = result
             
+            print("file_path",file_path)
+
+            if file_type == 'pdf':
+                # For PDFs, just return file metadata and path for direct access
+                pdf_url = f"{file_path}"
+                # pdf_url = "http://localhost:5000/static/uploads/9dc54c91-7597-458c-ae1f-7388c588d4df.pdf"
+                response_data = {
+                    'type': 'unstructured',
+                    'file_type': file_type,
+                    'filename': filename,
+                    'pdf_url': pdf_url,
+                    'editable': True
+                }
+                
+                return jsonify(response_data)
+
             # Special handling for JSON files
             if file_type == 'json':
                 try:
