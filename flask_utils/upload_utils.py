@@ -1,6 +1,6 @@
 import tempfile
 import traceback
-from flask import Flask, app
+from flask import current_app
 from flask_cors import CORS
 import sqlite3
 import logging
@@ -21,6 +21,8 @@ from flask_utils.task_utils import stats_task_queue
 from flask_utils.task_utils import update_task_status
 from flask_utils.statistics_utils import calculate_column_statistics_chunked, calculate_dataset_statistics_optimized
 
+# Setup a logger for this module
+logger = logging.getLogger(__name__)
 
 def handle_json_upload(file, user_id, filename, c, conn):
     """
@@ -71,9 +73,9 @@ def handle_json_upload(file, user_id, filename, c, conn):
             # Approach 1: Use pandas read_json directly
             try:
                 df = pd.read_json(file_path)
-                app.logger.info(f"Successfully read JSON file with pd.read_json: {filename}")
+                logger.info(f"Successfully read JSON file with pd.read_json: {filename}")
             except Exception as pd_error:
-                app.logger.warning(f"pd.read_json failed: {str(pd_error)}")
+                logger.warning(f"pd.read_json failed: {str(pd_error)}")
                 
                 # Approach 2: Load file with json.load and normalize
                 try:
@@ -82,46 +84,46 @@ def handle_json_upload(file, user_id, filename, c, conn):
                     
                     # Check JSON structure and normalize accordingly
                     if isinstance(json_data, list) and len(json_data) > 0 and isinstance(json_data[0], dict):
-                        app.logger.info(f"Processing JSON array with {len(json_data)} items")
+                        logger.info(f"Processing JSON array with {len(json_data)} items")
                         # Array of objects - normalize directly
                         df = pd.json_normalize(json_data)
-                        app.logger.info(f"Successfully normalized JSON array of {len(json_data)} objects")
+                        logger.info(f"Successfully normalized JSON array of {len(json_data)} objects")
                     
                     elif isinstance(json_data, dict):
-                        app.logger.info(f"Processing JSON object with {len(json_data.keys())} keys")
+                        logger.info(f"Processing JSON object with {len(json_data.keys())} keys")
                         
                         # Look for nested arrays of objects to normalize
                         array_found = False
                         for key, value in json_data.items():
                             if isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
-                                app.logger.info(f"Found array of objects in key: {key} with {len(value)} items")
+                                logger.info(f"Found array of objects in key: {key} with {len(value)} items")
                                 # Normalize with record_path for nested array
                                 df = pd.json_normalize(json_data, record_path=key)
                                 array_found = True
-                                app.logger.info(f"Successfully normalized nested array in key: {key}")
+                                logger.info(f"Successfully normalized nested array in key: {key}")
                                 break
                         
                         # If no nested arrays or normalization failed, normalize the whole object
                         if not array_found:
-                            app.logger.info("Normalizing single JSON object")
+                            logger.info("Normalizing single JSON object")
                             df = pd.json_normalize([json_data])
-                            app.logger.info("Successfully normalized single JSON object")
+                            logger.info("Successfully normalized single JSON object")
                     
                     else:
-                        app.logger.warning(f"Unsupported JSON structure for normalization")
+                        logger.warning(f"Unsupported JSON structure for normalization")
                         df = None
                 
                 except Exception as json_error:
-                    app.logger.error(f"Error parsing JSON file with json.load: {str(json_error)}")
+                    logger.error(f"Error parsing JSON file with json.load: {str(json_error)}")
                     df = None
             
             # If all approaches failed, fall back to unstructured storage
             if df is None or df.empty:
-                app.logger.warning("Could not convert JSON to structured DataFrame")
+                logger.warning("Could not convert JSON to structured DataFrame")
                 return handle_unstructured_upload(file, user_id, filename, c, conn, 'json', content=file_content)
             
             # Log successful data frame creation
-            app.logger.info(f"Successfully created DataFrame with {len(df)} rows and {len(df.columns)} columns")
+            logger.info(f"Successfully created DataFrame with {len(df)} rows and {len(df.columns)} columns")
             
             # Clean up column names by replacing dots and special characters
             df.columns = [col.replace('.', '_').replace('[', '_').replace(']', '_') for col in df.columns]
@@ -131,21 +133,21 @@ def handle_json_upload(file, user_id, filename, c, conn):
             
             # Store data in the table (handle potential SQLite limitations with large JSON)
             try:
-                app.logger.info(f"Saving DataFrame to SQL table: {table_name}")
+                logger.info(f"Saving DataFrame to SQL table: {table_name}")
                 df.to_sql(table_name, conn, if_exists='replace', index=False)
-                app.logger.info(f"Successfully saved DataFrame to SQL table: {table_name}")
+                logger.info(f"Successfully saved DataFrame to SQL table: {table_name}")
             except Exception as sql_error:
-                app.logger.error(f"Error saving to SQL: {str(sql_error)}")
+                logger.error(f"Error saving to SQL: {str(sql_error)}")
                 # If to_sql fails, try to handle common issues (like NaN values)
-                app.logger.info("Handling potential data type issues")
+                logger.info("Handling potential data type issues")
                 df = df.fillna('')
                 # Convert all columns to string to avoid type issues
                 df = df.astype(str)
-                app.logger.info("Saving DataFrame with string conversion")
+                logger.info("Saving DataFrame with string conversion")
                 df.to_sql(table_name, conn, if_exists='replace', index=False)
             
             # Insert metadata into 'user_files'
-            app.logger.info(f"Inserting metadata into user_files table")
+            logger.info(f"Inserting metadata into user_files table")
             c.execute("""
                 INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
                 VALUES (?, ?, ?, ?, ?)
@@ -153,7 +155,7 @@ def handle_json_upload(file, user_id, filename, c, conn):
             file_id = c.lastrowid
             
             # Insert mapping into 'structured_file_storage' including file path
-            app.logger.info(f"Inserting mapping into structured_file_storage table")
+            logger.info(f"Inserting mapping into structured_file_storage table")
             c.execute("""
                 INSERT INTO structured_file_storage (unique_key, file_id, table_name)
                 VALUES (?, ?, ?)
@@ -174,22 +176,22 @@ def handle_json_upload(file, user_id, filename, c, conn):
                     INSERT INTO json_file_paths (file_id, unique_key, file_path)
                     VALUES (?, ?, ?)
                 """, (file_id, unique_key, file_path))
-                app.logger.info(f"Saved file path in json_file_paths table: {file_path}")
+                logger.info(f"Saved file path in json_file_paths table: {file_path}")
             except Exception as table_error:
-                app.logger.error(f"Error with json_file_paths table: {str(table_error)}")
+                logger.error(f"Error with json_file_paths table: {str(table_error)}")
             
             conn.commit()
-            app.logger.info(f"Successfully processed JSON file: {filename}")
+            logger.info(f"Successfully processed JSON file: {filename}")
             return file_id, unique_key, table_name
             
         except Exception as e:
-            app.logger.error(f"Failed to process JSON file: {str(e)}")
+            logger.error(f"Failed to process JSON file: {str(e)}")
             traceback.print_exc()
             # If structured handling fails, try unstructured
             return handle_unstructured_upload(file, user_id, filename, c, conn, 'json', content=file_content)
         
     except Exception as e:
-        app.logger.error(f"Error handling JSON upload: {str(e)}")
+        logger.error(f"Error handling JSON upload: {str(e)}")
         traceback.print_exc()
         # If overall processing fails, try unstructured
         return handle_unstructured_upload(file, user_id, filename, c, conn, 'json')
@@ -290,11 +292,11 @@ def handle_xml_upload(file, user_id, filename, c, conn):
             return file_id, unique_key, table_name
             
         except Exception as e:
-            app.logger.error(f"Failed to convert XML to DataFrame: {str(e)}")
+            logger.error(f"Failed to convert XML to DataFrame: {str(e)}")
             return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml', content=content_copy)
             
     except Exception as e:
-        app.logger.error(f"Error handling XML upload: {str(e)}")
+        logger.error(f"Error handling XML upload: {str(e)}")
         traceback.print_exc()
         return handle_unstructured_upload(file, user_id, filename, c, conn, 'xml')
 
@@ -321,10 +323,10 @@ def handle_unstructured_upload(file, user_id, filename, c, conn, file_type, cont
         """, (file_id, unique_key, content))
         
         conn.commit()
-        app.logger.info(f"Stored {file_type} as unstructured content")
+        logger.info(f"Stored {file_type} as unstructured content")
         return file_id, unique_key, None
     except Exception as e:
-        app.logger.error(f"Error in handle_unstructured_upload: {str(e)}")
+        logger.error(f"Error in handle_unstructured_upload: {str(e)}")
         traceback.print_exc()
         raise
 
@@ -608,7 +610,7 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
                 
                 return insight, None
             except Exception as e:
-                app.logger.error(f"Error loading data: {str(e)}")
+                logger.error(f"Error loading data: {str(e)}")
                 return None, f"Error loading data: {str(e)}"
             
         elif file_type in ['db', 'sqlite', 'sqlite3']:
@@ -660,13 +662,13 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
                 
                 return insight, None
             except Exception as e:
-                app.logger.error(f"Error creating InsightAI instance: {str(e)}")
+                logger.error(f"Error creating InsightAI instance: {str(e)}")
                 return None, f"Error creating InsightAI instance: {str(e)}"
         else:
             # Unsupported file type
             return None, f"Unsupported file type: {file_type}"
     except Exception as e:
-        app.logger.error(f"Error in create_insight_instance: {str(e)}")
+        logger.error(f"Error in create_insight_instance: {str(e)}")
         return None, str(e)
     finally:
         conn.close()
