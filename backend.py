@@ -3812,144 +3812,88 @@ def delete_file(user_id, file_id):
     finally:
         conn.close()
     
-# @app.route('/split-column/<user_id>/<file_id>', methods=['POST'])
-# def split_column(user_id, file_id):
-#     try:
-#         data = request.json
-#         column_name = data.get('column')
-#         delimiter = data.get('delimiter')
-#         new_column_prefix = data.get('newColumnPrefix', 'split')
-        
-#         conn = sqlite3.connect('user_files.db')
-#         c = conn.cursor()
-        
-#         # Get table info
-#         c.execute("""
-#             SELECT f.unique_key, s.table_name
-#             FROM user_files f
-#             LEFT JOIN structured_file_storage s ON f.unique_key = s.unique_key
-#             WHERE f.file_id = ? AND f.user_id = ?
-#         """, (file_id, user_id))
-        
-#         result = c.fetchone()
-#         if not result:
-#             return jsonify({'error': 'File not found'}), 404
-            
-#         unique_key, table_name = result
-        
-#         # Read data into pandas
-#         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
-        
-#         # Perform split operation efficiently
-#         split_df = df[column_name].str.split(delimiter, expand=True)
-        
-#         # Name new columns
-#         num_cols = len(split_df.columns)
-#         new_columns = [f"{new_column_prefix}_{i+1}" for i in range(num_cols)]
-#         split_df.columns = new_columns
-        
-#         # Add new columns to original dataframe
-#         for col in new_columns:
-#             df[col] = split_df[col]
-        
-#         # Update database
-#         df.to_sql(table_name, conn, if_exists='replace', index=False)
-        
-#         conn.commit()
-        
-#         return jsonify({
-#             'success': True,
-#             'newColumns': new_columns,
-#             'data': df.to_dict('records')
-#         })
-        
-#     except Exception as e:
-#         app.logger.error(f"Error in split_column: {str(e)}")
-#         return jsonify({'error': str(e)}), 500
-#     finally:
-#         conn.close()
 
-# @app.route('/add-column/<user_id>/<file_id>', methods=['POST'])
-# def add_column(user_id, file_id):
-#     """Add a new column by splitting an existing one"""
-#     try:
-#         data = request.json
-#         app.logger.info(f"Received add column request: {data}")
+@app.route('/add-column/<user_id>/<file_id>', methods=['POST'])
+def add_column(user_id, file_id):
+    """Add a new column by splitting an existing one"""
+    try:
+        data = request.json
+        app.logger.info(f"Received add column request: {data}")
         
-#         source_column = data.get('sourceColumn')
-#         new_column_name = data.get('newColumnName')
-#         delimiter = data.get('delimiter')
-#         split_index = data.get('splitIndex', 0)
+        source_column = data.get('sourceColumn')
+        new_column_name = data.get('newColumnName')
+        delimiter = data.get('delimiter')
+        split_index = data.get('splitIndex', 0)
         
-#         if not source_column or not new_column_name or delimiter is None:
-#             return jsonify({'error': 'Source column, new column name, and delimiter are required'}), 400
+        if not source_column or not new_column_name or delimiter is None:
+            return jsonify({'error': 'Source column, new column name, and delimiter are required'}), 400
         
-#         conn = sqlite3.connect('user_files.db')
-#         c = conn.cursor()
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
         
-#         # Get file information
-#         c.execute("""
-#             SELECT unique_key
-#             FROM user_files
-#             WHERE file_id = ? AND user_id = ?
-#         """, (file_id, user_id))
+        # Get file information
+        c.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
         
-#         result = c.fetchone()
-#         if not result:
-#             return jsonify({'error': 'File not found'}), 404
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
             
-#         unique_key = result[0]
-#         table_name = f"table_{unique_key}"
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
         
-#         # Get current columns
-#         c.execute(f'PRAGMA table_info("{table_name}")')
-#         columns = [col[1] for col in c.fetchall()]
+        # Get current columns
+        c.execute(f'PRAGMA table_info("{table_name}")')
+        columns = [col[1] for col in c.fetchall()]
         
-#         if source_column not in columns:
-#             return jsonify({'error': f'Column {source_column} not found in table'}), 404
+        if source_column not in columns:
+            return jsonify({'error': f'Column {source_column} not found in table'}), 404
         
-#         if new_column_name in columns:
-#             return jsonify({'error': f'Column {new_column_name} already exists in table'}), 400
+        if new_column_name in columns:
+            return jsonify({'error': f'Column {new_column_name} already exists in table'}), 400
         
-#         # Read data into pandas for processing
-#         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+        # Read data into pandas for processing
+        df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
         
-#         # Create new column
-#         df[new_column_name] = ""
+        # Create new column
+        df[new_column_name] = ""
         
-#         # Update with split values
-#         for idx, row in df.iterrows():
-#             value = row[source_column]
-#             if value and isinstance(value, str):
-#                 parts = value.split(delimiter)
-#                 if parts and len(parts) > split_index:
-#                     df.at[idx, new_column_name] = parts[split_index].strip()
+        # Update with split values
+        for idx, row in df.iterrows():
+            value = row[source_column]
+            if value and isinstance(value, str):
+                parts = value.split(delimiter)
+                if parts and len(parts) > split_index:
+                    df.at[idx, new_column_name] = parts[split_index].strip()
         
-#         # Create temporary table, then swap
-#         temp_table = f"temp_{uuid.uuid4().hex}"
-#         df.to_sql(temp_table, conn, if_exists='replace', index=False)
+        # Create temporary table, then swap
+        temp_table = f"temp_{uuid.uuid4().hex}"
+        df.to_sql(temp_table, conn, if_exists='replace', index=False)
         
-#         # Drop original and rename temp
-#         c.execute(f'DROP TABLE "{table_name}"')
-#         c.execute(f'ALTER TABLE "{temp_table}" RENAME TO "{table_name}"')
+        # Drop original and rename temp
+        c.execute(f'DROP TABLE "{table_name}"')
+        c.execute(f'ALTER TABLE "{temp_table}" RENAME TO "{table_name}"')
         
-#         conn.commit()
+        conn.commit()
         
-#         return jsonify({
-#             'success': True,
-#             'message': f'New column {new_column_name} added successfully',
-#             'columns': list(df.columns)
-#         })
+        return jsonify({
+            'success': True,
+            'message': f'New column {new_column_name} added successfully',
+            'columns': list(df.columns)
+        })
         
-#     except Exception as e:
-#         if 'conn' in locals():
-#             conn.rollback()
-#         app.logger.error(f"Error adding column: {str(e)}")
-#         app.logger.error(traceback.format_exc())
-#         return jsonify({'error': str(e)}), 500
-#     finally:
-#         if 'conn' in locals():
-#             conn.close()
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+        app.logger.error(f"Error adding column: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 def calculate_basic_stats(df: pd.DataFrame) -> Dict[str, Any]:
     """Calculate basic statistics for the dataset."""
@@ -6716,7 +6660,7 @@ def generate_data_table_image(data_table_data):
     modified_html = modified_html.replace(tbody_pattern, rows_html)
     
     # Replace pagination text
-    modified_html = modified_html.replace('<div>Showing 1 to 10 of 50 entries</div>', f'<div>{pagination_text}</div>')
+    modified_html = modified_html.replace('<div>Showing the entries</div>', f'<div>{pagination_text}</div>')
     
     # Replace download filename
     modified_html = modified_html.replace('data-table.png', f'datatable_{table_id}.png')
