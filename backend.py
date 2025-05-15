@@ -1455,7 +1455,204 @@ def upload_file(user_id):
 
     finally:
         conn.close()
+@app.route('/split-column/<user_id>/<file_id>', methods=['POST'])
+def split_column(user_id, file_id):
+    """
+    Enhanced endpoint to split a column into multiple parts based on a delimiter.
+    Now supports creating multiple columns with custom names for each part of the split.
+    """
+    try:
+        data = request.json
+        source_column = data.get('column')
+        delimiter = data.get('delimiter')
+        parts = data.get('parts', [])  # New parameter - array of parts to create
+        
+        # Validate inputs
+        if not source_column:
+            return jsonify({'error': 'Source column is required'}), 400
+            
+        if not delimiter:
+            return jsonify({'error': 'Delimiter is required'}), 400
+            
+        if not parts or len(parts) == 0:
+            return jsonify({'error': 'At least one output column part must be specified'}), 400
+            
+        # Connect to database
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get file metadata to find the unique_key
+        c.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
+        
+        # Verify table exists
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not c.fetchone():
+            return jsonify({'error': f'Table {table_name} not found'}), 404
+        
+        # Get current columns to verify source column exists
+        c.execute(f"PRAGMA table_info('{table_name}')")
+        columns = [col[1] for col in c.fetchall()]
+        
+        if source_column not in columns:
+            return jsonify({'error': f'Column {source_column} not found in table'}), 404
+        
+        # Read data into pandas for processing
+        df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+        
+        # Create new columns for each selected part
+        for part in parts:
+            part_name = part.get('name')
+            part_index = part.get('index')
+            
+            if not part_name or part_index is None:
+                continue
+                
+            # Sanitize the column name to avoid SQL injection
+            part_name = part_name.replace('"', '').replace("'", "")
+            
+            # Create the new column
+            df[part_name] = df[source_column].apply(
+                lambda x: safe_split(x, delimiter, part_index)
+            )
+        
+        # Save the updated DataFrame back to the database
+        temp_table = f"temp_{uuid.uuid4().hex}"
+        df.to_sql(temp_table, conn, if_exists='replace', index=False)
+        
+        # Drop the original table and rename the temp table
+        c.execute(f'DROP TABLE "{table_name}"')
+        c.execute(f'ALTER TABLE "{temp_table}" RENAME TO "{table_name}"')
+        
+        conn.commit()
+        
+        # Return success response with updated data
+        return jsonify({
+            'success': True,
+            'message': f'Column {source_column} split successfully',
+            'data': df.to_dict('records')
+        })
+        
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+        app.logger.error(f"Error splitting column: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
+# Helper function to safely split strings
+def safe_split(value, delimiter, index):
+    """
+    Safely split a value using a delimiter and extract the part at the specified index.
+    Handles non-string values, missing values, and index out of range.
+    """
+    if value is None:
+        return None
+        
+    # Convert to string if it's not already
+    if not isinstance(value, str):
+        try:
+            value = str(value)
+        except:
+            return None
+    
+    # Split the string and get the part at the specified index
+    parts = value.split(delimiter)
+    
+    if index < 0 or index >= len(parts):
+        return None
+        
+    return parts[index].strip()
+
+@app.route('/get-column-sample/<user_id>/<file_id>/<column_name>', methods=['GET'])
+def get_column_sample(user_id, file_id, column_name):
+    """
+    Fetch sample data from a specific column to help preview splitting operations.
+    
+    Parameters:
+    - user_id: User ID
+    - file_id: File ID
+    - column_name: Name of the column to sample
+    
+    Query parameters:
+    - limit: Number of sample rows to retrieve (default: 3)
+    """
+    try:
+        # Get the limit from query parameter (default to 3)
+        limit = request.args.get('limit', 3, type=int)
+        
+        # Connect to database
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Get file metadata to find the table name
+        c.execute("""
+            SELECT unique_key
+            FROM user_files
+            WHERE file_id = ? AND user_id = ?
+        """, (file_id, user_id))
+        
+        result = c.fetchone()
+        if not result:
+            return jsonify({'error': 'File not found'}), 404
+            
+        unique_key = result[0]
+        table_name = f"table_{unique_key}"
+        
+        # Verify table exists
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not c.fetchone():
+            return jsonify({'error': f'Table {table_name} not found'}), 404
+        
+        # Get current columns to verify column exists
+        c.execute(f"PRAGMA table_info('{table_name}')")
+        columns = [col[1] for col in c.fetchall()]
+        
+        if column_name not in columns:
+            return jsonify({'error': f'Column {column_name} not found in table'}), 404
+        
+        # Query for sample data, avoiding NULL values if possible
+        c.execute(f"""
+            SELECT "{column_name}" 
+            FROM "{table_name}" 
+            WHERE "{column_name}" IS NOT NULL AND "{column_name}" != ''
+            LIMIT ?
+        """, (limit,))
+        
+        sample_values = [row[0] for row in c.fetchall()]
+        
+        # If we didn't get any non-NULL values, just get first few values
+        if not sample_values:
+            c.execute(f'SELECT "{column_name}" FROM "{table_name}" LIMIT ?', (limit,))
+            sample_values = [row[0] for row in c.fetchall()]
+        
+        # Convert any non-string values to strings
+        sample_values = [str(val) if val is not None else "" for val in sample_values]
+        
+        return jsonify({
+            'success': True,
+            'sample': sample_values
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error getting column sample: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 @app.route('/get-column-statistics/<user_id>/<file_id>/<column_name>', methods=['GET'])
 def get_column_statistics_from_db(user_id, file_id, column_name):
     """

@@ -3423,10 +3423,10 @@ const DocumentAnalysisPanel: React.FC<{
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="meta-llama/llama-4-maverick-17b-128e-instruct">
-                      Llama 4 Maverick (Recommended)
+                      Better for diagrams (Recommended)
                     </SelectItem>
                     <SelectItem value="gpt-4o-mini">
-                      GPT-4o Mini (Faster)
+                      Faster Model (Faster)
                     </SelectItem>
                   </SelectContent>
                 </Select>

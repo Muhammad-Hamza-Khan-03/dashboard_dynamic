@@ -36,6 +36,7 @@ import RenameFileDialog from "./renameFileDialog";
 import { FileEdit } from "lucide-react";
 import StatisticsCalculatorStandalone from "./Calulator";
 import ColumnManagementDialog from "./columnManagementDialog";
+import { SplitDialog } from "./split-dialog";
 // import LoadingScreen from "../LoadingScreen";
 
 const PDFViewer = dynamic(() => import("./pdf-viewer"), { ssr: false });
@@ -1269,18 +1270,25 @@ const handleColumnChange = useCallback((
             {/* Action Buttons - Consistent black theme */}
             {/* {columns.length > 0 && (
               <SplitDialog
-                columns={columns.map(col => col.id).filter((col): col is string => col !== undefined)}
-                fileId={selectedFile?.file_id || ''}
-                userId={user.id}
-                onSplitComplete={(newData) => {
-                  setData(newData);
-                  setColumns(generateColumns(newData[0]));
-                  toast({
-                    title: "Success",
-                    description: "Column split successfully",
-                  });
-                }}
-              />
+  columns={columns.map(col => (typeof col === 'object' && 'accessorKey' in col ? col.accessorKey : col)).filter((col): col is string => col !== undefined)}
+  fileId={selectedFile?.file_id || ''}
+  userId={user.id}
+  onSplitComplete={(newData) => {
+    setData(newData);
+
+    // Use fetchFileData.columns to update columns
+    if (newData.length > 0 && newData[0].columns) {
+      setColumns(generateColumns.current(newData[0].columns));
+    } else {
+      console.warn("No columns found in newData");
+    }
+
+    toast({
+      title: "Success",
+      description: "Column split successfully",
+    });
+  }}
+/>
             )} */}
  <StatisticsCalculatorStandalone 
   fileId={selectedFile?.file_id || ''}

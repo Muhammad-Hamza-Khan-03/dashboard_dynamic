@@ -1,5 +1,4 @@
-'use client'
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,7 +19,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { FlipHorizontal } from 'lucide-react';
+import { Checkbox } from "@/components/ui/checkbox";
+import { FlipHorizontal, Plus, Minus, FileText, Search } from 'lucide-react';
 import axios from 'axios';
 
 interface SplitDialogProps {
@@ -33,9 +33,23 @@ interface SplitDialogProps {
 export const SplitDialog = ({ columns, fileId, userId, onSplitComplete }: SplitDialogProps) => {
   const [selectedColumn, setSelectedColumn] = useState<string>('');
   const [delimiter, setDelimiter] = useState<string>('');
-  const [prefix, setPrefix] = useState<string>('split');
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState<string>(''); // New state for search term
+  const [filteredColumns, setFilteredColumns] = useState<string[]>(columns); // New state for filtered columns
+
+  useEffect(() => {
+    // Filter columns based on the search term
+    if (searchTerm.trim() === '') {
+      setFilteredColumns(columns);
+    } else {
+      setFilteredColumns(
+        columns.filter((col) =>
+          col.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      );
+    }
+  }, [searchTerm, columns]);
 
   const handleSplit = async () => {
     if (!selectedColumn || !delimiter) return;
@@ -47,7 +61,6 @@ export const SplitDialog = ({ columns, fileId, userId, onSplitComplete }: SplitD
         {
           column: selectedColumn,
           delimiter,
-          newColumnPrefix: prefix
         }
       );
 
@@ -70,15 +83,47 @@ export const SplitDialog = ({ columns, fileId, userId, onSplitComplete }: SplitD
           Split Column
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Split Column</DialogTitle>
           <DialogDescription>
-            Choose a column and delimiter to split its contents into new columns.
+            Choose a column and delimiter to split its contents into multiple new columns.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="grid gap-4 py-4">
+          {/* Search Box */}
+          <div className="space-y-2">
+            <Label>Search Columns</Label>
+            <div className="relative">
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search columns..."
+              />
+              <Search className="absolute right-3 top-3 h-4 w-4 text-gray-400" />
+            </div>
+          </div>
+
+          {/* Related Words Below Search Box */}
+          {filteredColumns.length > 0 && (
+            <div className="space-y-1">
+              <Label>Related Columns</Label>
+              <ul className="border border-gray-300 rounded-md max-h-32 overflow-y-auto">
+                {filteredColumns.map((col) => (
+                  <li
+                    key={col}
+                    className="p-2 hover:bg-gray-100 cursor-pointer"
+                    onClick={() => setSearchTerm(col)} // Set search term when clicked
+                  >
+                    {col}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Select Column */}
           <div className="space-y-2">
             <Label>Select Column</Label>
             <Select value={selectedColumn} onValueChange={setSelectedColumn}>
@@ -86,7 +131,7 @@ export const SplitDialog = ({ columns, fileId, userId, onSplitComplete }: SplitD
                 <SelectValue placeholder="Choose column to split" />
               </SelectTrigger>
               <SelectContent>
-                {columns.map(col => (
+                {filteredColumns.map((col) => (
                   <SelectItem key={col} value={col}>
                     {col}
                   </SelectItem>
@@ -94,33 +139,31 @@ export const SplitDialog = ({ columns, fileId, userId, onSplitComplete }: SplitD
               </SelectContent>
             </Select>
           </div>
-          
+
           <Separator />
-          
+
+          {/* Delimiter Input */}
           <div className="space-y-2">
             <Label>Delimiter</Label>
             <Input
               value={delimiter}
               onChange={(e) => setDelimiter(e.target.value)}
-              placeholder="e.g. , or | or space"
+              placeholder="e.g. , or - or space"
             />
-          </div>
-          
-          <div className="space-y-2">
-            <Label>New Column Prefix</Label>
-            <Input
-              value={prefix}
-              onChange={(e) => setPrefix(e.target.value)}
-              placeholder="e.g. split"
-            />
+            <p className="text-xs text-gray-500">
+              The character that separates parts of the data (e.g., "-" in "2022-09-22")
+            </p>
           </div>
         </div>
-        
+
         <DialogFooter>
           <Button variant="outline" onClick={() => setIsOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSplit} disabled={!selectedColumn || !delimiter || isLoading}>
+          <Button
+            onClick={handleSplit}
+            disabled={!selectedColumn || !delimiter || isLoading}
+          >
             {isLoading ? 'Processing...' : 'Split Column'}
           </Button>
         </DialogFooter>
