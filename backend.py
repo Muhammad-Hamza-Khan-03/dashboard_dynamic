@@ -5404,11 +5404,405 @@ def export_dashboard_images(user_id):
 #         if 'conn' in locals():
 #             conn.close()
 
+# @app.route('/export-dashboard-pre-rendered/<user_id>', methods=['POST'])
+# def export_dashboard_pre_rendered(user_id):
+#     """
+#     Generate a PDF export of dashboard using pre-rendered images from local files and database.
+#     Creates a formal, professional presentation of dashboard elements.
+#     """
+#     try:
+#         data = request.json
+#         dashboard_ids = data.get('dashboard_ids', [])
+#         export_name = data.get('export_name', 'Dashboard Export')
+#         use_relative_positioning = data.get('use_relative_positioning', True)
+        
+#         # Get node positions
+#         node_positions = data.get('node_positions', {})
+#         stat_card_data = data.get('stat_card_data', [])
+#         data_table_data = data.get('data_table_data', [])
+        
+#         node_images = data.get('node_images', {})
+#         text_boxes = node_positions.get('textBoxes', [])
+
+#         app.logger.info(f"Exporting dashboard with pre-rendered images")
+        
+
+#         # Ensure we have at least one dashboard ID
+#         if not dashboard_ids:
+#             return jsonify({'error': 'No dashboards selected for export'}), 400
+        
+#         # Create directories for exports
+#         export_id = str(uuid.uuid4())
+#         export_dir = os.path.join('static', 'exports')
+#         os.makedirs(export_dir, exist_ok=True)
+        
+#         # Create temporary directory for storing individual images
+#         temp_dir = os.path.join(export_dir, f"temp_{export_id}")
+#         os.makedirs(temp_dir, exist_ok=True)
+        
+#         export_path = os.path.join(export_dir, f"{export_name.replace(' ', '_')}_{export_id}.pdf")
+        
+#         # Create PDF canvas
+#         c = canvas.Canvas(export_path, pagesize=landscape(A4))
+#         page_width, page_height = landscape(A4)
+        
+#         # Dashboard info
+#         dashboards_info = data.get('dashboards', [])
+        
+#         # Connect to database to retrieve saved images
+#         conn = sqlite3.connect('user_files.db')
+#         db_cursor = conn.cursor()
+        
+#         # Save images from database to files
+#         image_files = {}
+        
+#         # Map node types to their positions array
+#         node_type_map = {
+#             'chart': node_positions.get('charts', []),
+#             'textbox': node_positions.get('textBoxes', []),
+#             'datatable': node_positions.get('dataTables', []),
+#             'statcard': node_positions.get('statCards', [])
+#         }
+        
+#         # For each dashboard, get pre-rendered images
+#         for dashboard_index, dashboard_id in enumerate(dashboard_ids):
+#             # Find the dashboard name
+#             dashboard_name = None
+#             for dash in dashboards_info:
+#                 if dash.get('id') == dashboard_id:
+#                     dashboard_name = dash.get('name')
+#                     break
+            
+#             if not dashboard_name:
+#                 app.logger.warning(f"Dashboard name not found for {dashboard_id}")
+#                 dashboard_name = f"Dashboard-{dashboard_id}"
+            
+#             # Process all nodes to find images
+#             for node_type, nodes in node_type_map.items():
+#                 for node in nodes:
+#                     node_id = node.get('id')
+#                     if not node_id:
+#                         continue
+                    
+#                     # Create the image key
+#                     image_key = f"{node_type}_{node_id}"
+                    
+#                     # Handle different node types with their respective image locations
+#                     if node_type == 'chart':
+#                         # First check for local PNG file
+#                         local_img_path = os.path.join('static', 'chart_images', f"{image_key}.png")
+#                         if os.path.exists(local_img_path):
+#                             temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
+#                             import shutil
+#                             shutil.copy2(local_img_path, temp_img_path)
+#                             image_files[image_key] = temp_img_path
+#                             app.logger.info(f"Using local chart image: {local_img_path}")
+#                             continue
+                        
+#                         # If not found locally, try database
+#                         db_cursor.execute("""
+#                             SELECT image_blob 
+#                             FROM graph_cache 
+#                             WHERE graph_id = ? AND isImageSuccess = 1
+#                         """, (node_id,))
+                        
+#                         result = db_cursor.fetchone()
+#                         if result and result[0]:
+#                             image_file_path = os.path.join(temp_dir, f"{image_key}.png")
+#                             with open(image_file_path, 'wb') as f:
+#                                 f.write(result[0])
+#                             image_files[image_key] = image_file_path
+#                             app.logger.info(f"Using database image for chart: {node_id}")
+                    
+#                     elif node_type == 'datatable':
+#                         # Check for local data table image
+#                         local_img_path = os.path.join('static', 'data_table_images', f"{image_key}.png")
+#                         if os.path.exists(local_img_path):
+#                             temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
+#                             import shutil
+#                             shutil.copy2(local_img_path, temp_img_path)
+#                             image_files[image_key] = temp_img_path
+#                             app.logger.info(f"Using local data table image: {local_img_path}")
+#                             continue
+                        
+#                         # Generate on-the-fly if we have data
+#                         table_info = next((table for table in data_table_data if table.get('id') == node_id), None)
+#                         if table_info:
+#                             try:
+#                                 img_path = generate_data_table_image(table_info)
+#                                 temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
+#                                 import shutil
+#                                 if img_path != temp_img_path:
+#                                     shutil.copy2(img_path, temp_img_path)
+#                                 image_files[image_key] = temp_img_path
+#                                 app.logger.info(f"Generated data table image on-the-fly: {node_id}")
+#                             except Exception as e:
+#                                 app.logger.error(f"Error generating data table image: {str(e)}")
+                    
+#                     elif node_type == 'statcard':
+#                         # Check for local stat card image
+#                         local_img_path = os.path.join('static', 'stat_card_images', f"{image_key}.png")
+#                         if os.path.exists(local_img_path):
+#                             temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
+#                             import shutil
+#                             shutil.copy2(local_img_path, temp_img_path)
+#                             image_files[image_key] = temp_img_path
+#                             app.logger.info(f"Using local stat card image: {local_img_path}")
+#                             continue
+                        
+#                         # Generate on-the-fly if we have data
+#                         card_info = next((card for card in stat_card_data if card.get('id') == node_id), None)
+#                         if card_info:
+#                             try:
+#                                 img_path = generate_stat_card_image(card_info)
+#                                 temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
+#                                 import shutil
+#                                 if img_path != temp_img_path:
+#                                     shutil.copy2(img_path, temp_img_path)
+#                                 image_files[image_key] = temp_img_path
+#                                 app.logger.info(f"Generated stat card image on-the-fly: {node_id}")
+#                             except Exception as e:
+#                                 app.logger.error(f"Error generating stat card image: {str(e)}")
+                    
+#                     elif node_type == 'textbox':
+#                         # For text boxes, check if we have a captured image from frontend
+#                         captured_images = data.get('node_images', {})
+#                         if image_key in captured_images:
+#                             image_data = captured_images[image_key]
+                            
+#                             # Remove data:image/png;base64, prefix
+#                             if image_data.startswith('data:image/png;base64,'):
+#                                 image_data = image_data[len('data:image/png;base64,'):]
+                            
+#                             try:
+#                                 img_bytes = base64.b64decode(image_data)
+#                                 image_file_path = os.path.join(temp_dir, f"{image_key}.png")
+#                                 with open(image_file_path, 'wb') as f:
+#                                     f.write(img_bytes)
+#                                 image_files[image_key] = image_file_path
+#                                 app.logger.info(f"Using captured image for textbox: {node_id}")
+#                             except Exception as e:
+#                                 app.logger.error(f"Error processing textbox image: {str(e)}")
+        
+#         app.logger.info(f"Processed {len(image_files)} images for PDF export")
+        
+#         # Process each dashboard
+#         for dashboard_index, dashboard_id in enumerate(dashboard_ids):
+#             # Start a new page for each dashboard except the first one
+#             if dashboard_index > 0:
+#                 c.showPage()
+            
+#             # Find the dashboard name
+#             dashboard_name = f"Dashboard Export - {export_name}"
+#             for dash in dashboards_info:
+#                 if dash.get('id') == dashboard_id:
+#                     dashboard_name = dash.get('name', dashboard_name)
+            
+#             # Professional header style - more formal and subdued
+#             # Add elegant header background
+#             c.setFillColorRGB(0.95, 0.95, 0.95)  # Very light gray background
+#             c.rect(0, page_height-28*mm, page_width, 28*mm, fill=1)
+            
+#             # Add subtle separator line
+#             c.setStrokeColorRGB(0.8, 0.8, 0.8)
+#             c.setLineWidth(0.5)
+#             c.line(10*mm, page_height-28*mm, page_width-10*mm, page_height-28*mm)
+            
+#             # Add dashboard title with formal styling
+#             c.setFillColorRGB(0.2, 0.2, 0.2)  # Dark gray text for formal look
+#             c.setFont("Helvetica-Bold", 16)
+#             c.drawString(15*mm, page_height-18*mm, dashboard_name)
+            
+#             # Add timestamp
+#             c.setFillColorRGB(0.5, 0.5, 0.5)  # Medium gray text
+#             c.setFont("Helvetica", 9)
+#             c.drawString(15*mm, page_height-24*mm, f"Exported: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            
+#             # For relative positioning, calculate the bounding box
+#             all_node_positions = []
+            
+#             # Build a list of all node positions from the different node types
+#             for node_type, positions in node_type_map.items():
+#                 for pos in positions:
+#                     # Only include nodes that have corresponding images
+#                     node_id = pos.get('id')
+#                     image_key = f"{node_type}_{node_id}"
+#                     if image_key in image_files and node_id and 'position' in pos:
+#                         all_node_positions.append({
+#                             'type': node_type,
+#                             'id': node_id,
+#                             'position': pos.get('position', {}),
+#                             'title': pos.get('title', '')
+#                         })
+            
+#             # Skip empty dashboards
+#             if not all_node_positions:
+#                 app.logger.warning(f"No valid nodes found for dashboard {dashboard_id}")
+#                 continue
+            
+#             # Set up coordinate transformation based on positioning method
+#             if use_relative_positioning:
+#                 # Find min and max positions with null safety
+#                 min_x = min((node.get('position', {}).get('x', 0) or 0) for node in all_node_positions)
+#                 min_y = min((node.get('position', {}).get('y', 0) or 0) for node in all_node_positions)
+#                 max_x = max((node.get('position', {}).get('x', 0) or 0) + 
+#                           (node.get('position', {}).get('width', 400) or 400) for node in all_node_positions)
+#                 max_y = max((node.get('position', {}).get('y', 0) or 0) + 
+#                           (node.get('position', {}).get('height', 300) or 300) for node in all_node_positions)
+                
+#                 # Calculate scale factors to fit everything on the page with margins
+#                 margin_mm = 15  # Slightly tighter margins for better use of space
+#                 available_width = page_width - 2 * margin_mm
+#                 available_height = page_height - 35*mm  # Account for header
+                
+#                 width_scale = available_width / (max_x - min_x) if max_x > min_x else 1
+#                 height_scale = available_height / (max_y - min_y) if max_y > min_y else 1
+                
+#                 # Use the smaller scale to ensure everything fits
+#                 scale = min(width_scale, height_scale) * 0.92  # Better use of page space
+                
+#                 # Function to transform coordinates
+#                 def transform_coords(pos):
+#                     x = ((pos.get('x', 0) or 0) - min_x) * scale + margin_mm
+#                     y = page_height - (((pos.get('y', 0) or 0) - min_y) * scale + 35*mm)  # Adjusted for new header size
+#                     width = (pos.get('width', 400) or 400) * scale
+#                     height = (pos.get('height', 300) or 300) * scale
+#                     return x, y - height, width, height
+#             else:
+#                 # For absolute positioning, use a simple scale factor
+#                 scale_factor = 0.16  # Slightly larger for better visibility
+                
+#                 # Function to transform coordinates with absolute positioning
+#                 def transform_coords(pos):
+#                     x = (pos.get('x', 0) or 0) * scale_factor
+#                     y = page_height - (pos.get('y', 0) or 0) * scale_factor - (pos.get('height', 300) or 300) * scale_factor
+#                     width = (pos.get('width', 400) or 400) * scale_factor
+#                     height = (pos.get('height', 300) or 300) * scale_factor
+#                     return x, y, width, height
+            
+#             # Add subtle background to the content area
+#             c.setFillColorRGB(0.98, 0.98, 0.98)  # Very light gray
+#             c.rect(margin_mm, margin_mm, page_width - 2*margin_mm, page_height - margin_mm - 28*mm, fill=1)
+                    
+#             # Process all nodes
+#             for node in all_node_positions:
+#                 node_type = node.get('type')
+#                 node_id = node.get('id')
+#                 image_key = f"{node_type}_{node_id}"
+                
+#                 if image_key in image_files:
+#                     try:
+#                         image_path = image_files[image_key]
+                        
+#                         # Get node position
+#                         pos = node.get('position', {})
+#                         x, y, width, height = transform_coords(pos)
+                        
+#                         # Ensure dimensions are positive
+#                         if width <= 0 or height <= 0:
+#                             app.logger.warning(f"Invalid dimensions for {image_key}: {width}x{height}")
+#                             continue
+                        
+#                         # Add subtle drop shadow effect for depth
+#                         c.setFillColorRGB(0.9, 0.9, 0.9)
+#                         c.setStrokeColorRGB(0.9, 0.9, 0.9)
+#                         c.rect(x + 2, y - 2, width, height, fill=1, stroke=0)
+                        
+#                         # Draw the image
+#                         c.drawImage(image_path, x, y, width, height, preserveAspectRatio=True)
+                        
+#                         # For charts and data elements, add professional titles
+#                         if node_type in ['chart', 'datatable', 'statcard']:
+#                             # Get title if available
+#                             title = node.get('title', '')
+#                             if title:
+#                                 # Save current font settings
+#                                 c.saveState()
+#                                 # Draw a small bar above the title for professional look
+#                                 if node_type == 'chart':
+#                                     c.setFillColorRGB(0.3, 0.5, 0.7)  # Blue-ish for charts
+#                                 elif node_type == 'datatable':
+#                                     c.setFillColorRGB(0.5, 0.6, 0.3)  # Green-ish for tables
+#                                 elif node_type == 'statcard':
+#                                     c.setFillColorRGB(0.7, 0.5, 0.3)  # Orange-ish for stats
+                                
+#                                 c.rect(x, y + height + 3, 30, 2, fill=1, stroke=0)
+                                
+#                                 # Draw title with formal styling
+#                                 c.setFillColorRGB(0.25, 0.25, 0.25)  # Dark gray text
+#                                 c.setFont("Helvetica-Bold", 9)
+#                                 c.drawString(x, y + height + 12, title)
+#                                 # Restore font settings
+#                                 c.restoreState()
+                        
+#                     except Exception as e:
+#                         app.logger.error(f"Error adding {image_key} to PDF: {str(e)}")
+#                         app.logger.error(traceback.format_exc())
+        
+#         # Add elegant footer with page numbers
+#         for i in range(c.getPageNumber()):
+#             c.showPage()
+#             # Save state for footer
+#             c.saveState()
+#             # Add subtle footer line
+#             c.setStrokeColorRGB(0.8, 0.8, 0.8)
+#             c.setLineWidth(0.5)
+#             c.line(10*mm, 10*mm, page_width-10*mm, 10*mm)
+#             # Add page numbers with elegant styling
+#             c.setFillColorRGB(0.5, 0.5, 0.5)
+#             c.setFont("Helvetica", 8)
+#             c.drawRightString(
+#                 page_width - 10*mm, 
+#                 7*mm, 
+#                 f"Page {i+1} of {len(dashboard_ids)}"
+#             )
+#             c.restoreState()
+        
+#         # Save PDF
+#         c.save()
+        
+#         # Clean up temporary images
+#         for image_path in image_files.values():
+#             try:
+#                 os.remove(image_path)
+#             except:
+#                 pass
+        
+#         try:
+#             os.rmdir(temp_dir)
+#         except:
+#             pass
+        
+#         # Record the export in the database
+#         db_cursor.execute("""
+#             INSERT INTO dashboard_exports (
+#                 export_id, user_id, dashboard_ids, export_name, export_path, created_at
+#             ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+#         """, (export_id, user_id, json.dumps(dashboard_ids), export_name, export_path))
+        
+#         conn.commit()
+        
+#         # Return download URL
+#         return jsonify({
+#             'success': True,
+#             'export_id': export_id,
+#             'export_name': export_name,
+#             'download_url': f'/download-export/{export_id}'
+#         })
+        
+#     except Exception as e:
+#         app.logger.error(f"Error exporting dashboard with pre-rendered images: {str(e)}")
+#         app.logger.error(traceback.format_exc())
+#         return jsonify({'error': str(e)}), 500
+#     finally:
+#         if 'conn' in locals():
+#             conn.close()
+
 @app.route('/export-dashboard-pre-rendered/<user_id>', methods=['POST'])
 def export_dashboard_pre_rendered(user_id):
     """
     Generate a PDF export of dashboard using pre-rendered images from local files and database.
-    Creates a formal, professional presentation of dashboard elements.
+    Creates a formal, professional presentation of dashboard elements including text boxes.
     """
     try:
         data = request.json
@@ -5420,6 +5814,9 @@ def export_dashboard_pre_rendered(user_id):
         node_positions = data.get('node_positions', {})
         stat_card_data = data.get('stat_card_data', [])
         data_table_data = data.get('data_table_data', [])
+        
+        # Get node images
+        node_images = data.get('node_images', {})
         
         app.logger.info(f"Exporting dashboard with pre-rendered images")
         
@@ -5528,7 +5925,7 @@ def export_dashboard_pre_rendered(user_id):
                                 img_path = generate_data_table_image(table_info)
                                 temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
                                 import shutil
-                                if img_path != temp_img_path:
+                                if img_path != temp_img_path:  # Only copy if paths are different
                                     shutil.copy2(img_path, temp_img_path)
                                 image_files[image_key] = temp_img_path
                                 app.logger.info(f"Generated data table image on-the-fly: {node_id}")
@@ -5553,7 +5950,7 @@ def export_dashboard_pre_rendered(user_id):
                                 img_path = generate_stat_card_image(card_info)
                                 temp_img_path = os.path.join(temp_dir, f"{image_key}.png")
                                 import shutil
-                                if img_path != temp_img_path:
+                                if img_path != temp_img_path:  # Only copy if paths are different
                                     shutil.copy2(img_path, temp_img_path)
                                 image_files[image_key] = temp_img_path
                                 app.logger.info(f"Generated stat card image on-the-fly: {node_id}")
@@ -5561,10 +5958,9 @@ def export_dashboard_pre_rendered(user_id):
                                 app.logger.error(f"Error generating stat card image: {str(e)}")
                     
                     elif node_type == 'textbox':
-                        # For text boxes, check if we have a captured image from frontend
-                        captured_images = data.get('node_images', {})
-                        if image_key in captured_images:
-                            image_data = captured_images[image_key]
+                        # For text boxes, first check if we have a captured image from frontend
+                        if image_key in node_images:
+                            image_data = node_images[image_key]
                             
                             # Remove data:image/png;base64, prefix
                             if image_data.startswith('data:image/png;base64,'):
@@ -5579,6 +5975,14 @@ def export_dashboard_pre_rendered(user_id):
                                 app.logger.info(f"Using captured image for textbox: {node_id}")
                             except Exception as e:
                                 app.logger.error(f"Error processing textbox image: {str(e)}")
+                                
+                        # No matter if we have an image or not, also store the text content directly
+                        # This ensures we have the text for direct rendering if needed
+                        content = node.get('content', '')
+                        if content:
+                            # Store text content with special prefix for direct rendering
+                            image_files[f"text_content_{image_key}"] = content
+                            app.logger.info(f"Stored text content for textbox: {node_id}")
         
         app.logger.info(f"Processed {len(image_files)} images for PDF export")
         
@@ -5620,15 +6024,21 @@ def export_dashboard_pre_rendered(user_id):
             # Build a list of all node positions from the different node types
             for node_type, positions in node_type_map.items():
                 for pos in positions:
-                    # Only include nodes that have corresponding images
+                    # Only include nodes that have corresponding images or text content
                     node_id = pos.get('id')
                     image_key = f"{node_type}_{node_id}"
-                    if image_key in image_files and node_id and 'position' in pos:
+                    text_content_key = f"text_content_{image_key}"
+                    
+                    # Check if we have image or text content for this node
+                    has_content = image_key in image_files or text_content_key in image_files
+                    
+                    if node_id and 'position' in pos and (has_content or node_type == 'textbox'):
                         all_node_positions.append({
                             'type': node_type,
                             'id': node_id,
                             'position': pos.get('position', {}),
-                            'title': pos.get('title', '')
+                            'title': pos.get('title', ''),
+                            'content': pos.get('content', '')  # Get content for textboxes
                         })
             
             # Skip empty dashboards
@@ -5660,10 +6070,10 @@ def export_dashboard_pre_rendered(user_id):
                 # Function to transform coordinates
                 def transform_coords(pos):
                     x = ((pos.get('x', 0) or 0) - min_x) * scale + margin_mm
-                    y = page_height - (((pos.get('y', 0) or 0) - min_y) * scale + 35*mm)  # Adjusted for new header size
+                    y = page_height - (((pos.get('y', 0) or 0) - min_y) * scale + 35*mm)  # Flip Y and account for header
                     width = (pos.get('width', 400) or 400) * scale
                     height = (pos.get('height', 300) or 300) * scale
-                    return x, y - height, width, height
+                    return x, y - height, width, height  # Adjust y for PDF coordinates
             else:
                 # For absolute positioning, use a simple scale factor
                 scale_factor = 0.16  # Slightly larger for better visibility
@@ -5685,55 +6095,125 @@ def export_dashboard_pre_rendered(user_id):
                 node_type = node.get('type')
                 node_id = node.get('id')
                 image_key = f"{node_type}_{node_id}"
+                text_content_key = f"text_content_{image_key}"
                 
-                if image_key in image_files:
-                    try:
+                try:
+                    # Get node position
+                    pos = node.get('position', {})
+                    x, y, width, height = transform_coords(pos)
+                    
+                    # Ensure dimensions are positive
+                    if width <= 0 or height <= 0:
+                        app.logger.warning(f"Invalid dimensions for {image_key}: {width}x{height}")
+                        continue
+                    
+                    # Add subtle drop shadow effect for depth
+                    c.setFillColorRGB(0.9, 0.9, 0.9)
+                    c.setStrokeColorRGB(0.9, 0.9, 0.9)
+                    c.rect(x + 2, y - 2, width, height, fill=1, stroke=0)
+                    
+                    # Check if we have an image for this node
+                    if image_key in image_files:
+                        # Use the image
                         image_path = image_files[image_key]
-                        
-                        # Get node position
-                        pos = node.get('position', {})
-                        x, y, width, height = transform_coords(pos)
-                        
-                        # Ensure dimensions are positive
-                        if width <= 0 or height <= 0:
-                            app.logger.warning(f"Invalid dimensions for {image_key}: {width}x{height}")
-                            continue
-                        
-                        # Add subtle drop shadow effect for depth
-                        c.setFillColorRGB(0.9, 0.9, 0.9)
-                        c.setStrokeColorRGB(0.9, 0.9, 0.9)
-                        c.rect(x + 2, y - 2, width, height, fill=1, stroke=0)
-                        
-                        # Draw the image
                         c.drawImage(image_path, x, y, width, height, preserveAspectRatio=True)
                         
-                        # For charts and data elements, add professional titles
-                        if node_type in ['chart', 'datatable', 'statcard']:
-                            # Get title if available
-                            title = node.get('title', '')
-                            if title:
-                                # Save current font settings
-                                c.saveState()
-                                # Draw a small bar above the title for professional look
-                                if node_type == 'chart':
-                                    c.setFillColorRGB(0.3, 0.5, 0.7)  # Blue-ish for charts
-                                elif node_type == 'datatable':
-                                    c.setFillColorRGB(0.5, 0.6, 0.3)  # Green-ish for tables
-                                elif node_type == 'statcard':
-                                    c.setFillColorRGB(0.7, 0.5, 0.3)  # Orange-ish for stats
-                                
-                                c.rect(x, y + height + 3, 30, 2, fill=1, stroke=0)
-                                
-                                # Draw title with formal styling
-                                c.setFillColorRGB(0.25, 0.25, 0.25)  # Dark gray text
-                                c.setFont("Helvetica-Bold", 9)
-                                c.drawString(x, y + height + 12, title)
-                                # Restore font settings
-                                c.restoreState()
+                    # Handle textboxes - if no image or we should use direct rendering
+                    elif node_type == 'textbox':
+                        # Draw a border and background for the text box
+                        c.setFillColorRGB(1, 1, 1)  # White background
+                        c.setStrokeColorRGB(0.8, 0.8, 0.8)  # Light gray border
+                        c.rect(x, y, width, height, fill=1, stroke=1)
                         
-                    except Exception as e:
-                        app.logger.error(f"Error adding {image_key} to PDF: {str(e)}")
-                        app.logger.error(traceback.format_exc())
+                        # Get content either from text_content_key or directly from node
+                        content = ""
+                        if text_content_key in image_files:
+                            content = image_files[text_content_key]
+                        else:
+                            content = node.get('content', '')
+                            
+                        if content:
+                            # Render text in the text box with proper wrapping
+                            c.setFillColorRGB(0.1, 0.1, 0.1)  # Dark gray text
+                            c.setFont("Helvetica", 10)
+                            
+                            # Split content into lines
+                            text_lines = content.split('\n')
+                            line_height = 14  # Approximate line height in points
+                            
+                            # Starting position for text (top of box with margin)
+                            text_x = x + 5  # 5 points margin from left
+                            text_y = y + height - 12  # 12 points margin from top
+                            
+                            for line in text_lines:
+                                # Skip empty lines but still move down
+                                if not line.strip():
+                                    text_y -= line_height
+                                    continue
+                                
+                                # Calculate available width
+                                available_width = width - 10  # 10 points total margin (5 on each side)
+                                
+                                # Check if line needs wrapping
+                                if c.stringWidth(line, "Helvetica", 10) > available_width:
+                                    words = line.split()
+                                    current_line = words[0] if words else ""
+                                    
+                                    for word in words[1:]:
+                                        test_line = current_line + " " + word
+                                        # Check if adding this word exceeds available width
+                                        if c.stringWidth(test_line, "Helvetica", 10) <= available_width:
+                                            current_line = test_line
+                                        else:
+                                            # Draw current line and start a new one
+                                            c.drawString(text_x, text_y, current_line)
+                                            text_y -= line_height
+                                            # Check if we've run out of vertical space
+                                            if text_y < y + 5:
+                                                c.drawString(text_x, text_y, "...")
+                                                break
+                                            current_line = word
+                                    
+                                    # Draw the final line if we still have space
+                                    if current_line and text_y >= y + 5:
+                                        c.drawString(text_x, text_y, current_line)
+                                        text_y -= line_height
+                                else:
+                                    # Line fits, draw it directly
+                                    c.drawString(text_x, text_y, line)
+                                    text_y -= line_height
+                                
+                                # Check if we've run out of vertical space
+                                if text_y < y + 5:
+                                    break
+                    
+                    # For charts and data elements, add professional titles
+                    if node_type in ['chart', 'datatable', 'statcard']:
+                        # Get title if available
+                        title = node.get('title', '')
+                        if title:
+                            # Save current font settings
+                            c.saveState()
+                            # Draw a small bar above the title for professional look
+                            if node_type == 'chart':
+                                c.setFillColorRGB(0.3, 0.5, 0.7)  # Blue-ish for charts
+                            elif node_type == 'datatable':
+                                c.setFillColorRGB(0.5, 0.6, 0.3)  # Green-ish for tables
+                            elif node_type == 'statcard':
+                                c.setFillColorRGB(0.7, 0.5, 0.3)  # Orange-ish for stats
+                            
+                            c.rect(x, y + height + 3, 30, 2, fill=1, stroke=0)
+                            
+                            # Draw title with formal styling
+                            c.setFillColorRGB(0.25, 0.25, 0.25)  # Dark gray text
+                            c.setFont("Helvetica-Bold", 9)
+                            c.drawString(x, y + height + 12, title)
+                            # Restore font settings
+                            c.restoreState()
+                    
+                except Exception as e:
+                    app.logger.error(f"Error adding {image_key} to PDF: {str(e)}")
+                    app.logger.error(traceback.format_exc())
         
         # Add elegant footer with page numbers
         for i in range(c.getPageNumber()):
@@ -5758,11 +6238,13 @@ def export_dashboard_pre_rendered(user_id):
         c.save()
         
         # Clean up temporary images
-        for image_path in image_files.values():
-            try:
-                os.remove(image_path)
-            except:
-                pass
+        for key, value in image_files.items():
+            # Only clean up image files, not text content
+            if not key.startswith("text_content_") and isinstance(value, str) and os.path.exists(value):
+                try:
+                    os.remove(value)
+                except:
+                    pass
         
         try:
             os.rmdir(temp_dir)
@@ -5793,384 +6275,6 @@ def export_dashboard_pre_rendered(user_id):
     finally:
         if 'conn' in locals():
             conn.close()
-
-# with layout:
-# @app.route('/export-dashboard-pre-rendered/<user_id>', methods=['POST'])
-# def export_dashboard_pre_rendered(user_id):
-#     """
-#     Generate a PDF export of dashboard using pre-rendered images.
-#     Creates a professionally formatted multi-page PDF with all charts.
-#     """
-#     try:
-#         data = request.json
-#         dashboard_ids = data.get('dashboard_ids', [])
-#         export_name = data.get('export_name', 'Dashboard Export')
-#         node_images = data.get('node_images', {})
-        
-#         # Get node positions
-#         node_positions = data.get('node_positions', {})
-#         stat_card_data = data.get('stat_card_data', [])
-#         data_table_data = data.get('data_table_data', [])
-        
-#         app.logger.info(f"Exporting dashboard with {len(node_images)} images")
-        
-#         # Ensure we have at least one dashboard ID
-#         if not dashboard_ids:
-#             return jsonify({'error': 'No dashboards selected for export'}), 400
-        
-#         # Create directories for exports
-#         export_id = str(uuid.uuid4())
-#         export_dir = os.path.join('static', 'exports')
-#         os.makedirs(export_dir, exist_ok=True)
-        
-#         # Define the export path for the PDF
-#         export_path = os.path.join(export_dir, f"{export_name.replace(' ', '_')}_{export_id}.pdf")
-        
-#         # Dashboard info
-#         dashboards_info = data.get('dashboards', [])
-        
-#         # Connect to database
-#         conn = sqlite3.connect('user_files.db')
-#         db_cursor = conn.cursor()
-        
-#         # Prepare data structure for PDF creation
-#         all_dashboards = []
-        
-#         # Process each dashboard
-#         for dashboard_id in dashboard_ids:
-#             # Find the dashboard name
-#             dashboard_name = None
-#             for dash in dashboards_info:
-#                 if dash.get('id') == dashboard_id:
-#                     dashboard_name = dash.get('name')
-#                     break
-            
-#             if not dashboard_name:
-#                 dashboard_name = f"Dashboard {dashboard_id}"
-            
-#             # Create directory for this dashboard's images
-#             dashboard_dir = os.path.join(export_dir, f"dash_{dashboard_id}")
-#             os.makedirs(dashboard_dir, exist_ok=True)
-            
-#             # Map node types to their positions array
-#             node_type_map = {
-#                 'chart': node_positions.get('charts', []),
-#                 'textbox': node_positions.get('textBoxes', []),
-#                 'datatable': node_positions.get('dataTables', []),
-#                 'statcard': node_positions.get('statCards', [])
-#             }
-            
-#             # Collect elements for this dashboard
-#             dashboard_elements = []
-            
-#             # Process all charts first
-#             for node in node_type_map.get('chart', []):
-#                 node_id = node.get('id')
-#                 if not node_id:
-#                     continue
-                
-#                 image_key = f"chart_{node_id}"
-#                 image_path = None
-                
-#                 # Try getting the image
-#                 # First check captured images from frontend
-#                 if image_key in node_images:
-#                     try:
-#                         image_data = node_images[image_key]
-#                         if image_data.startswith('data:image/png;base64,'):
-#                             image_data = image_data[len('data:image/png;base64,'):]
-                        
-#                         img_bytes = base64.b64decode(image_data)
-#                         image_path = os.path.join(dashboard_dir, f"{image_key}.png")
-#                         with open(image_path, 'wb') as f:
-#                             f.write(img_bytes)
-#                         app.logger.info(f"Saved frontend image for {image_key}")
-#                     except Exception as e:
-#                         app.logger.error(f"Failed to save frontend image: {str(e)}")
-                
-#                 # If no frontend image, check local files
-#                 if not image_path:
-#                     local_path = os.path.join('static', 'chart_images', f"{image_key}.png")
-#                     if os.path.exists(local_path):
-#                         image_path = os.path.join(dashboard_dir, f"{image_key}.png")
-#                         import shutil
-#                         shutil.copy2(local_path, image_path)
-#                         app.logger.info(f"Copied local image for {image_key}")
-                
-#                 # If still no image, try database
-#                 if not image_path:
-#                     db_cursor.execute("""
-#                         SELECT image_blob 
-#                         FROM graph_cache 
-#                         WHERE graph_id = ? AND isImageSuccess = 1
-#                     """, (node_id,))
-                    
-#                     result = db_cursor.fetchone()
-#                     if result and result[0]:
-#                         image_path = os.path.join(dashboard_dir, f"{image_key}.png")
-#                         with open(image_path, 'wb') as f:
-#                             f.write(result[0])
-#                         app.logger.info(f"Saved database image for {image_key}")
-                
-#                 # If we have an image, add it to the dashboard
-#                 if image_path and os.path.exists(image_path):
-#                     dashboard_elements.append({
-#                         'type': 'chart',
-#                         'title': node.get('title', 'Chart'),
-#                         'image_path': image_path,
-#                         'position': {
-#                             'x': node.get('position', {}).get('x', 0) or 0,
-#                             'y': node.get('position', {}).get('y', 0) or 0,
-#                             'width': node.get('position', {}).get('width', 400) or 400,
-#                             'height': node.get('position', {}).get('height', 300) or 300
-#                         }
-#                     })
-#                     app.logger.info(f"Added chart {node_id} to dashboard")
-            
-#             # Process data tables
-#             for node in node_type_map.get('datatable', []):
-#                 node_id = node.get('id')
-#                 if not node_id:
-#                     continue
-                
-#                 image_key = f"datatable_{node_id}"
-#                 image_path = None
-                
-#                 # First check local storage
-#                 local_path = os.path.join('static', 'data_table_images', f"{image_key}.png")
-#                 if os.path.exists(local_path):
-#                     image_path = os.path.join(dashboard_dir, f"{image_key}.png")
-#                     import shutil
-#                     shutil.copy2(local_path, image_path)
-#                     app.logger.info(f"Copied local image for {image_key}")
-                
-#                 # If no local image, try to generate one
-#                 if not image_path:
-#                     table_info = next((t for t in data_table_data if t.get('id') == node_id), None)
-#                     if table_info:
-#                         try:
-#                             temp_path = generate_data_table_image(table_info)
-#                             image_path = os.path.join(dashboard_dir, f"{image_key}.png")
-#                             import shutil
-#                             shutil.copy2(temp_path, image_path)
-#                             app.logger.info(f"Generated image for {image_key}")
-#                         except Exception as e:
-#                             app.logger.error(f"Failed to generate data table image: {str(e)}")
-                
-#                 # If we have an image, add it to the dashboard
-#                 if image_path and os.path.exists(image_path):
-#                     dashboard_elements.append({
-#                         'type': 'table',
-#                         'title': node.get('title', 'Data Table'),
-#                         'image_path': image_path,
-#                         'position': {
-#                             'x': node.get('position', {}).get('x', 0) or 0,
-#                             'y': node.get('position', {}).get('y', 0) or 0,
-#                             'width': node.get('position', {}).get('width', 400) or 400,
-#                             'height': node.get('position', {}).get('height', 300) or 300
-#                         }
-#                     })
-#                     app.logger.info(f"Added data table {node_id} to dashboard")
-            
-#             # Process stat cards
-#             for node in node_type_map.get('statcard', []):
-#                 node_id = node.get('id')
-#                 if not node_id:
-#                     continue
-                
-#                 image_key = f"statcard_{node_id}"
-#                 image_path = None
-                
-#                 # First check local storage
-#                 local_path = os.path.join('static', 'stat_card_images', f"{image_key}.png")
-#                 if os.path.exists(local_path):
-#                     image_path = os.path.join(dashboard_dir, f"{image_key}.png")
-#                     import shutil
-#                     shutil.copy2(local_path, image_path)
-#                     app.logger.info(f"Copied local image for {image_key}")
-                
-#                 # If no local image, try to generate one
-#                 if not image_path:
-#                     card_info = next((c for c in stat_card_data if c.get('id') == node_id), None)
-#                     if card_info:
-#                         try:
-#                             temp_path = generate_stat_card_image(card_info)
-#                             image_path = os.path.join(dashboard_dir, f"{image_key}.png")
-#                             import shutil
-#                             shutil.copy2(temp_path, image_path)
-#                             app.logger.info(f"Generated image for {image_key}")
-#                         except Exception as e:
-#                             app.logger.error(f"Failed to generate stat card image: {str(e)}")
-                
-#                 # If we have an image, add it to the dashboard
-#                 if image_path and os.path.exists(image_path):
-#                     dashboard_elements.append({
-#                         'type': 'stat',
-#                         'title': node.get('title', 'Stat Card'),
-#                         'image_path': image_path,
-#                         'position': {
-#                             'x': node.get('position', {}).get('x', 0) or 0,
-#                             'y': node.get('position', {}).get('y', 0) or 0,
-#                             'width': node.get('position', {}).get('width', 400) or 400,
-#                             'height': node.get('position', {}).get('height', 300) or 300
-#                         }
-#                     })
-#                     app.logger.info(f"Added stat card {node_id} to dashboard")
-            
-#             # Process text boxes
-#             for node in node_type_map.get('textbox', []):
-#                 node_id = node.get('id')
-#                 if not node_id:
-#                     continue
-                
-#                 image_key = f"textbox_{node_id}"
-#                 image_path = None
-                
-#                 # Try getting the image from frontend
-#                 if image_key in node_images:
-#                     try:
-#                         image_data = node_images[image_key]
-#                         if image_data.startswith('data:image/png;base64,'):
-#                             image_data = image_data[len('data:image/png;base64,'):]
-                        
-#                         img_bytes = base64.b64decode(image_data)
-#                         image_path = os.path.join(dashboard_dir, f"{image_key}.png")
-#                         with open(image_path, 'wb') as f:
-#                             f.write(img_bytes)
-#                         app.logger.info(f"Saved frontend image for {image_key}")
-#                     except Exception as e:
-#                         app.logger.error(f"Failed to save frontend image: {str(e)}")
-                
-#                 # If we have an image, add it to the dashboard
-#                 if image_path and os.path.exists(image_path):
-#                     dashboard_elements.append({
-#                         'type': 'text',
-#                         'title': node.get('title', 'Text'),
-#                         'image_path': image_path,
-#                         'position': {
-#                             'x': node.get('position', {}).get('x', 0) or 0,
-#                             'y': node.get('position', {}).get('y', 0) or 0,
-#                             'width': node.get('position', {}).get('width', 400) or 400,
-#                             'height': node.get('position', {}).get('height', 300) or 300
-#                         }
-#                     })
-#                     app.logger.info(f"Added text box {node_id} to dashboard")
-            
-#             # Organize elements into a grid to ensure all are visible
-#             # Sort by Y position
-#             dashboard_elements.sort(key=lambda el: el['position']['y'])
-            
-#             # Group elements into rows - elements within 100px Y are in the same row
-#             rows = []
-#             current_row = []
-#             last_y = None
-            
-#             for element in dashboard_elements:
-#                 current_y = element['position']['y']
-                
-#                 if last_y is None:
-#                     current_row.append(element)
-#                 elif abs(current_y - last_y) <= 100:
-#                     current_row.append(element)
-#                 else:
-#                     if current_row:
-#                         # Sort row by X position
-#                         current_row.sort(key=lambda el: el['position']['x'])
-#                         rows.append(current_row)
-#                     current_row = [element]
-                
-#                 last_y = current_y
-            
-#             # Add the last row
-#             if current_row:
-#                 current_row.sort(key=lambda el: el['position']['x'])
-#                 rows.append(current_row)
-            
-#             # Reassign positions based on grid layout
-#             grid_elements = []
-#             max_elements_per_row = 3  # Setting a fixed number of elements per row
-#             base_width = 400  # Base width for elements
-#             base_height = 300  # Base height for elements
-#             margin = 20  # Margin between elements
-            
-#             # Flatten the rows into a grid with max_elements_per_row per row
-#             all_elements = []
-#             for row in rows:
-#                 all_elements.extend(row)
-            
-#             grid_rows = []
-#             for i in range(0, len(all_elements), max_elements_per_row):
-#                 grid_rows.append(all_elements[i:i+max_elements_per_row])
-            
-#             # Calculate positions based on the grid
-#             for row_idx, row in enumerate(grid_rows):
-#                 for col_idx, element in enumerate(row):
-#                     # Assign new grid positions
-#                     element['position'] = {
-#                         'x': col_idx * (base_width + margin),
-#                         'y': row_idx * (base_height + margin),
-#                         'width': base_width,
-#                         'height': base_height
-#                     }
-#                     grid_elements.append(element)
-            
-#             # Skip if no elements
-#             if not grid_elements:
-#                 app.logger.warning(f"No valid elements for dashboard {dashboard_id}")
-#                 continue
-            
-#             # Print stats for debugging
-#             app.logger.info(f"Dashboard {dashboard_id} has {len(grid_elements)} elements")
-            
-#             # Add to dashboards list
-#             all_dashboards.append({
-#                 'name': dashboard_name,
-#                 'elements': grid_elements
-#             })
-        
-#         if not all_dashboards:
-#             return jsonify({'error': 'No valid dashboards with elements to export'}), 400
-        
-#         # Create the multi-page dashboard export
-#         app.logger.info(f"Creating PDF with {len(all_dashboards)} dashboards...")
-#         create_multi_page_dashboard_export(
-#             export_path,
-#             all_dashboards,
-#             export_id,
-#             company_name=None
-#         )
-        
-#         # Verify PDF was created
-#         if not os.path.exists(export_path):
-#             return jsonify({'error': 'Failed to create PDF file'}), 500
-        
-#         app.logger.info(f"PDF created successfully at {export_path}")
-        
-#         # Record the export in the database
-#         db_cursor.execute("""
-#             INSERT INTO dashboard_exports (
-#                 export_id, user_id, dashboard_ids, export_name, export_path, created_at
-#             ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-#         """, (export_id, user_id, json.dumps(dashboard_ids), export_name, export_path))
-        
-#         conn.commit()
-        
-#         # Return download URL
-#         return jsonify({
-#             'success': True,
-#             'export_id': export_id,
-#             'export_name': export_name,
-#             'download_url': f'/download-export/{export_id}'
-#         })
-        
-#     except Exception as e:
-#         app.logger.error(f"Error exporting dashboard: {str(e)}")
-#         app.logger.error(traceback.format_exc())
-#         return jsonify({'error': str(e)}), 500
-#     finally:
-#         if 'conn' in locals():
-#             conn.close()
-
 
 @app.route('/export-dashboard-mdx/<user_id>', methods=['POST'])
 def export_dashboard_mdx(user_id):
