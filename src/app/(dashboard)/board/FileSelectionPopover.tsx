@@ -25,16 +25,20 @@ const FileSelectionPopover = ({
   onSelect 
 }: FileSelectionPopoverProps) => {
   return (
+    
     <Popover>
       <PopoverTrigger asChild>
-        <Button 
-          variant="outline" 
-          size="icon" 
-          className="hover:bg-gray-100"
-        >
-          <Menu className="h-4 w-4" />
-        </Button>
-      </PopoverTrigger>
+  <div className="flex items-center space-x-2">
+    <span className="text-sm text-gray-700 font-medium">Select File:</span>
+    <Button 
+      variant="outline" 
+      size="icon" 
+      className="hover:bg-gray-100"
+    >
+      <Menu className="h-4 w-4" />
+    </Button>
+  </div>
+</PopoverTrigger>
       <PopoverContent 
         className="w-[400px] p-2" 
         side="bottom" 
@@ -53,7 +57,14 @@ const FileSelectionPopover = ({
             </p>
           ) : (
             <div className="space-y-1">
-              {files.map((file) => (
+              {files
+              .filter((file) => !file.filename.toLowerCase().endsWith('.pdf')
+                && !file.filename.toLowerCase().endsWith('.docx')
+                && !file.filename.toLowerCase().endsWith('.doc')
+                && !file.filename.toLowerCase().endsWith('.pptx')
+                && !file.filename.toLowerCase().endsWith('.ppt')
+                && !file.filename.toLowerCase().endsWith('.txt'))
+              .map((file) => (
                 <TooltipProvider key={file.file_id} delayDuration={300}>
                   <Tooltip>
                     <TooltipTrigger asChild>

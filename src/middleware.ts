@@ -12,7 +12,7 @@ export default clerkMiddleware(async (auth, req) => {
     // Protect the route; unauthenticated users will be redirected to the sign-in page
     await auth.protect();
   }
-  // Proceed to the next middleware or request handler
+  // // Proceed to the next middleware or request handler
   return NextResponse.next();
 });
 

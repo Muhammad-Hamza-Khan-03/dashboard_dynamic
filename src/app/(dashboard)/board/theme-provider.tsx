@@ -206,7 +206,7 @@ export const ThemeProvider: React.FC<{
   const [chartThemeName, setChartThemeName] = useState<ThemeNames>(defaultTheme);
   const [boardTheme, setBoardTheme] = useState(themes[defaultTheme]);
   const [chartTheme, setChartTheme] = useState(themes[defaultTheme]);
-  const [syncThemes, setSyncThemes] = useState(true);
+  const [syncThemes, setSyncThemes] = useState(false);
 
   // Update board theme and document properties
   useEffect(() => {
@@ -304,7 +304,7 @@ export const ThemeSelector: React.FC = () => {
             <Sparkles className="h-4 w-4 text-blue-500" />
             <span>Theme Settings</span>
           </h3>
-          
+{/*           
           <div className="flex items-center space-x-2 bg-blue-50/50 dark:bg-blue-950/30 p-2 rounded-lg">
             <Checkbox 
               id="sync-themes" 
@@ -315,7 +315,7 @@ export const ThemeSelector: React.FC = () => {
             <Label htmlFor="sync-themes" className="text-xs font-medium cursor-pointer">
               Sync dashboard and chart themes
             </Label>
-          </div>
+          </div> */}
         </div>
 
         <Tabs defaultValue="board" className="w-full">
@@ -326,13 +326,13 @@ export const ThemeSelector: React.FC = () => {
             >
               Dashboard
             </TabsTrigger>
-            <TabsTrigger 
+            {/* <TabsTrigger 
               value="chart" 
               className="rounded-md flex-1 text-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700" 
               disabled={syncThemes}
             >
               Charts
-            </TabsTrigger>
+            </TabsTrigger> */}
           </TabsList>
           
           {/* Theme selection grids for board and charts */}

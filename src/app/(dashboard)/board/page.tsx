@@ -480,7 +480,7 @@ const [parentFileId, setParentFileId] = useState<string | null>(null);
       setClickPosition(position);
       setShowStatCardModal(true);
     }
-    setMode('none');
+    // setMode('none');
   }, [maximizedChart, mode]);
 
   // Update the text box handlers to use textBoxes state instead of nodes
@@ -624,8 +624,15 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Server responded with error:', errorText);
-        throw new Error(`Failed to generate chart: ${errorText}`);
+        // Show a toast notification and return early to prevent a big error in the app
+        toast({
+          title: "Invalid columns selected",
+          description: "The columns you selected are not valid for this chart type. Please select appropriate columns.",
+          variant: "destructive",
+        });
+        setDataError("The columns you selected are not valid for this chart type.");
+        setShowChartModal(false);
+        return;
       }
 
       const responseData = await response.json();
@@ -738,7 +745,7 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
             </div>
           )} 
            */}
-          <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-6">
             <FileSelectionPopover
               files={fileList || []}
               loading={filesLoading}
