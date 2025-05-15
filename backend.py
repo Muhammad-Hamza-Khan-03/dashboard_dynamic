@@ -6888,35 +6888,35 @@ def generate_node_mdx(node, use_relative_positioning):
     return mdx_lines
 
 # New endpoint to get a list of dashboards for export selection
-@app.route('/get-dashboards/<user_id>', methods=['GET'])
-def get_dashboards(user_id):
-    """Get a list of dashboards for the user."""
-    try:
-        conn = sqlite3.connect('user_files.db')
-        cursor = conn.cursor()
+# @app.route('/get-dashboards/<user_id>', methods=['GET'])
+# def get_dashboards(user_id):
+#     """Get a list of dashboards for the user."""
+#     try:
+#         conn = sqlite3.connect('user_files.db')
+#         cursor = conn.cursor()
         
-        # Get dashboards for the user
-        cursor.execute("""
-            SELECT id, name, created_at
-            FROM dashboards
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-        """, (user_id,))
+#         # Get dashboards for the user
+#         cursor.execute("""
+#             SELECT id, name, created_at
+#             FROM dashboards
+#             WHERE user_id = ?
+#             ORDER BY created_at DESC
+#         """, (user_id,))
         
-        dashboard_rows = cursor.fetchall()
-        dashboards = [{
-            'id': row[0],
-            'name': row[1],
-            'created_at': row[2]
-        } for row in dashboard_rows]
+#         dashboard_rows = cursor.fetchall()
+#         dashboards = [{
+#             'id': row[0],
+#             'name': row[1],
+#             'created_at': row[2]
+#         } for row in dashboard_rows]
         
-        conn.close()
+#         conn.close()
         
-        return jsonify({'dashboards': dashboards})
+#         return jsonify({'dashboards': dashboards})
         
-    except Exception as e:
-        app.logger.error(f"Error getting dashboards: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+#     except Exception as e:
+#         app.logger.error(f"Error getting dashboards: {str(e)}")
+#         return jsonify({'error': str(e)}), 500
 
 @app.route('/save-dashboard/<user_id>/<dashboard_id>', methods=['POST'])
 def save_dashboard(user_id, dashboard_id):
@@ -8029,6 +8029,306 @@ def check_wkhtmltopdf_installed():
         app.logger.error(f"wkhtmltopdf not found: {e}")
         app.logger.error("Please install wkhtmltopdf using: apt-get install wkhtmltopdf")
         return False
+@app.route('/save-complete-dashboard/<user_id>/<dashboard_id>', methods=['POST'])
+def save_complete_dashboard(user_id, dashboard_id):
+    """Save the complete dashboard with all elements to the database."""
+    try:
+        data = request.json
+        dashboard_name = data.get('name', 'Unnamed Dashboard')
+        charts = data.get('charts', [])
+        textboxes = data.get('textBoxes', [])
+        datatables = data.get('dataTables', [])
+        statcards = data.get('statCards', [])
+        
+        # Connect to database
+        conn = sqlite3.connect('user_files.db')
+        c = conn.cursor()
+        
+        # Check if dashboard exists
+        c.execute("""
+            SELECT id FROM dashboards
+            WHERE id = ? AND user_id = ?
+        """, (dashboard_id, user_id))
+        
+        result = c.fetchone()
+        
+        if result:
+            # Update existing dashboard
+            c.execute("""
+                UPDATE dashboards
+                SET name = ?, charts = ?, textboxes = ?, datatables = ?, statcards = ?
+                WHERE id = ? AND user_id = ?
+            """, (
+                dashboard_name,
+                json.dumps(charts),
+                json.dumps(textboxes),
+                json.dumps(datatables),
+                json.dumps(statcards),
+                dashboard_id,
+                user_id
+            ))
+        else:
+            # Insert new dashboard
+            c.execute("""
+                INSERT INTO dashboards (id, user_id, name, charts, textboxes, datatables, statcards)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                dashboard_id,
+                user_id,
+                dashboard_name,
+                json.dumps(charts),
+                json.dumps(textboxes),
+                json.dumps(datatables),
+                json.dumps(statcards)
+            ))
+        
+        # Process each chart to save in graph_cache
+        for chart in charts:
+            chart_id = chart.get('id')
+            if not chart_id:
+                continue
+                
+            # Update dashboard_name in graph_cache for this chart
+            c.execute("""
+                UPDATE graph_cache 
+                SET dashboard_name = ?
+                WHERE graph_id = ?
+            """, (dashboard_name, chart_id))
+        
+        # Save data tables to graph_cache with a prefix
+        for table in datatables:
+            table_id = table.get('id')
+            if not table_id:
+                continue
+                
+            # Serialize the table data
+            table_html = f"""
+            <div class="data-table-container">
+                <h3 class="table-title">{table.get('title', 'Data Table')}</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            {' '.join(f'<th>{col}</th>' for col in table.get('columns', []))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {generate_table_rows(table.get('data', []), table.get('columns', []))}
+                    </tbody>
+                </table>
+            </div>
+            """
+            
+            # Check if entry exists
+            c.execute("""
+                SELECT COUNT(*) FROM graph_cache 
+                WHERE graph_id = ?
+            """, (f"datatable_{table_id}",))
+            
+            if c.fetchone()[0] > 0:
+                # Update existing entry
+                c.execute("""
+                    UPDATE graph_cache 
+                    SET html_content = ?, dashboard_name = ?, isImageSuccess = 0
+                    WHERE graph_id = ?
+                """, (table_html, dashboard_name, f"datatable_{table_id}"))
+            else:
+                # Insert new entry
+                c.execute("""
+                    INSERT INTO graph_cache (graph_id, html_content, dashboard_name, isImageSuccess)
+                    VALUES (?, ?, ?, 0)
+                """, (f"datatable_{table_id}", table_html, dashboard_name))
+        
+        # Save stat cards to graph_cache with a prefix
+        for card in statcards:
+            card_id = card.get('id')
+            if not card_id:
+                continue
+                
+            # Serialize the stat card data
+            card_html = f"""
+            <div class="stat-card">
+                <h3 class="stat-title">{card.get('title', 'Statistic')}</h3>
+                <div class="stat-value">{calculate_stat_value(card)}</div>
+                <div class="stat-type">{card.get('statType', 'count')}</div>
+            </div>
+            """
+            
+            # Check if entry exists
+            c.execute("""
+                SELECT COUNT(*) FROM graph_cache 
+                WHERE graph_id = ?
+            """, (f"statcard_{card_id}",))
+            
+            if c.fetchone()[0] > 0:
+                # Update existing entry
+                c.execute("""
+                    UPDATE graph_cache 
+                    SET html_content = ?, dashboard_name = ?, isImageSuccess = 0
+                    WHERE graph_id = ?
+                """, (card_html, dashboard_name, f"statcard_{card_id}"))
+            else:
+                # Insert new entry
+                c.execute("""
+                    INSERT INTO graph_cache (graph_id, html_content, dashboard_name, isImageSuccess)
+                    VALUES (?, ?, ?, 0)
+                """, (f"statcard_{card_id}", card_html, dashboard_name))
+        
+        # Save text boxes to graph_cache with a prefix
+        for textbox in textboxes:
+            textbox_id = textbox.get('id')
+            if not textbox_id:
+                continue
+                
+            # Serialize the textbox content
+            textbox_html = f"""
+            <div class="textbox-content">
+                {textbox.get('content', '')}
+            </div>
+            """
+            
+            # Check if entry exists
+            c.execute("""
+                SELECT COUNT(*) FROM graph_cache 
+                WHERE graph_id = ?
+            """, (f"textbox_{textbox_id}",))
+            
+            if c.fetchone()[0] > 0:
+                # Update existing entry
+                c.execute("""
+                    UPDATE graph_cache 
+                    SET html_content = ?, dashboard_name = ?, isImageSuccess = 0
+                    WHERE graph_id = ?
+                """, (textbox_html, dashboard_name, f"textbox_{textbox_id}"))
+            else:
+                # Insert new entry
+                c.execute("""
+                    INSERT INTO graph_cache (graph_id, html_content, dashboard_name, isImageSuccess)
+                    VALUES (?, ?, ?, 0)
+                """, (f"textbox_{textbox_id}", textbox_html, dashboard_name))
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Dashboard saved successfully',
+            'dashboard_id': dashboard_id
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error saving complete dashboard: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+def generate_table_rows(data, columns):
+    """Helper function to generate HTML for table rows"""
+    rows = []
+    for row_data in data[:10]:  # Limit to 10 rows for performance
+        row = "<tr>"
+        for col in columns:
+            value = row_data.get(col, "")
+            row += f"<td>{value}</td>"
+        row += "</tr>"
+        rows.append(row)
+    return "\n".join(rows)
+
+def calculate_stat_value(card):
+    """Helper function to calculate statistic value"""
+    try:
+        data = card.get('data', [])
+        column = card.get('column', '')
+        stat_type = card.get('statType', 'count')
+        
+        if not data or not column:
+            return "N/A"
+            
+        # Extract values from the column
+        values = [float(row[column]) for row in data if column in row and row[column] is not None]
+        
+        if not values:
+            return "0"
+            
+        if stat_type == 'count':
+            return str(len(values))
+        elif stat_type == 'sum':
+            return f"{sum(values):.2f}"
+        elif stat_type == 'mean':
+            return f"{sum(values) / len(values):.2f}"
+        elif stat_type == 'max':
+            return f"{max(values):.2f}"
+        elif stat_type == 'min':
+            return f"{min(values):.2f}"
+        else:
+            return str(len(values))
+    except Exception as e:
+        app.logger.error(f"Error calculating stat value: {str(e)}")
+        return "Error"
+
+@app.route('/get-dashboards/<user_id>', methods=['GET'])
+def get_dashboards(user_id):
+    """Get all dashboards for a user with their elements."""
+    try:
+        conn = sqlite3.connect('user_files.db')
+        cursor = conn.cursor()
+        
+        # Get dashboards for the user
+        cursor.execute("""
+            SELECT id, name, charts, textboxes, datatables, statcards, created_at
+            FROM dashboards
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        """, (user_id,))
+        
+        dashboard_rows = cursor.fetchall()
+        dashboards = []
+        
+        for row in dashboard_rows:
+            dashboard_id, name, charts_json, textboxes_json, datatables_json, statcards_json, created_at = row
+            
+            # Parse JSON data
+            try:
+                charts = json.loads(charts_json) if charts_json else []
+            except:
+                charts = []
+                
+            try:
+                textboxes = json.loads(textboxes_json) if textboxes_json else []
+            except:
+                textboxes = []
+                
+            try:
+                datatables = json.loads(datatables_json) if datatables_json else []
+            except:
+                datatables = []
+                
+            try:
+                statcards = json.loads(statcards_json) if statcards_json else []
+            except:
+                statcards = []
+            
+            dashboards.append({
+                'id': dashboard_id,
+                'name': name,
+                'charts': charts,
+                'textBoxes': textboxes,
+                'dataTables': datatables,
+                'statCards': statcards,
+                'created_at': created_at
+            })
+        
+        return jsonify({
+            'success': True,
+            'dashboards': dashboards
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error getting dashboards: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 if __name__ == '__main__':
     check_wkhtmltopdf_installed()

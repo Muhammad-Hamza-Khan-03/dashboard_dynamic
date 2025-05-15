@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Camera, Check, Loader, X } from 'lucide-react';
+import { Camera, Check, Loader } from 'lucide-react';
 import { 
   Dialog, 
   DialogContent, 
@@ -9,19 +9,21 @@ import {
   DialogFooter
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { toast } from '@/components/ui/use-toast';
 
 interface SaveDashboardButtonProps {
   userId: string | undefined;
   currentDashboardId: string | null;
   currentDashboardName: string;
   charts: any[];
-   statCards: any[]; 
-   dataTables: any[];
+  statCards: any[];
+  dataTables: any[];
+  textBoxes?: any[];
   disabled?: boolean;
 }
 
 /**
- * A button that captures the current state of all charts in the dashboard
+ * A button that captures the current state of all dashboard elements
  * and stores them in the database for later export.
  */
 const SaveDashboardButton: React.FC<SaveDashboardButtonProps> = ({
@@ -31,6 +33,7 @@ const SaveDashboardButton: React.FC<SaveDashboardButtonProps> = ({
   charts,
   statCards,
   dataTables,
+  textBoxes = [],
   disabled
 }) => {
   const [isSaving, setIsSaving] = useState(false);
@@ -39,44 +42,47 @@ const SaveDashboardButton: React.FC<SaveDashboardButtonProps> = ({
   const [message, setMessage] = useState<string>('');
   const [results, setResults] = useState<any>(null);
   
-  function calculateStatValue(card: { data: never[]; column: any; statType: any; }) {
-  const data = card.data || [];
-  const column = card.column;
-  const statType = card.statType;
-  
-  if (!data.length || !column) return "N/A";
-  
-  try {
-    // Extract values from the data
-    const values = data.map(item => item[column]).filter(val => val !== null && val !== undefined);
+  // This function correctly calculates stat values based on stat type
+  function calculateStatValue(card: { data: any[]; column: string; statType: string; }) {
+    const data = card.data || [];
+    const column = card.column;
+    const statType = card.statType;
     
-    if (!values.length) return "N/A";
+    if (!data.length || !column) return "N/A";
     
-    switch (statType) {
-      case 'count':
-        return values.length.toFixed(2);
-      case 'sum':
-        return values.reduce((sum, val) => sum + Number(val), 0).toFixed(2);
-      case 'mean':
-        return (values.reduce((sum, val) => sum + Number(val), 0) / values.length).toFixed(2);
-      case 'mode':
-        const counts: Record<string | number, number> = {};
-        values.forEach(val => { counts[val] = (counts[val] || 0) + 1; });
-        const mode = Object.entries(counts).reduce((a, b) => a[1] > b[1] ? a : b)[0];
-        return mode;
-      case 'max':
-        return Math.max(...values.map(v => Number(v))).toFixed(2);
-      case 'min':
-        return Math.min(...values.map(v => Number(v))).toFixed(2);
-      default:
-        return "N/A";
+    try {
+      // Extract values from the data
+      const values = data.map(item => item[column])
+        .filter(val => val !== null && val !== undefined)
+        .map(val => typeof val === 'string' ? parseFloat(val) : val)
+        .filter(val => !isNaN(val)); // Filter out NaN values
+      
+      if (!values.length) return "N/A";
+      
+      switch (statType) {
+        case 'count':
+          return values.length.toString();
+        case 'sum':
+          return values.reduce((sum, val) => sum + Number(val), 0).toFixed(2);
+        case 'mean':
+          return (values.reduce((sum, val) => sum + Number(val), 0) / values.length).toFixed(2);
+        case 'mode':
+          const counts: Record<string | number, number> = {};
+          values.forEach(val => { counts[val] = (counts[val] || 0) + 1; });
+          const mode = Object.entries(counts).reduce((a, b) => a[1] > b[1] ? a : b)[0];
+          return mode;
+        case 'max':
+          return Math.max(...values.map(v => Number(v))).toFixed(2);
+        case 'min':
+          return Math.min(...values.map(v => Number(v))).toFixed(2);
+        default:
+          return "N/A";
+      }
+    } catch (e) {
+      console.error("Error calculating stat value:", e);
+      return "Error";
     }
-  } catch (e) {
-    console.error("Error calculating stat value:", e);
-    return "Error";
   }
-}
-
 
   // Capture the current dashboard state
   const handleSaveDashboard = async () => {
@@ -96,43 +102,78 @@ const SaveDashboardButton: React.FC<SaveDashboardButtonProps> = ({
         graphUrl: chart.graphUrl
       }));
       
+      // Calculate actual stat values for each card
       const statCardData = statCards.map(card => ({
-      id: card.id,
-      title: card.title,
-      value: calculateStatValue(card), // Same helper function as in EnhancedExportButton
-      statType: card.statType,
-      column: card.column
-    }));
+        id: card.id,
+        title: card.title,
+        value: calculateStatValue(card), // Using the correct calculation function
+        statType: card.statType,
+        column: card.column
+      }));
 
-    const dataTableData = dataTables.map(table => ({
+      // Prepare data table data
+      const dataTableData = dataTables.map(table => ({
         id: table.id,
         title: table.title,
         columns: table.columns,
         data: table.data
       }));
-      // Send request to backend
-    const response = await fetch(`http://localhost:5000/save-dashboard/${userId}/${currentDashboardId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        dashboard_name: currentDashboardName,
-        charts: chartData,
-        stat_cards: statCardData,
-        data_tables: dataTableData 
-      }),
-    });  
-      if (!response.ok) {
-        throw new Error(`Server responded with status: ${response.status}`);
+      
+      // First save the visualization data for rendering
+      const saveVisResponse = await fetch(`http://localhost:5000/save-dashboard/${userId}/${currentDashboardId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dashboard_name: currentDashboardName,
+          charts: chartData,
+          stat_cards: statCardData,
+          data_tables: dataTableData 
+        }),
+      });  
+      
+      if (!saveVisResponse.ok) {
+        throw new Error(`Failed to save visualizations: ${saveVisResponse.status}`);
       }
       
-      const data = await response.json();
+      // Then save the complete dashboard structure with all elements
+      const saveCompleteResponse = await fetch(`http://localhost:5000/save-complete-dashboard/${userId}/${currentDashboardId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: currentDashboardName,
+          charts: charts,
+          textBoxes: textBoxes,
+          dataTables: dataTables,
+          statCards: statCards.map(card => ({
+            ...card,
+            calculatedValue: calculateStatValue(card) // Add calculated value to ensure it's stored
+          }))
+        }),
+      });
+      
+      if (!saveCompleteResponse.ok) {
+        throw new Error(`Failed to save complete dashboard: ${saveCompleteResponse.status}`);
+      }
+      
+      const data = await saveCompleteResponse.json();
       
       if (data.success) {
         setStatus('success');
-        setMessage(data.message);
-        setResults(data.results);
+        setMessage(data.message || 'Dashboard saved successfully');
+        setResults(data.results || {
+          success: charts.length + statCards.length + dataTables.length + textBoxes.length,
+          failed: 0
+        });
+        
+        // Also show a toast notification
+        toast({
+          title: "Dashboard saved",
+          description: "Your dashboard has been saved to the database.",
+        });
       } else {
         throw new Error(data.error || 'Unknown error occurred');
       }
@@ -140,6 +181,13 @@ const SaveDashboardButton: React.FC<SaveDashboardButtonProps> = ({
       console.error('Error saving dashboard:', error);
       setStatus('error');
       setMessage(error instanceof Error ? error.message : 'Failed to save dashboard');
+      
+      // Show error toast
+      toast({
+        title: "Failed to save dashboard",
+        description: error instanceof Error ? error.message : 'An error occurred',
+        variant: "destructive",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -191,9 +239,9 @@ const SaveDashboardButton: React.FC<SaveDashboardButtonProps> = ({
                 
                 {results && (
                   <div className="bg-gray-50 p-3 rounded-md text-sm">
-                    <p><span className="font-medium">Successfully saved:</span> {results.success} charts</p>
+                    <p><span className="font-medium">Successfully saved:</span> {results.success} elements</p>
                     {results.failed > 0 && (
-                      <p><span className="font-medium">Failed:</span> {results.failed} charts</p>
+                      <p><span className="font-medium">Failed:</span> {results.failed} elements</p>
                     )}
                   </div>
                 )}

@@ -57,11 +57,13 @@ interface FileData {
   data: Array<Record<string, unknown>>;
   columns: Column[];
 }
-
 interface Dashboard {
   id: string;
   name: string;
   charts: Chart[];
+  textBoxes: TextBoxData[]; // Add this
+  dataTables: DataTable[];  // Add this
+  statCards: StatCard[];    // Add this
 }
 interface ChartOptions {
   binSize?: number;
@@ -139,31 +141,98 @@ const [parentFileId, setParentFileId] = useState<string | null>(null);
 
   type ContentMode = 'none' | 'chart' | 'textbox' | 'datatable' | 'statcard';
 
-  useEffect(() => {
-    if (userId) {
-      const savedDashboards = localStorage.getItem(`dashboards_${userId}`);
-      if (savedDashboards) {
-        setDashboards(JSON.parse(savedDashboards));
-      }
-    }
-  }, [userId]);
+  // useEffect(() => {
+  //   if (userId) {
+  //     const savedDashboards = localStorage.getItem(`dashboards_${userId}`);
+  //     if (savedDashboards) {
+  //       setDashboards(JSON.parse(savedDashboards));
+  //     }
+  //   }
+  // }, [userId]);
 
-  // Save dashboards to localStorage
+  // // Save dashboards to localStorage
+  // useEffect(() => {
+  //   if (userId) {
+  //     localStorage.setItem(`dashboards_${userId}`, JSON.stringify(dashboards));
+  //   }
+  // }, [dashboards, userId]);
+
   useEffect(() => {
-    if (userId) {
-      localStorage.setItem(`dashboards_${userId}`, JSON.stringify(dashboards));
-    }
-  }, [dashboards, userId]);
+  if (userId) {
+    const fetchDashboards = async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/get-dashboards/${userId}`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Error fetching dashboards:', errorText);
+          // Fallback to localStorage if API fails
+          const savedDashboards = localStorage.getItem(`dashboards_${userId}`);
+          if (savedDashboards) {
+            setDashboards(JSON.parse(savedDashboards));
+          }
+          return;
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && data.dashboards) {
+          setDashboards(data.dashboards);
+        } else {
+          // Fallback to localStorage
+          const savedDashboards = localStorage.getItem(`dashboards_${userId}`);
+          if (savedDashboards) {
+            setDashboards(JSON.parse(savedDashboards));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching dashboards:', error);
+        // Fallback to localStorage
+        const savedDashboards = localStorage.getItem(`dashboards_${userId}`);
+        if (savedDashboards) {
+          setDashboards(JSON.parse(savedDashboards));
+        }
+      }
+    };
+    
+    fetchDashboards();
+  }
+}, [userId]);
 
   // Update charts when dashboard changes
+  // useEffect(() => {
+  //   if (selectedDashboard) {
+  //     const dashboard = dashboards.find(d => d.id === selectedDashboard);
+  //     setCharts(dashboard?.charts || []);
+  //   } else {
+  //     setCharts([]);
+  //   }
+  // }, [selectedDashboard, dashboards]);
+
   useEffect(() => {
-    if (selectedDashboard) {
-      const dashboard = dashboards.find(d => d.id === selectedDashboard);
-      setCharts(dashboard?.charts || []);
+  if (selectedDashboard) {
+    const dashboard = dashboards.find(d => d.id === selectedDashboard);
+    if (dashboard) {
+      // Update all element states
+      setCharts(dashboard.charts || []);
+      setTextBoxes(dashboard.textBoxes || []);
+      setDataTables(dashboard.dataTables || []);
+      setStatCards(dashboard.statCards || []);
     } else {
+      // Reset if dashboard not found
       setCharts([]);
+      setTextBoxes([]);
+      setDataTables([]);
+      setStatCards([]);
     }
-  }, [selectedDashboard, dashboards]);
+  } else {
+    // Reset if no dashboard selected
+    setCharts([]);
+    setTextBoxes([]);
+    setDataTables([]);
+    setStatCards([]);
+  }
+}, [selectedDashboard, dashboards]);
 
   // Save current dashboard state
   const saveDashboardState = useCallback(() => {
@@ -177,19 +246,19 @@ const [parentFileId, setParentFileId] = useState<string | null>(null);
   }, [selectedDashboard, charts]);
 
   // Auto-save when charts change
-  useEffect(() => {
-    if (!selectedDashboard) return;
+  // useEffect(() => {
+  //   if (!selectedDashboard) return;
 
-    const timeoutId = setTimeout(() => {
-      setDashboards(prev => prev.map(dashboard =>
-        dashboard.id === selectedDashboard
-          ? { ...dashboard, charts }
-          : dashboard
-      ));
-    }, 500);
+  //   const timeoutId = setTimeout(() => {
+  //     setDashboards(prev => prev.map(dashboard =>
+  //       dashboard.id === selectedDashboard
+  //         ? { ...dashboard, charts }
+  //         : dashboard
+  //     ));
+  //   }, 500);
 
-    return () => clearTimeout(timeoutId);
-  }, [charts, selectedDashboard]);
+  //   return () => clearTimeout(timeoutId);
+  // }, [charts, selectedDashboard]);
   const handleAiDashboardCreate = async (config: AiDashboardConfig) => {
     if (!selectedDashboard) {
       toast({
@@ -599,7 +668,10 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
     const newDashboard: Dashboard = {
       id: Date.now().toString(),
       name: newDashboardName.trim(),
-      charts: []
+      charts: [],
+      textBoxes: [],
+      dataTables: [],
+      statCards: []
     };
 
     setDashboards(prev => [...prev, newDashboard]);
@@ -724,14 +796,15 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
 
             <div className='flex items-center space-x-2'>
             <SaveDashboardButton
-    userId={userId}
-    currentDashboardId={selectedDashboard}
-    currentDashboardName={dashboards.find(d => d.id === selectedDashboard)?.name || 'Dashboard'}
-    charts={charts}
-    statCards={statCards}
-    dataTables={dataTables}
-    disabled={!selectedDashboard}
-  />
+  userId={userId}
+  currentDashboardId={selectedDashboard}
+  currentDashboardName={dashboards.find(d => d.id === selectedDashboard)?.name || 'Dashboard'}
+  charts={charts}
+  textBoxes={textBoxes}
+  dataTables={dataTables}
+  statCards={statCards}
+  disabled={!selectedDashboard}
+/>
 
 <EnhancedExportButton
     userId={userId}
