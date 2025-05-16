@@ -1876,19 +1876,19 @@ const AnalysisPanel: React.FC<{
   }, [userId]);
   const checkForMermaidDiagram = async (chainId: number) => {
     console.log(`Checking for Mermaid diagram for chain ID: ${chainId}`);
-    
+
     try {
       // The path format for mermaid diagrams
       const diagramPath = `analysis_flow_${chainId}.mmd`;
       console.log(`Looking for diagram at path: ${diagramPath}`);
-      
+
       // Try to fetch the diagram
-      const checkResponse = await axios.get(`http://localhost:5000/mermaid/${diagramPath}`, { 
+      const checkResponse = await axios.get(`http://localhost:5000/mermaid/${diagramPath}`, {
         validateStatus: (status) => status < 500 // Accept 404 as a valid status
       });
-      
+
       console.log(`Mermaid diagram check response:`, checkResponse.status);
-      
+
       if (checkResponse.status === 200) {
         console.log(`Mermaid diagram found for chain ID: ${chainId}`);
         // Add the diagram to the result
@@ -2462,6 +2462,8 @@ const AnalysisPanel: React.FC<{
 
   // Add Data Cleaning Result Component
   const DataCleaningResult: React.FC<{ cleanedDataFile: string }> = ({ cleanedDataFile }) => {
+    console.log('Rendering DataCleaningResult with file:', cleanedDataFile);
+
     return (
       <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 mt-4">
         <CardHeader className="pb-2">
@@ -2649,14 +2651,9 @@ const AnalysisPanel: React.FC<{
             </div>
           )}
 
-          {result?.cleaned_data_file &&
-            (sortedSections.some(section =>
-              section.agentName === "Data Cleaning Expert" ||
-              section.agentName === "Data Quality Analyzer" ||
-              section.agentName === "Data Cleaning Planner"
-            )) && (
-              <DataCleaningResult cleanedDataFile={result.cleaned_data_file} />
-            )}
+          {result?.cleaned_data_file && (
+            <DataCleaningResult cleanedDataFile={result.cleaned_data_file} />
+          )}
           {/* Display the ordered agent sections for question responses */}
           {sortedSections.length > 0 && (
             <Card>
