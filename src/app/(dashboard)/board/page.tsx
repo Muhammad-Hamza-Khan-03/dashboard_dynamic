@@ -22,6 +22,7 @@ import AiDashboardModal, { AiDashboardConfig } from './ai-dashboard/aiDashboardM
 import { toast } from '@/components/ui/use-toast';
 import EnhancedExportButton from './EnhancedExportButton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Video } from 'lucide-react';
 // Interfaces
 interface Position {
   x: number;
@@ -131,7 +132,7 @@ const [parentFileId, setParentFileId] = useState<string | null>(null);
 
   const [mode, setMode] = useState<'none' | 'chart' | 'textbox' | 'datatable' | 'statcard'>('none');
   const [textBoxes, setTextBoxes] = useState<TextBoxData[]>([]);
-
+const [showVideoModal, setShowVideoModal] = useState<boolean>(false);
 
   const [showDataTableModal, setShowDataTableModal] = useState<boolean>(false);
   const [showStatCardModal, setShowStatCardModal] = useState<boolean>(false);
@@ -699,52 +700,6 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
       <div className="h-screen flex flex-col">
         {/* Top Navigation */}
         <div className="bg-white border-b p-4 flex items-center justify-between shadow-sm">
-
-          {/* <div className="flex items-center space-x-6">
-          
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="hover:bg-gray-100">
-                <Menu className="h-4 w-4" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-[320px]">
-              <SheetHeader>
-                <SheetTitle>Select File</SheetTitle>
-              </SheetHeader>
-              <div className="py-4">
-                {filesLoading ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader className="animate-spin w-6 h-6 text-blue-500" />
-                  </div>
-                ) : !fileList?.length ? (
-                  <p className="text-gray-500 text-center py-4">No files available</p>
-                ) : (
-                  fileList.map((file) => (
-                    <Button
-                      key={file.file_id}
-                      variant="ghost"
-                      className="w-full justify-start mb-1 hover:bg-blue-50"
-                      onClick={() => handleFileSelection(file.file_id)}
-                    >
-                      <FileText className="h-4 w-4 mr-2" />
-                      {file.filename}
-                    </Button>
-                  ))
-                )}
-              </div>
-            </SheetContent>
-          </Sheet>
-          
-           {selectedFile && (
-            <div className="flex items-center px-3 py-1.5 bg-blue-50 rounded-md">
-              <FileText className="h-4 w-4 text-blue-600 mr-2" />
-              <span className="text-sm font-medium text-blue-700">
-                {fileList?.find(f => f.file_id === selectedFile.id)?.filename || 'Selected File'}
-              </span>
-            </div>
-          )} 
-           */}
             <div className="flex items-center space-x-6">
             <FileSelectionPopover
               files={fileList || []}
@@ -800,7 +755,6 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
               </Button>
             </div>
 
-
             <div className='flex items-center space-x-2'>
             <SaveDashboardButton
   userId={userId}
@@ -825,32 +779,21 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
     usePreRendered={true} // Enable pre-rendered export by default
   />
             </div> 
+
+            <Button
+  variant="outline"
+  size="icon"
+  onClick={() => setShowVideoModal(true)}
+  className="ml-2 h-10 w-10 rounded-full hover:bg-blue-50"
+  title="Watch Tutorial Video"
+>
+  <Video className="h-5 w-5 text-blue-500" />
+</Button>
+
           </div>
         </div>
 
-        {/* Graph Area with improved styling */}
-           {/* <div className="flex-1 relative bg-gray-100 overflow-hidden p-6">
-        <div
-          className="absolute inset-0 p-6"
-          onDoubleClick={handleGraphAreaClick}
-        >
-          {charts.map(chart => (
-  <DraggableChart
-    key={chart.id}
-    id={chart.id}
-    title={chart.title}
-    description={chart.description}
-    graphUrl={chart.graphUrl}
-    position={chart.position}
-    onPositionChange={handleChartPosition}
-    onRemove={handleRemoveChart}
-    isMaximized={maximizedChart === chart.id}
-    onMaximizeToggle={handleMaximizeToggle}
-    onDescriptionChange={handleDescriptionChange}
-  />
-))}
-        </div>
-      </div> */}
+     
 <div className="flex-1 relative bg-gray-100 overflow-hidden">
           <FlowBoard
             charts={charts}
@@ -878,8 +821,10 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
           <Button
             variant={mode === 'chart' ? "default" : "outline"}
             size="icon"
+            title="Add Chart"
             className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
             onClick={() => setMode(prev => prev === 'chart' ? 'none' : 'chart')}
+            
           >
             <PlusCircle className="h-5 w-5" />
           </Button>
@@ -889,6 +834,7 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
             size="icon"
             className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
             onClick={() => setMode(prev => prev === 'textbox' ? 'none' : 'textbox')}
+            title="Add Text Box"
           >
             <Type className="h-5 w-5" />
           </Button>
@@ -897,6 +843,7 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
             size="icon"
             className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
             onClick={() => setMode(prev => prev === 'datatable' ? 'none' : 'datatable')}
+            title="Add Data Table"
           >
             <Table className="h-5 w-5" />
           </Button>
@@ -905,6 +852,7 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
             size="icon"
             className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
             onClick={() => setMode(prev => prev === 'statcard' ? 'none' : 'statcard')}
+            title="Add Stat Table"
           >
             <Database className="h-5 w-5" />
           </Button>
@@ -913,6 +861,7 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
     size="icon"
     className="h-10 w-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200"
     onClick={() => setShowAiDashboardModal(true)}
+    title="AI Dashboard Generator"
   >
     <BrainCircuit className="h-5 w-5 text-purple-500" />
   </Button>
@@ -1006,6 +955,25 @@ const handleSheetSelection = useCallback(async (sheetId: string) => {
             </Button>
           ))}
         </div>
+      </div>
+    </DialogContent>
+  </Dialog>
+)}
+{showVideoModal && (
+  <Dialog open={showVideoModal} onOpenChange={setShowVideoModal}>
+    <DialogContent className="sm:max-w-[800px]">
+      <DialogHeader>
+        <DialogTitle>Video Tutorial</DialogTitle>
+      </DialogHeader>
+      <div className="relative aspect-video">
+        <video 
+          className="w-full h-auto rounded-md" 
+          controls 
+          autoPlay
+        >
+          <source src='/tutorial.mp4' type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
       </div>
     </DialogContent>
   </Dialog>

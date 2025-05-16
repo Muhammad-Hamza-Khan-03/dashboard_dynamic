@@ -76,9 +76,11 @@ const FileSelectionPopover = ({
                           selectedFileId === file.file_id && "bg-blue-50 text-blue-600 hover:bg-blue-50/80"
                         )}
                         onClick={() => onSelect(file.file_id)}
+                      title = "select file"
                       >
                         <FileText className="h-4 w-4 shrink-0" />
                         <span className="line-clamp-2">{file.filename}</span>
+                        
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent 

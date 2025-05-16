@@ -188,7 +188,7 @@ const EnhancedExportModal: React.FC<ExportModalProps> = ({
                 checked={useRelativePositioning} 
                 onCheckedChange={(checked) => setUseRelativePositioning(!!checked)} 
               />
-              <Label htmlFor="relative-positioning">Use relative positioning nckjdnjk(recommended)</Label>
+              <Label htmlFor="relative-positioning">Use relative positioning(recommended)</Label>
             </div>
             <p className="text-xs text-gray-500 mt-1 ml-6">
               Preserves the layout of your dashboard elements relative to each other
