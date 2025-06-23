@@ -42,11 +42,10 @@ import base64
 # from flask_utils.db import init_db, init_stats_db
 from flask_utils.pdf_processing_utils import decompress_content, get_model, get_num_images, initialize_nltk, process_document_file
 from flask_utils.upload_utils import handle_json_upload,handle_xml_upload,process_document_content 
-
+from flask_utils.init_db import init_db, init_stats_db
 from flask_utils.task_utils import create_stats_task
 import os
 import matplotlib
-from flask_utils.pdf_processing import ConnectionPool
 # Add these utility functions
 import os
 import traceback
@@ -72,9 +71,6 @@ CHUNK_SIZE = 100000  # Maximum rows to fetch at once
 # TASK_STATUS = {}
 load_dotenv()
 
-global connection_pool
-
-connection_pool = ConnectionPool('user_files.db')
 
 
 DB_STORAGE_DIR = os.path.join('static', 'databases')
@@ -82,262 +78,6 @@ os.makedirs(DB_STORAGE_DIR, exist_ok=True)
 
 import logging
 import sqlite3
-from backend import connection_pool
-
-def init_db():
-    conn = sqlite3.connect('user_files.db')
-    c = conn.cursor()
-
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-    user_id TEXT PRIMARY KEY,
-    -- username TEXT NOT NULL,
-    -- email TEXT UNIQUE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-              );
-              ''')
-
-    c.execute('''CREATE TABLE IF NOT EXISTS  user_files 
-              (file_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT REFERENCES users(user_id),
-    filename TEXT NOT NULL,
-    file_type TEXT, --CHECK(file_type IN ('csv', 'xlsx','xls', 'db', 'tsv', 'doc', 'docx', 'txt', 'xml','pdf')),
-    is_structured BOOLEAN,
-    sheet_table TEXT, -- For Excel sheets or DB tables
-    unique_key TEXT,  -- Random unique identifier for structured data storage table
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id)
-    );
-              ''')
-
-    conn = sqlite3.connect('user_files.db')
-    c = conn.cursor()
-
-    # Check if parent_file_id column exists
-    c.execute("PRAGMA table_info(user_files)")
-    columns = [row[1] for row in c.fetchall()]
-
-    if 'parent_file_id' not in columns:
-        # Add parent_file_id column
-        c.execute('''ALTER TABLE user_files 
-                    ADD COLUMN parent_file_id INTEGER 
-                    REFERENCES user_files(file_id)''')
-
-    c.execute('''
-    CREATE TABLE IF NOT EXISTS  structured_file_storage (
-    unique_key TEXT PRIMARY KEY,
-    file_id INTEGER REFERENCES user_files(file_id),
-    table_name TEXT NOT NULL, -- Name of dynamically created table for each file
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (file_id) REFERENCES user_files(file_id)
-    );
-              ''')
-
-    c.execute('''CREATE TABLE IF NOT EXISTS  unstructured_file_storage (
-    file_id INTEGER REFERENCES user_files(file_id),
-    file_path TEXT,
-    unique_key TEXT PRIMARY KEY,
-    content BLOB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    processed_text TEXT,
-    FOREIGN KEY (file_id) REFERENCES user_files(file_id)
-    );
-    ''')
-
-    c.execute('''CREATE TABLE IF NOT EXISTS  dashboard_store (
-        dashboard_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_id INTEGER REFERENCES user_files(file_id),
-        dashboard_data BLOB,
-              user_id TEXT REFERENCES users(user_id),
-        dashboardname TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    ''')
-    c.execute('''CREATE TABLE IF NOT EXISTS graph_cache (
-        graph_id TEXT PRIMARY KEY,
-        html_content TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-
-    # Check if the column 'dashboard_name' exists before adding it
-    c.execute("PRAGMA table_info(graph_cache)")
-    columns = [row[1] for row in c.fetchall()]
-
-    if 'dashboard_name' not in columns:
-        c.execute('''ALTER TABLE graph_cache ADD COLUMN dashboard_name TEXT''')
-
-    if 'image_blob' not in columns:
-        c.execute('''ALTER TABLE graph_cache ADD COLUMN image_blob BLOB''')
-
-    if 'isImageSuccess' not in columns:
-        c.execute('''ALTER TABLE graph_cache ADD COLUMN isImageSuccess INTEGER DEFAULT 0''')
-
-    c.execute('''CREATE INDEX IF NOT EXISTS idx_graph_cache_dashboard 
-        ON graph_cache(dashboard_name, isImageSuccess);
-     ''')
-    c.execute(""" 
-            CREATE TABLE IF NOT EXISTS dashboard_exports (
-                export_id TEXT PRIMARY KEY,
-                user_id TEXT,
-                dashboard_ids TEXT,
-                export_name TEXT,
-                export_path TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-    c.execute(""" 
-            CREATE TABLE IF NOT EXISTS dashboards (
-                id TEXT PRIMARY KEY,
-                user_id TEXT,
-                name TEXT,
-                charts TEXT,
-                textboxes TEXT,
-                datatables TEXT,
-                statcards TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
-            )
-        """)
-
-    # Add document processing tables
-    with connection_pool.get_connection() as conn:
-        c = conn.cursor()
-
-        # Table for document chunks and embeddings
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS document_chunks (
-                chunk_id TEXT PRIMARY KEY,
-                file_id INTEGER,
-                doc_id TEXT,
-                chunk_type TEXT NOT NULL,
-                content TEXT,
-                content_compressed BLOB,
-                embedding BLOB,
-                summary TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
-            )
-        ''')
-
-        # Table for document images
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS document_images (
-                image_id TEXT PRIMARY KEY,
-                file_id INTEGER,
-                doc_id TEXT,
-                image_data BLOB,
-                summary TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
-            )
-        ''')
-
-        c.execute('''
-    CREATE TABLE IF NOT EXISTS document_processing (
-        process_id TEXT PRIMARY KEY,
-        file_id INTEGER,
-        status TEXT NOT NULL,
-        progress REAL DEFAULT 0,
-        message TEXT,
-        verbose_output TEXT,  -- New column for verbose output
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        completed_at TIMESTAMP,
-        FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
-    )
-    ''')
-        c.execute('''
-    CREATE TABLE IF NOT EXISTS user_query_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        chain_id INTEGER NOT NULL,
-        query_text TEXT NOT NULL,
-        filename TEXT,
-        file_id INTEGER,
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(user_id)
-    )
-''')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_query_history_user ON user_query_history(user_id)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_query_history_chain ON user_query_history(chain_id)')
-        # Create indexes for efficient querying
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_file_id ON document_chunks(file_id)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc_id ON document_chunks(doc_id)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_type ON document_chunks(chunk_type)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_images_file_id ON document_images(file_id)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_processing_file_id ON document_processing(file_id)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_doc_processing_status ON document_processing(status)')
-    # if conn:
-    #     conn.commit()
-    #     conn.close()
-
-def init_stats_db():
-    """Initialize the stats database structure"""
-    conn = sqlite3.connect('stats.db')
-    c = conn.cursor()
-    
-    # Table for column-level statistics
-    c.execute('''CREATE TABLE IF NOT EXISTS column_stats (
-        stats_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        table_id TEXT NOT NULL,
-        column_name TEXT NOT NULL,
-        data_type TEXT NOT NULL,
-        basic_stats TEXT,
-        distribution TEXT,
-        shape_stats TEXT,
-        outlier_stats TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(table_id, column_name)
-    )''')
-    
-    # Table for dataset-level statistics
-    c.execute('''CREATE TABLE IF NOT EXISTS dataset_stats (
-        stats_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        table_id TEXT NOT NULL UNIQUE,
-        correlation_matrix TEXT,
-        parallel_coords TEXT,
-        violin_data TEXT,
-        heatmap_data TEXT,
-        scatter_matrix TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    
-    # Table for tracking task status
-    c.execute('''CREATE TABLE IF NOT EXISTS stats_tasks (
-        task_id TEXT PRIMARY KEY,
-        table_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        progress REAL DEFAULT 0.0,
-        message TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        completed_at TIMESTAMP
-    )''')
-    c.execute("""
-            CREATE TABLE IF NOT EXISTS dashboard_exports (
-                export_id TEXT PRIMARY KEY,
-                user_id TEXT,
-                dashboard_ids TEXT,
-                export_name TEXT,
-                export_path TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-    c.execute("""
-            CREATE TABLE IF NOT EXISTS dashboards (
-                id TEXT PRIMARY KEY,
-                user_id TEXT,
-                name TEXT,
-                charts TEXT,
-                textboxes TEXT,
-                datatables TEXT,
-                statcards TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
-            )
-        """)
-    conn.commit()
-    conn.close()
-    logging.info("Stats database initialized")
 
 
 # LLM settings
@@ -362,12 +102,12 @@ def configure_llm_settings():
     llm_config = [
         {"agent": "Expert Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 500, "temperature": 0}},
         {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 500, "temperature": 0}},
-        {"agent": "SQL Analyst", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
-        {"agent": "SQL Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
-        {"agent": "SQL Executor", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+        {"agent": "SQL Analyst", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+        {"agent": "SQL Generator", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+        {"agent": "SQL Executor", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
         {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
-        {"agent": "Code Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
-        {"agent": "Code Debugger", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+        {"agent": "Code Generator", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+        {"agent": "Code Debugger", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
         {"agent": "Solution Summarizer", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}}
     ]
     
@@ -490,6 +230,10 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
 
 
 # API Routes
+@app.route('/',methods=['GET'])
+def index():
+    return "Welcome to the InsightAI API!"
+
 @app.route('/process_question/<user_id>/<file_id>', methods=['POST'])
 def process_question(user_id, file_id):
     try:
@@ -635,7 +379,6 @@ def process_question(user_id, file_id):
                     elif f.endswith('.mmd'):
                         mermaid_files.append(f)
 
-            # ADDED CODE: Also check the static/visualization directory for .mmd files
             static_viz_dir = os.path.join('static', 'visualization')
             if os.path.exists(static_viz_dir):
                 # Get only .mmd files from this directory
@@ -777,6 +520,8 @@ def get_user_history(user_id):
     finally:
         if 'conn' in locals():
             conn.close()
+
+
 @app.route('/get_history_result/<chain_id>', methods=['GET'])
 def get_history_result(chain_id):
     """Get the detailed results for a specific chain_id"""
@@ -968,221 +713,6 @@ def handle_sqlite_upload(file, user_id, filename, c, conn):
                 pass
         raise
 
-# //////////////////////////////////////////////
-
-# def calculate_column_statistics_chunked(df, column_name, chunk_size=10000):
-#     """Calculate statistics for a column using chunking for large datasets"""
-#     column_data = df[column_name]
-    
-#     # Determine data type
-#     if pd.api.types.is_numeric_dtype(column_data):
-#         data_type = 'numeric'
-#         # Filter out NaN values for calculations
-#         clean_data = column_data.dropna()
-        
-#         if len(clean_data) == 0:
-#             # Handle empty columns
-#             return {
-#                 'data_type': 'numeric',
-#                 'basic_stats': json.dumps({'missing_count': len(column_data), 'missing_percentage': 100.0}),
-#                 'distribution': json.dumps({}),
-#                 'shape_stats': json.dumps({}),
-#                 'outlier_stats': json.dumps({})
-#             }
-        
-#         # Process in chunks for better performance
-#         chunks = [clean_data[i:i+chunk_size] for i in range(0, len(clean_data), chunk_size)]
-        
-#         # Calculate basic stats incrementally
-#         count = 0
-#         sum_val = 0
-#         sum_sq = 0
-#         min_val = float('inf')
-#         max_val = float('-inf')
-        
-#         # First pass - calculate sums, min, max
-#         for chunk in chunks:
-#             chunk_min = chunk.min()
-#             chunk_max = chunk.max()
-#             min_val = min(min_val, chunk_min)
-#             max_val = max(max_val, chunk_max)
-            
-#             chunk_count = len(chunk)
-#             chunk_sum = chunk.sum()
-            
-#             count += chunk_count
-#             sum_val += chunk_sum
-#             sum_sq += (chunk ** 2).sum()
-        
-#         # Calculate mean and variance
-#         mean = sum_val / count if count > 0 else 0
-#         variance = (sum_sq / count) - (mean ** 2) if count > 0 else 0
-#         std_dev = math.sqrt(variance) if variance > 0 else 0
-        
-#         # Calculate median and quartiles
-#         sorted_data = clean_data.sort_values().reset_index(drop=True)
-#         median_idx = len(sorted_data) // 2
-#         median = sorted_data.iloc[median_idx]
-        
-#         q1_idx = len(sorted_data) // 4
-#         q3_idx = q1_idx * 3
-#         q1 = sorted_data.iloc[q1_idx]
-#         q3 = sorted_data.iloc[q3_idx]
-#         iqr = q3 - q1
-        
-#         # Calculate mode efficiently
-#         value_counts = clean_data.value_counts()
-#         mode_value = value_counts.index[0] if not value_counts.empty else None
-        
-#         # Basic stats
-#         basic_stats = {
-#             'min': float(min_val),
-#             'max': float(max_val),
-#             'mean': float(mean),
-#             'median': float(median),
-#             'mode': float(mode_value) if mode_value is not None else None,
-#             'count': int(count),
-#             'missing_count': int(len(column_data) - count),
-#             'missing_percentage': float((len(column_data) - count) / len(column_data) * 100)
-#         }
-        
-#         # Calculate histogram with fewer bins for large datasets
-#         bin_count = min(50, max(10, int(count / 1000)))
-#         hist, bin_edges = np.histogram(clean_data, bins=bin_count)
-        
-#         # Generate a sampled version of the data for QQ-plot
-#         # Use sampling for huge datasets
-#         if len(clean_data) > 10000:
-#             sample_size = 5000
-#             sampled_data = clean_data.sample(sample_size) if len(clean_data) > sample_size else clean_data
-#             sorted_sample = sampled_data.sort_values().values
-#             n = len(sorted_sample)
-#             theoretical_quantiles = np.array([stats.norm.ppf((i + 0.5) / n) for i in range(n)])
-#             valid_mask = ~np.isnan(theoretical_quantiles)
-#             x_values = theoretical_quantiles[valid_mask].tolist()
-#             y_values = sorted_sample[valid_mask].tolist()
-#         else:
-#             sorted_values = clean_data.sort_values().values
-#             n = len(sorted_values)
-#             theoretical_quantiles = np.array([stats.norm.ppf((i + 0.5) / n) for i in range(n)])
-#             valid_mask = ~np.isnan(theoretical_quantiles)
-#             x_values = theoretical_quantiles[valid_mask].tolist()
-#             y_values = sorted_values[valid_mask].tolist()
-        
-#         distribution = {
-#             'histogram': {
-#                 'counts': hist.tolist(),
-#                 'bin_edges': bin_edges.tolist()
-#             },
-#             'boxplot': {
-#                 'q1': float(q1),
-#                 'q3': float(q3),
-#                 'median': float(median),
-#                 'whislo': float(max(min_val, q1 - 1.5 * iqr)),
-#                 'whishi': float(min(max_val, q3 + 1.5 * iqr))
-#             },
-#             'qqplot': {
-#                 'x': x_values,
-#                 'y': y_values
-#             }
-#         }
-        
-#         # Calculate skewness and kurtosis on sampled data for large datasets
-#         if len(clean_data) > 50000:
-#             sample_size = 10000
-#             skew_sample = clean_data.sample(sample_size) if len(clean_data) > sample_size else clean_data
-#             skewness = float(skew_sample.skew())
-#             kurtosis = float(skew_sample.kurtosis())
-#         else:
-#             skewness = float(clean_data.skew())
-#             kurtosis = float(clean_data.kurtosis())
-        
-#         shape_stats = {
-#             'skewness': skewness,
-#             'kurtosis': kurtosis,
-#             'range': float(max_val - min_val)
-#         }
-        
-#         # Find outliers
-#         lower_bound = q1 - 1.5 * iqr
-#         upper_bound = q3 + 1.5 * iqr
-#         outliers = clean_data[(clean_data < lower_bound) | (clean_data > upper_bound)]
-        
-#         # Limit the number of outliers stored
-#         max_outliers = 100
-#         outlier_list = outliers.head(max_outliers).tolist()
-        
-#         outlier_stats = {
-#             'count': len(outliers),
-#             'percentage': float((len(outliers) / len(clean_data)) * 100),
-#             'lower_bound': float(lower_bound),
-#             'upper_bound': float(upper_bound),
-#             'outlier_values': outlier_list
-#         }
-    
-#     elif pd.api.types.is_categorical_dtype(column_data) or pd.api.types.is_object_dtype(column_data):
-#         data_type = 'categorical'
-        
-#         # For large datasets, limit the number of unique values processed
-#         if len(column_data) > 100000:
-#             sample = column_data.sample(min(50000, len(column_data)))
-#             value_counts = sample.value_counts()
-#         else:
-#             value_counts = column_data.value_counts()
-        
-#         # Limit to top 1000 categories for very large categorical columns
-#         if len(value_counts) > 1000:
-#             value_counts = value_counts.head(1000)
-        
-#         basic_stats = {
-#             'unique_count': int(value_counts.shape[0]),
-#             'top': str(value_counts.index[0]) if not value_counts.empty else None,
-#             'top_count': int(value_counts.iloc[0]) if not value_counts.empty else 0,
-#             'missing_count': int(column_data.isna().sum()),
-#             'missing_percentage': float(column_data.isna().sum() / len(column_data) * 100)
-#         }
-        
-#         # Distribution for categorical data
-#         value_dict = {}
-#         for k, v in value_counts.items():
-#             # Convert key to string to ensure JSON serialization
-#             key = str(k) if k is not None else 'null'
-#             value_dict[key] = int(v)
-            
-#         distribution = {
-#             'value_counts': value_dict
-#         }
-        
-#         # Shape stats (minimal for categorical)
-#         # Calculate entropy with a limit on number of categories
-#         shape_stats = {
-#             'entropy': float(stats.entropy(value_counts.values)) if len(value_counts) > 1 else 0
-#         }
-        
-#         # No outliers for categorical data
-#         outlier_stats = {}
-    
-#     else:
-#         # For other types (datetime, etc.)
-#         data_type = 'other'
-#         missing_count = column_data.isna().sum()
-#         basic_stats = {
-#             'missing_count': int(missing_count),
-#             'missing_percentage': float(missing_count / len(column_data) * 100)
-#         }
-#         distribution = {}
-#         shape_stats = {}
-#         outlier_stats = {}
-    
-#     return {
-#         'data_type': data_type,
-#         'basic_stats': json.dumps(basic_stats),
-#         'distribution': json.dumps(distribution),
-#         'shape_stats': json.dumps(shape_stats),
-#         'outlier_stats': json.dumps(outlier_stats)
-#     }
-
-# /////////////////////////////////
 def calculate_column_statistics(df, column_name):
     """Calculate comprehensive statistics for a single column"""
     column_data = df[column_name]

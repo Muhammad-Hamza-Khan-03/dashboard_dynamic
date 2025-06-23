@@ -1176,7 +1176,7 @@ const parseAgentSections = (output: string): {
   const codeMatch = codeRegex.exec(output);
   if (codeMatch) {
     const codeContent = codeMatch[1].trim();
-
+    console.log(codeContent);
     // Check if this is SQL code
     if (codeContent.includes("SELECT") && codeContent.includes("FROM")) {
       sections.push({
@@ -1276,7 +1276,7 @@ const FileSelector: React.FC<{
       } catch (err: any) {
         console.error('Error fetching files:', err);
         setError('Failed to load existing files: ' + (err.message || 'Unknown error'));
-      } finally {
+      } finally { 
         setIsLoading(false);
       }
     };

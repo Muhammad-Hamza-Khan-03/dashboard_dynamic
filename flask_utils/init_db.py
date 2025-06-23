@@ -1,6 +1,12 @@
-import logging
 import sqlite3
-from backend import connection_pool
+import logging
+
+from flask_utils.pdf_processing import ConnectionPool
+
+global connection_pool
+
+connection_pool = ConnectionPool('user_files.db')
+
 
 def init_db():
     conn = sqlite3.connect('user_files.db')
@@ -13,7 +19,7 @@ def init_db():
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
               );
               ''')
-    
+
     c.execute('''CREATE TABLE IF NOT EXISTS  user_files 
               (file_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT REFERENCES users(user_id),
@@ -27,19 +33,20 @@ def init_db():
     FOREIGN KEY (user_id) REFERENCES users(user_id)
     );
               ''')
+
     conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
-    
+
     # Check if parent_file_id column exists
     c.execute("PRAGMA table_info(user_files)")
     columns = [row[1] for row in c.fetchall()]
-    
+
     if 'parent_file_id' not in columns:
         # Add parent_file_id column
         c.execute('''ALTER TABLE user_files 
                     ADD COLUMN parent_file_id INTEGER 
                     REFERENCES user_files(file_id)''')
-    
+
     c.execute('''
     CREATE TABLE IF NOT EXISTS  structured_file_storage (
     unique_key TEXT PRIMARY KEY,
@@ -49,7 +56,7 @@ def init_db():
     FOREIGN KEY (file_id) REFERENCES user_files(file_id)
     );
               ''')
-    
+
     c.execute('''CREATE TABLE IF NOT EXISTS  unstructured_file_storage (
     file_id INTEGER REFERENCES user_files(file_id),
     file_path TEXT,
@@ -60,7 +67,7 @@ def init_db():
     FOREIGN KEY (file_id) REFERENCES user_files(file_id)
     );
     ''')
-    
+
     c.execute('''CREATE TABLE IF NOT EXISTS  dashboard_store (
         dashboard_id INTEGER PRIMARY KEY AUTOINCREMENT,
         file_id INTEGER REFERENCES user_files(file_id),
@@ -75,24 +82,24 @@ def init_db():
         html_content TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
-    
+
     # Check if the column 'dashboard_name' exists before adding it
     c.execute("PRAGMA table_info(graph_cache)")
     columns = [row[1] for row in c.fetchall()]
-    
+
     if 'dashboard_name' not in columns:
         c.execute('''ALTER TABLE graph_cache ADD COLUMN dashboard_name TEXT''')
-    
+
     if 'image_blob' not in columns:
         c.execute('''ALTER TABLE graph_cache ADD COLUMN image_blob BLOB''')
-    
+
     if 'isImageSuccess' not in columns:
         c.execute('''ALTER TABLE graph_cache ADD COLUMN isImageSuccess INTEGER DEFAULT 0''')
-    
+
     c.execute('''CREATE INDEX IF NOT EXISTS idx_graph_cache_dashboard 
         ON graph_cache(dashboard_name, isImageSuccess);
      ''')
-    c.execute("""
+    c.execute(""" 
             CREATE TABLE IF NOT EXISTS dashboard_exports (
                 export_id TEXT PRIMARY KEY,
                 user_id TEXT,
@@ -103,7 +110,7 @@ def init_db():
             )
         """)
 
-    c.execute("""
+    c.execute(""" 
             CREATE TABLE IF NOT EXISTS dashboards (
                 id TEXT PRIMARY KEY,
                 user_id TEXT,
@@ -116,11 +123,11 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
         """)
-    
+
     # Add document processing tables
     with connection_pool.get_connection() as conn:
         c = conn.cursor()
-        
+
         # Table for document chunks and embeddings
         c.execute('''
             CREATE TABLE IF NOT EXISTS document_chunks (
@@ -136,7 +143,7 @@ def init_db():
                 FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
             )
         ''')
-        
+
         # Table for document images
         c.execute('''
             CREATE TABLE IF NOT EXISTS document_images (
@@ -149,7 +156,7 @@ def init_db():
                 FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
             )
         ''')
-        
+
         c.execute('''
     CREATE TABLE IF NOT EXISTS document_processing (
         process_id TEXT PRIMARY KEY,
@@ -162,8 +169,21 @@ def init_db():
         completed_at TIMESTAMP,
         FOREIGN KEY (file_id) REFERENCES user_files(file_id) ON DELETE CASCADE
     )
+    ''')
+        c.execute('''
+    CREATE TABLE IF NOT EXISTS user_query_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        chain_id INTEGER NOT NULL,
+        query_text TEXT NOT NULL,
+        filename TEXT,
+        file_id INTEGER,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+    )
 ''')
-        
+        c.execute('CREATE INDEX IF NOT EXISTS idx_query_history_user ON user_query_history(user_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_query_history_chain ON user_query_history(chain_id)')
         # Create indexes for efficient querying
         c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_file_id ON document_chunks(file_id)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc_id ON document_chunks(doc_id)')
