@@ -100,22 +100,140 @@ def configure_llm_settings():
     
     # Set the LLM_CONFIG
     llm_config = [
-        {"agent": "Expert Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 500, "temperature": 0}},
+{"agent": "Expert Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 500, "temperature": 0}},
         {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 500, "temperature": 0}},
-        {"agent": "SQL Analyst", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
-        {"agent": "SQL Generator", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
-        {"agent": "SQL Executor", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+        {"agent": "SQL Analyst", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+        {"agent": "SQL Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+        {"agent": "SQL Executor", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
         {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
-        {"agent": "Code Generator", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
-        {"agent": "Code Debugger", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+        {"agent": "Code Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+        {"agent": "Code Debugger", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
         {"agent": "Solution Summarizer", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}}
     ]
     
     # Set as environment variable
     os.environ['LLM_CONFIG'] = json.dumps(llm_config)
+# def create_insight_instance(file_id, user_id, report_enabled=False, report_questions=3, diagram_enabled=False):
+#     """
+#     Create an InsightAI instance based on file type (CSV or DB)
+#     """
+#     # Set API keys and LLM config   
+#     configure_llm_settings()
+    
+#     conn = sqlite3.connect('user_files.db')
+#     c = conn.cursor()
+    
+#     # Get file metadata
+#     c.execute("""
+#         SELECT file_type, unique_key, filename, parent_file_id
+#         FROM user_files
+#         WHERE file_id = ? AND user_id = ?
+#     """, (file_id, user_id))
+    
+#     result = c.fetchone()
+#     if not result:
+#         conn.close()
+#         return None, "File not found"
+    
+#     file_type, unique_key, filename, parent_file_id = result
+    
+#     # Create visualization directory - SIMPLIFIED PATH
+#     viz_dir = os.path.join('static', 'visualization')
+#     os.makedirs(viz_dir, exist_ok=True)
+    
+#     # Set environment variable to tell InsightAI where to save visualizations
+#     os.environ['VISUALIZATION_DIR'] = viz_dir
+    
+#     try:
+#         if file_type in ['csv', 'json', 'xml']:  # Add other structured file types
+            
+#             # For structured files
+#             table_name = f"table_{unique_key}"
+            
+#             # Query all data from the table
+#             try:
+#                 df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+                
+#                 # Create InsightAI instance with DataFrame and include diagram_enabled
+#                 insight = InsightAI(
+#                     df=df,
+#                     debug=True,
+#                     exploratory=True,
+#                     generate_report=report_enabled,
+#                     report_questions=report_questions,
+#                     diagram=diagram_enabled
+#                 )
+                
+#                 return insight, None
+#             except Exception as e:
+#                 app.logger.error(f"Error loading data: {str(e)}")
+#                 return None, f"Error loading data: {str(e)}"
+            
+#         elif file_type in ['db', 'sqlite', 'sqlite3']:
+#             # For database files, we'll use the original stored database
+            
+#             # If this is a child table entry, get the parent file ID
+#             parent_id = parent_file_id if parent_file_id else file_id
+            
+#             # Get the parent's unique key to find the stored database file
+#             c.execute("""
+#                 SELECT unique_key 
+#                 FROM user_files 
+#                 WHERE file_id = ?
+#             """, (parent_id,))
+            
+#             parent_result = c.fetchone()
+#             if not parent_result:
+#                 return None, "Parent database not found"
+            
+#             parent_unique_key = parent_result[0]
+            
+#             # Find the stored database path
+#             c.execute("""
+#                 SELECT table_name
+#                 FROM structured_file_storage
+#                 WHERE unique_key = ?
+#             """, (parent_unique_key,))
+            
+#             path_result = c.fetchone()
+#             if not path_result:
+#                 return None, "Database file path not found"
+            
+#             db_path = path_result[0]
+            
+#             # Verify the file exists
+#             if not os.path.exists(db_path):
+#                 return None, f"Database file not found at {db_path}"
+            
+#             # Create InsightAI instance with the original db_path and include diagram_enabled
+#             try:
+#                 insight = InsightAI(
+#                     db_path=db_path,
+#                     debug=True,
+#                     exploratory=True,
+#                     generate_report=report_enabled,
+#                     report_questions=report_questions,
+#                     diagram=diagram_enabled
+#                 )
+                
+#                 return insight, None
+#             except Exception as e:
+#                 app.logger.error(f"Error creating InsightAI instance: {str(e)}")
+#                 return None, f"Error creating InsightAI instance: {str(e)}"
+#         else:
+#             # Unsupported file type
+#             return None, f"Unsupported file type: {file_type}"
+#     except Exception as e:
+#         app.logger.error(f"Error in create_insight_instance: {str(e)}")
+#         return None, str(e)
+#     finally:
+#         conn.close()
+
+# Update the create_insight_instance function in backend.py
 def create_insight_instance(file_id, user_id, report_enabled=False, report_questions=3, diagram_enabled=False):
     """
     Create an InsightAI instance based on file type (CSV or DB)
+    Enhanced to handle Excel sheet selection properly
     """
     # Set API keys and LLM config first
     configure_llm_settings()
@@ -123,9 +241,9 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
     conn = sqlite3.connect('user_files.db')
     c = conn.cursor()
     
-    # Get file metadata
+    # Get file metadata - Enhanced to handle parent-child relationships
     c.execute("""
-        SELECT file_type, unique_key, filename, parent_file_id
+        SELECT file_type, unique_key, filename, parent_file_id, sheet_table
         FROM user_files
         WHERE file_id = ? AND user_id = ?
     """, (file_id, user_id))
@@ -135,7 +253,28 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
         conn.close()
         return None, "File not found"
     
-    file_type, unique_key, filename, parent_file_id = result
+    file_type, unique_key, filename, parent_file_id, sheet_table = result
+    
+    # Enhanced handling for Excel files
+    if parent_file_id is None and file_type in ['xlsx', 'xls']:
+        # This is a parent Excel file - we need to get the first child sheet
+        c.execute("""
+            SELECT file_id, unique_key, sheet_table
+            FROM user_files
+            WHERE parent_file_id = ? AND user_id = ?
+            ORDER BY file_id ASC
+            LIMIT 1
+        """, (file_id, user_id))
+        
+        child_result = c.fetchone()
+        if child_result:
+            # Use the first sheet
+            file_id, unique_key, sheet_table = child_result
+            file_type = 'xlsx'  # Treat as structured data
+            app.logger.info(f"Using Excel sheet: {sheet_table} with unique_key: {unique_key}")
+        else:
+            conn.close()
+            return None, "No sheets found in Excel file"
     
     # Create visualization directory - SIMPLIFIED PATH
     viz_dir = os.path.join('static', 'visualization')
@@ -145,15 +284,15 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
     os.environ['VISUALIZATION_DIR'] = viz_dir
     
     try:
-        if file_type in ['csv', 'json', 'xml']:  # Add other structured file types
-            # For structured files
+        if file_type in ['csv', 'json', 'xml', 'xlsx', 'xls']:  # Include Excel types
+            # For structured files (including Excel sheets)
             table_name = f"table_{unique_key}"
             
             # Query all data from the table
             try:
                 df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
                 
-                # Create InsightAI instance with DataFrame and include diagram_enabled
+                # Create InsightAI instance with DataFrame
                 insight = InsightAI(
                     df=df,
                     debug=True,
@@ -165,7 +304,7 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
                 
                 return insight, None
             except Exception as e:
-                app.logger.error(f"Error loading data: {str(e)}")
+                app.logger.error(f"Error loading data from table {table_name}: {str(e)}")
                 return None, f"Error loading data: {str(e)}"
             
         elif file_type in ['db', 'sqlite', 'sqlite3']:
@@ -204,7 +343,7 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
             if not os.path.exists(db_path):
                 return None, f"Database file not found at {db_path}"
             
-            # Create InsightAI instance with the original db_path and include diagram_enabled
+            # Create InsightAI instance with the original db_path
             try:
                 insight = InsightAI(
                     db_path=db_path,
@@ -227,8 +366,7 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
         return None, str(e)
     finally:
         conn.close()
-
-
+        
 # API Routes
 @app.route('/',methods=['GET'])
 def index():
@@ -582,7 +720,6 @@ def serve_cleaned_data():
 @app.route('/mermaid/<path:filename>')
 def serve_mermaid(filename):
     return send_from_directory('static/visualization', filename, mimetype='text/plain')
-
 
 @cache.memoize(timeout=CACHE_TIMEOUT)
 def get_table_data(table_name, selected_columns):
@@ -2474,7 +2611,7 @@ def list_files(user_id):
                     'is_structured': bool(f[3]),
                     'created_at': f[4],
                     'unique_key': f[5],
-                    'supported_by_insightai': f[2] in ['csv', 'db', 'sqlite', 'sqlite3']
+                    'supported_by_insightai': f[2] in ['csv', 'db', 'sqlite', 'sqlite3','xlsx']
                 })
         
         return jsonify({'files': file_list}), 200

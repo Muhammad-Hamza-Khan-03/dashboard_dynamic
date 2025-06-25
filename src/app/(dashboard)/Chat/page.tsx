@@ -108,6 +108,13 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from "@/components/ui/badge";
 
+interface ExcelSheet {
+  id: number;
+  name: string;
+  full_name: string;
+}
+
+
 // Define interfaces
 interface ExistingFile {
   file_id: number;
@@ -125,6 +132,8 @@ interface SelectedFile {
   fileId?: number;
   fileType?: string;
   fileName?: string;
+  isExcelParent?: boolean; // New property to identify Excel parent files
+  selectedSheetId?: number; // New property for selected sheet
 }
 
 interface AnalysisConfig {
@@ -1259,54 +1268,77 @@ const FileSelector: React.FC<{
   const [uploadingFile, setUploadingFile] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+   // New states for Excel sheet selection
+  const [showSheetSelector, setShowSheetSelector] = useState(false);
+  const [availableSheets, setAvailableSheets] = useState<ExcelSheet[]>([]);
+  const [selectedExcelFile, setSelectedExcelFile] = useState<ExistingFile | null>(null);
+  const [isLoadingSheets, setIsLoadingSheets] = useState(false);
+
   // Fetch existing files when component mounts
   useEffect(() => {
     const fetchFiles = async () => {
       if (!userId) return;
-
+      
       setIsLoading(true);
       setError(null);
       try {
         const response = await axios.get(`http://localhost:5000/list_files/${userId}`);
-        setFiles(response.data.files.filter((f: ExistingFile) =>
-          f.file_type === 'csv' || f.file_type === 'db' ||
-          f.file_type === 'sqlite' || f.file_type === 'sqlite3' ||
-          f.file_type === 'json' || f.file_type === 'xml' || f.file_type === 'pdf' || f.file_type === 'docx' || f.file_type === 'doc' || f.file_type === 'txt'
+        setFiles(response.data.files.filter((f: ExistingFile) => 
+          f.file_type === 'csv' || f.file_type === 'db' || 
+          f.file_type === 'sqlite' || f.file_type === 'sqlite3' || 
+          f.file_type === 'json' || f.file_type === 'xml' || f.file_type === 'pdf' || 
+          f.file_type=== 'docx' || f.file_type === 'doc' || f.file_type === 'txt' ||
+          f.file_type === 'xlsx' || f.file_type === 'xls' // Include Excel files
         ));
       } catch (err: any) {
         console.error('Error fetching files:', err);
         setError('Failed to load existing files: ' + (err.message || 'Unknown error'));
-      } finally { 
+      } finally {
         setIsLoading(false);
       }
     };
-
+    
     if (userId) {
       fetchFiles();
     }
   }, [userId]);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files || !event.target.files[0] || !userId) return;
+  const fetchExcelSheets = async (fileId: number) => {
+    if (!userId) return;
+    
+    setIsLoadingSheets(true);
+    try {
+      const response = await axios.get(`http://localhost:5000/get-tables/${userId}/${fileId}`);
+      setAvailableSheets(response.data.tables || []);
+    } catch (err: any) {
+      console.error('Error fetching Excel sheets:', err);
+      setError('Failed to load Excel sheets: ' + (err.message || 'Unknown error'));
+      setAvailableSheets([]);
+    } finally {
+      setIsLoadingSheets(false);
+    }
+  };
 
+ const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files || !event.target.files[0] || !userId) return;
+    
     const file = event.target.files[0];
     const fileType = file.name.split('.').pop()?.toLowerCase();
-
+    
     // Check if file type is supported
     if (!['csv', 'db', 'sqlite', 'sqlite3', 'json', 'xml', 'pdf', 'docx', 'doc', 'txt', 'xlsx', 'xls'].includes(fileType || '')) {
-      setError('Unsupported file type. Please upload CSV, JSON, XML, SQLite database, or document files (PDF, DOCX, DOC, TXT).');
+      setError('Unsupported file type. Please upload CSV, JSON, XML, Excel, SQLite database, or document files.');
       return;
     }
-
+    
     setUploadingFile(true);
     setUploadProgress(0);
     setError(null);
-
+    
     const formData = new FormData();
     formData.append('file', file);
-
+    
     try {
-      // Upload with progress tracking
       const response = await axios.post(
         `http://localhost:5000/upload/${userId}`,
         formData,
@@ -1319,30 +1351,38 @@ const FileSelector: React.FC<{
           }
         }
       );
-
+      
       if (response.data.file_id) {
-        // Successfully uploaded
         setUploadProgress(100);
-
+        
         // Refresh file list
         const filesResponse = await axios.get(`http://localhost:5000/list_files/${userId}`);
-        setFiles(filesResponse.data.files.filter((f: ExistingFile) =>
-          f.file_type === 'csv' || f.file_type === 'db' ||
-          f.file_type === 'sqlite' || f.file_type === 'sqlite3' ||
-          f.file_type === 'json' || f.file_type === 'xml'
+        setFiles(filesResponse.data.files.filter((f: ExistingFile) => 
+          f.file_type === 'csv' || f.file_type === 'db' || 
+          f.file_type === 'sqlite' || f.file_type === 'sqlite3' || 
+          f.file_type === 'json' || f.file_type === 'xml' ||
+          f.file_type === 'xlsx' || f.file_type === 'xls'
         ));
-
-        // Select the newly uploaded file
-        const newFile: SelectedFile = {
-          type: 'existing',
-          fileId: response.data.file_id,
-          fileType: fileType || '',
-          fileName: file.name
-        };
-
-        onFileSelect(newFile);
-
-        // Show preview if available
+        
+        // Handle Excel files differently - show sheet selector
+        if (fileType === 'xlsx' || fileType === 'xls') {
+          const uploadedFile = filesResponse.data.files.find((f: ExistingFile) => f.file_id === response.data.file_id);
+          if (uploadedFile) {
+            setSelectedExcelFile(uploadedFile);
+            await fetchExcelSheets(response.data.file_id);
+            setShowSheetSelector(true);
+          }
+        } else {
+          // For non-Excel files, select directly
+          const newFile: SelectedFile = {
+            type: 'existing',
+            fileId: response.data.file_id,
+            fileType: fileType || '',
+            fileName: file.name
+          };
+          onFileSelect(newFile);
+        }
+        
         if (response.data.preview) {
           setFilePreview(response.data.preview);
         }
@@ -1356,15 +1396,52 @@ const FileSelector: React.FC<{
   };
 
 
+const handleExistingFileSelect = async (fileId: string) => {
+    const selectedFile = files.find(f => f.file_id.toString() === fileId);
+    if (!selectedFile) return;
 
-  function getFileIcon(file_type: string): React.ReactNode {
-    switch (file_type.toLowerCase()) {
+    // Check if this is an Excel file
+    if (selectedFile.file_type === 'xlsx' || selectedFile.file_type === 'xls') {
+      setSelectedExcelFile(selectedFile);
+      await fetchExcelSheets(selectedFile.file_id);
+      setShowSheetSelector(true);
+    } else {
+      // For non-Excel files, select directly
+      onFileSelect({
+        type: 'existing',
+        fileId: selectedFile.file_id,
+        fileType: selectedFile.file_type,
+        fileName: selectedFile.filename
+      });
+    }
+  };
+  const handleSheetSelect = (sheetId: string) => {
+    if (!selectedExcelFile) return;
+
+    const selectedSheet = availableSheets.find(sheet => sheet.id.toString() === sheetId);
+    if (selectedSheet) {
+      onFileSelect({
+        type: 'existing',
+        fileId: parseInt(sheetId), // Use the sheet's file_id
+        fileType: selectedExcelFile.file_type,
+        fileName: `${selectedExcelFile.filename} - ${selectedSheet.name}`,
+        isExcelParent: false,
+        selectedSheetId: parseInt(sheetId)
+      });
+      setShowSheetSelector(false);
+    }
+  };
+function getFileIcon(file_type: string): React.ReactNode {
+    switch(file_type.toLowerCase()) {
       case 'csv':
         return <FileText className="h-4 w-4 mr-2 text-blue-500" />;
       case 'json':
         return <FileJson className="h-4 w-4 mr-2 text-orange-500" />;
       case 'xml':
         return <FileCode className="h-4 w-4 mr-2 text-green-500" />;
+      case 'xlsx':
+      case 'xls':
+        return <Table className="h-4 w-4 mr-2 text-green-600" />;
       case 'db':
       case 'sqlite':
       case 'sqlite3':
@@ -1386,15 +1463,15 @@ const FileSelector: React.FC<{
             <TabsTrigger value="upload">Upload New File</TabsTrigger>
             <TabsTrigger value="existing">Existing Files</TabsTrigger>
           </TabsList>
-
+          
           <TabsContent value="upload" className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="file-upload">Upload CSV, JSON, XML, or Database File</Label>
+              <Label htmlFor="file-upload">Upload CSV, Excel, JSON, XML, or Database File</Label>
               <div className="grid w-full max-w-sm items-center gap-1.5">
                 <Input
                   id="file-upload"
                   type="file"
-                  accept=".csv,.db,.xlsx,.sqlite,.sqlite3,.json,.xml,.pdf,.txt,.docx,.doc"
+                  accept=".csv,.db,.sqlite,.sqlite3,.json,.xml,.xlsx,.xls"
                   onChange={handleFileUpload}
                   disabled={uploadingFile}
                 />
@@ -1409,24 +1486,14 @@ const FileSelector: React.FC<{
               </div>
             </div>
           </TabsContent>
-
+          
           <TabsContent value="existing" className="space-y-4">
             {isLoading ? (
               <div className="flex justify-center p-4">
                 <Loader2 className="h-8 w-8 animate-spin" />
               </div>
             ) : files.length > 0 ? (
-              <Select onValueChange={(value) => {
-                const selectedFile = files.find(f => f.file_id.toString() === value);
-                if (selectedFile) {
-                  onFileSelect({
-                    type: 'existing',
-                    fileId: selectedFile.file_id,
-                    fileType: selectedFile.file_type,
-                    fileName: selectedFile.filename
-                  });
-                }
-              }}>
+              <Select onValueChange={handleExistingFileSelect}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a file" />
                 </SelectTrigger>
@@ -1449,6 +1516,45 @@ const FileSelector: React.FC<{
           </TabsContent>
         </Tabs>
 
+        {/* Excel Sheet Selector Dialog */}
+        <Dialog open={showSheetSelector} onOpenChange={setShowSheetSelector}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Select Excel Sheet</DialogTitle>
+              <DialogDescription>
+                Choose which sheet from "{selectedExcelFile?.filename}" you want to analyze
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {isLoadingSheets ? (
+                <div className="flex justify-center p-4">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : availableSheets.length > 0 ? (
+                <Select onValueChange={handleSheetSelect}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a sheet" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSheets.map((sheet) => (
+                      <SelectItem key={sheet.id} value={sheet.id.toString()}>
+                        <div className="flex items-center">
+                          <Table className="h-4 w-4 mr-2 text-green-600" />
+                          {sheet.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="text-center p-4 border rounded-lg">
+                  <p className="text-muted-foreground">No sheets found in this Excel file.</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+        
         {error && (
           <Alert variant="destructive" className="mt-4">
             <AlertCircle className="h-4 w-4" />
@@ -1456,16 +1562,17 @@ const FileSelector: React.FC<{
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-
+        
         {filePreview && (
           <div className="mt-4">
             <h3 className="text-md font-medium mb-2">Data Preview</h3>
             <div className="overflow-x-auto border rounded-lg">
               <table className="min-w-full divide-y divide-gray-200">
+                
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
                     {filePreview.columns.map((col, idx) => (
-                      <th
+                      <th 
                         key={idx}
                         className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                       >
@@ -1473,12 +1580,13 @@ const FileSelector: React.FC<{
                       </th>
                     ))}
                   </tr>
+                
                 </thead>
                 <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
                   {filePreview.rows.slice(0, 5).map((row, idx) => (
                     <tr key={idx} className={idx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
                       {row.map((cell, cellIdx) => (
-                        <td
+                        <td 
                           key={cellIdx}
                           className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
                         >
