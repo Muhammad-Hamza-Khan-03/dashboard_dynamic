@@ -779,17 +779,33 @@ const ThinkingProcess: React.FC<{ thinking: string }> = ({ thinking }) => {
 const AgentBox: React.FC<{ section: AgentSection }> = ({ section }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  // Extract thinking process from the content if present
+  const cleanThinkingTags = (content: string): string => {
+  if (!content) return '';
+  
+  // Remove <think>...</think> blocks completely
+  const cleanedContent = content.replace(/<think>[\s\S]*?<\/think>/g, '');
+  
+  // Also remove any standalone thinking markers
+  return cleanedContent.replace(/\[THINKING\][\s\S]*?\[\/THINKING\]/g, '').trim();
+};
+
+  // Extract content with enhanced cleaning for Analysis Summary
   const extractContent = (content: string): { mainContent: string, thinking: string | null } => {
     const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
     const thinking = thinkMatch ? thinkMatch[1].trim() : null;
 
     // Remove <think> section from content
-    const mainContent = content.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+    let mainContent = content.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+    
+    // For Analysis Summary, apply additional cleaning
+    if (section.agentName === "Analysis Summary") {
+      mainContent = cleanThinkingTags(mainContent);
+      // Also remove any remaining thinking artifacts
+      mainContent = mainContent.replace(/(\n\s*){3,}/g, '\n\n'); // Clean up excessive line breaks
+    }
 
     return { mainContent, thinking };
   };
-
   // Extract code blocks from content
   const extractCodeBlocks = (content: string): { cleanContent: string, codeBlocks: CodeBlock[] } => {
     const codeBlocks: CodeBlock[] = [];
@@ -1982,6 +1998,9 @@ const AnalysisPanel: React.FC<{
       setIsLoadingHistory(false);
     }
   }, [userId]);
+
+  
+
   const checkForMermaidDiagram = async (chainId: number) => {
     console.log(`Checking for Mermaid diagram for chain ID: ${chainId}`);
 
@@ -2661,8 +2680,15 @@ const AnalysisPanel: React.FC<{
                       "e.g., Clean this data and suggest ML models"}
                     disabled={isProcessing}
                     className="flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && question.trim()) {
+                        e.preventDefault();
+                        handleAnalysis();
+                      }
+                    }}
                   />
                   <Button
+                  
                     onClick={handleAnalysis}
                     disabled={!question || isProcessing}
                   >
@@ -2777,56 +2803,56 @@ const AnalysisPanel: React.FC<{
               <CardContent>
                 <div className="space-y-4">
                   {/* Expert Selector */}
-                  {sortedSections.filter(section =>
+                  {/* {sortedSections.filter(section =>
                     section.agentName === "Expert Selector" ||
                     section.agentName === "Expert Selector Response"
                   ).map((section, index) => (
                     <AgentBox key={`expert-${index}`} section={section} />
-                  ))}
+                  ))} */}
 
                   {/* Analyst Selector */}
-                  {sortedSections.filter(section =>
+                  {/* {sortedSections.filter(section =>
                     section.agentName === "Analyst Selector" ||
                     section.agentName === "Analyst Selector Response"
                   ).map((section, index) => (
                     <AgentBox key={`analyst-${index}`} section={section} />
-                  ))}
+                  ))} */}
 
                   {/* SQL Generator */}
-                  {sortedSections.filter(section =>
+                  {/* {sortedSections.filter(section =>
                     section.agentName === "SQL Generator"
                   ).map((section, index) => (
                     <AgentBox key={`sql-gen-${index}`} section={section} />
-                  ))}
+                  ))} */}
 
                   {/* Data Quality Analyzer - New for Data Cleaning */}
-                  {sortedSections.filter(section =>
+                  {/* {sortedSections.filter(section =>
                     section.agentName === "Data Quality Analyzer"
                   ).map((section, index) => (
                     <AgentBox key={`quality-${index}`} section={section} />
-                  ))}
+                  ))} */}
 
                   {/* Data Cleaning Planner - New for Data Cleaning */}
-                  {sortedSections.filter(section =>
+                  {/* {sortedSections.filter(section =>
                     section.agentName === "Data Cleaning Planner"
                   ).map((section, index) => (
                     <AgentBox key={`cleaning-plan-${index}`} section={section} />
-                  ))}
+                  ))} */}
 
                   {/* Code Generator */}
-                  {sortedSections.filter(section =>
+                  {/* {sortedSections.filter(section =>
                     section.agentName === "Code Generator" ||
                     section.agentName === "Planner"
                   ).map((section, index) => (
                     <AgentBox key={`code-gen-${index}`} section={section} />
-                  ))}
+                  ))} */}
 
                   {/* ML Model Suggester - New for Data Cleaning */}
-                  {sortedSections.filter(section =>
+                  {/* {sortedSections.filter(section =>
                     section.agentName === "ML Model Suggester"
                   ).map((section, index) => (
                     <AgentBox key={`ml-suggest-${index}`} section={section} />
-                  ))}
+                  ))} */}
 
                   {/* Summary Results + Plot */}
                   {((analysisSummary && !result?.is_report) || (result && mermaidDiagrams.length > 0)) && (
@@ -2859,7 +2885,7 @@ const AnalysisPanel: React.FC<{
                         </Card>
                       )}
                       {/* Mermaid Diagrams for both CSV and SQL results */}
-                      {mermaidDiagrams.length > 0 && (
+                      {/* {mermaidDiagrams.length > 0 && (
                         <Card className="bg-indigo-50/50 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-800">
                           <CardHeader className="pb-2">
                             <CardTitle className="flex items-center text-indigo-700 dark:text-indigo-300">
@@ -2873,7 +2899,7 @@ const AnalysisPanel: React.FC<{
                             ))}
                           </CardContent>
                         </Card>
-                      )}
+                      )} */}
                     </div>
                   )}
 
@@ -3093,6 +3119,7 @@ const AnalysisPanel: React.FC<{
                             className={`p-4 border rounded-lg mb-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${selectedHistoryItem === item.chain_id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/10' : ''
                               }`}
                             onClick={() => fetchHistoryItem(item.chain_id)}
+                            title={item.query} // Show full query on hover
                           >
                             <div className="flex items-center space-x-2">
                               <Search className="h-4 w-4 text-blue-500" />
