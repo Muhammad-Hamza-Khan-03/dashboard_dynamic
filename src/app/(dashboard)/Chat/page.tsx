@@ -1253,7 +1253,6 @@ const fixMarkdownImagePaths = (content: string): string => {
     }
   );
 
-  // Also fix paths starting with /visualization/
   fixedContent = fixedContent.replace(
     /!\[(.*?)\]\((\/visualization\/[^)]+)\)/g,
     (match, alt, path) => {

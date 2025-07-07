@@ -252,14 +252,15 @@ def configure_llm_settings():
     
     # First try to load API keys
     groq_key = os.getenv('GROQ_API_KEY')
+    gemini_key = os.getenv('GEMINI_API_KEY')
     openai_key = 'key'
     if not openai_key or not groq_key:
         print("Warning: API keys not found in environment variables")
         # For development only - replace with your keys
     
-    # Set the LLM_CONFIG in environment variable
-    LLM_CONFIG = [
-    {"agent": "Expert Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 500, "temperature": 0}},
+    # Set the LLM_CONFIG in environment variable groq
+    os.environ['LLM_CONFIG'] = '''[
+    {"agent": "Expert Selector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 500, "temperature": 0}},
     {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 500, "temperature": 0}},
     {"agent": "SQL Analyst", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
     {"agent": "SQL Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
@@ -268,9 +269,21 @@ def configure_llm_settings():
     {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
     {"agent": "Code Debugger", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
     {"agent": "Solution Summarizer", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}}
-    ]
+]'''
 
-    os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
+
+    # os.environ['LLM_CONFIG'] = '''[
+    # {"agent": "Expert Selector", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 500, "temperature": 0}},
+    # {"agent": "Analyst Selector", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 500, "temperature": 0}},
+    # {"agent": "SQL Analyst", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 2000, "temperature": 0}},
+    # {"agent": "SQL Generator", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 2000, "temperature": 0}},
+    # {"agent": "SQL Executor", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 2000, "temperature": 0}},
+    # {"agent": "Planner", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 2000, "temperature": 0}},
+    # {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"gemini","max_tokens": 2000, "temperature": 0}},
+    # {"agent": "Code Debugger", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"gemini","max_tokens": 2000, "temperature": 0}},
+    # {"agent": "Solution Summarizer", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 2000, "temperature": 0}}
+    # ]'''
+    # os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
 
 # Update the create_insight_instance function in backend.py
 def create_insight_instance(file_id, user_id, report_enabled=False, report_questions=3, diagram_enabled=False):
@@ -607,10 +620,10 @@ async def process_question(user_id: str, file_id: str, request_data: QuestionReq
                 cleaned_data_file = 'cleaned_data.csv'
 
             # Create visualization paths
-            visualization_paths = [
-                os.path.join('visualization', f) for f in viz_files
-            ]
-            mermaid_paths = [f for f in mermaid_files]
+            # visualization_paths = [
+            #     os.path.join('visualization', f) for f in viz_files
+            # ]
+            # mermaid_paths = [f for f in mermaid_files]
 
             try:
                 # determine chain_id
@@ -3006,7 +3019,7 @@ async def list_files(user_id:str):
         
         for f in files:
             # Only include parent files or standalone files
-            if f[2] in ['csv', 'db', 'sqlite', 'sqlite3'] or f[6] is None:
+            if f[2] in ['csv', 'db', 'sqlite', 'sqlite3','xlsx'] or f[6] is None:
                 file_list.append({
                     'file_id': f[0],
                     'filename': f[1],
@@ -3058,6 +3071,7 @@ async def serve_report(user_id: str, file_id: str):
 # Add a route to serve static files from the visualization directory
 @app.get("/visualization/{filename:path}")
 async def serve_visualization(filename: str):
+
     file_path = os.path.join('visualization', filename)
     if os.path.exists(file_path):
         return FileResponse(file_path)
@@ -3478,6 +3492,14 @@ def handle_excel_upload(file, user_id, filename, c, conn):
             raise ValueError("No sheets found in the Excel file.")
 
         # Create parent file entry
+        df = pd.read_excel(df_excel, sheet_name=sheet_names[0])
+        if any(str(col).startswith('Unnamed') for col in df.columns) or pd.isnull(df.columns).all():
+            # Find the first row with at least one non-null value
+            for i, row in df.iterrows():
+                if not row.isnull().all():
+                    df.columns = row
+                    df = df.drop(i).reset_index(drop=True)
+                    break
         parent_unique_key = str(uuid.uuid4())
         c.execute("""
             INSERT INTO user_files (user_id, filename, file_type, is_structured, unique_key)
@@ -3719,7 +3741,6 @@ async def get_file(user_id: str, file_id: str, page: int = Query(1), page_size: 
             if file_type == 'pdf':
                 # For PDFs, just return file metadata and path for direct access
                 pdf_url = f"{file_path}"
-                # pdf_url = "http://localhost:5000/static/uploads/9dc54c91-7597-458c-ae1f-7388c588d4df.pdf"
                 response_data = {
                     'type': 'unstructured',
                     'file_type': file_type,
