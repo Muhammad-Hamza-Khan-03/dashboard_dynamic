@@ -1,0 +1,8 @@
+*.json
+test.py
+.env
+*.csv
+*.json
+*.md
+test.py
+

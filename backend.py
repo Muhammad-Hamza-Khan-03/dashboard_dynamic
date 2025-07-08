@@ -267,9 +267,9 @@ def configure_llm_settings():
     {"agent": "SQL Executor", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
     {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
     {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
-    {"agent": "Code Debugger", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+    {"agent": "Code Debugger", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
     {"agent": "Solution Summarizer", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}}
-]'''
+    ]'''
 
 
     # os.environ['LLM_CONFIG'] = '''[
@@ -2924,7 +2924,7 @@ async def rename_column(user_id: str, file_id: str, request_data: ColumnRenameRe
 #         conn.close()
 
 # @app.route('/delete-rows/<user_id>/<file_id>', methods=['POST'])
-# async def delete_rows(user_id, file_id):
+# def delete_rows(user_id, file_id):
 #     conn = sqlite3.connect('user_files.db')
 #     c = conn.cursor()
     
@@ -3003,6 +3003,7 @@ async def rename_column(user_id: str, file_id: str, request_data: ColumnRenameRe
 #         return JSONResponse({'error': str(e)}, status_code=500)
 #     finally:
 #         conn.close()
+
 
 @app.get("/list_files/{user_id}")
 async def list_files(user_id:str):

@@ -58,7 +58,6 @@ import {
 } from 'lucide-react';
 
 // UI components
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -97,7 +96,6 @@ import {
   AlertTitle,
   AlertDescription,
 } from "@/components/ui/alert";
-import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 import {
   Tooltip,
@@ -105,7 +103,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from "@/components/ui/badge";
 
 interface ExcelSheet {
@@ -1372,6 +1369,7 @@ const FileSelector: React.FC<{
         
         // Refresh file list
         const filesResponse = await axios.get(`http://localhost:5000/list_files/${userId}`);
+        
         setFiles(filesResponse.data.files.filter((f: ExistingFile) => 
           f.file_type === 'csv' || f.file_type === 'db' || 
           f.file_type === 'sqlite' || f.file_type === 'sqlite3' || 
@@ -1382,6 +1380,7 @@ const FileSelector: React.FC<{
         // Handle Excel files differently - show sheet selector
         if (fileType === 'xlsx' || fileType === 'xls') {
           const uploadedFile = filesResponse.data.files.find((f: ExistingFile) => f.file_id === response.data.file_id);
+          
           if (uploadedFile) {
             setSelectedExcelFile(uploadedFile);
             await fetchExcelSheets(response.data.file_id);

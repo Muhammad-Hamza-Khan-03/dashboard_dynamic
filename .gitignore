@@ -96,4 +96,8 @@ chroma_db
 non-used
 process_pdf
 
-AI
+*.xlsx
+*.toml
+
+AI/examples
+AI/fine_tune_model
