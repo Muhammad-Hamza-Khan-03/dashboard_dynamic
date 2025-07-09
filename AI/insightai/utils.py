@@ -58,8 +58,6 @@ def inspect_dataframe(df, log_and_call_manager=None,chain_id=None,query=None):
             # Replace the numpy check with pandas type check
             if pd.api.types.is_numeric_dtype(df[column]):
                 col_stats['mean'] = float(df[column].mean())
-            elif isinstance(df[column].dtype, object):
-                col_stats['unique_values'] = str(df[column].value_counts().head(10).to_dict())
 
             # Special handling for datetime columns and period types
             elif pd.api.types.is_datetime64_dtype(df[column]) or hasattr(df[column].dtype, 'freq'):

@@ -1732,83 +1732,85 @@ const AnalysisConfig: React.FC<{
   }, [generateReport, questionCount, diagramEnabled, onConfigChange]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Analysis Options</CardTitle>
-        <CardDescription>Configure how you want to analyze your data</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {/* Report Generation Option */}
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="generate-report"
-              checked={generateReport}
-              onCheckedChange={(checked) => setGenerateReport(checked === true)}
-            />
-            <label
-              htmlFor="generate-report"
-              className="text-sm font-medium leading-none cursor-pointer"
-            >
-              Generate Comprehensive Report
-            </label>
-          </div>
+    <>
+    </>
+    // <Card>
+    //   <CardHeader>
+    //     <CardTitle>Analysis Options</CardTitle>
+    //     <CardDescription>Configure how you want to analyze your data</CardDescription>
+    //   </CardHeader>
+    //   <CardContent>
+    //     <div className="space-y-4">
+    //       {/* Report Generation Option */}
+    //       <div className="flex items-center space-x-2">
+    //         <Checkbox
+    //           id="generate-report"
+    //           checked={generateReport}
+    //           onCheckedChange={(checked) => setGenerateReport(checked === true)}
+    //         />
+    //         <label
+    //           htmlFor="generate-report"
+    //           className="text-sm font-medium leading-none cursor-pointer"
+    //         >
+    //           Generate Comprehensive Report
+    //         </label>
+    //       </div>
 
-          {generateReport && (
-            <div className="pl-6 space-y-2">
-              <div className="flex items-center space-x-2">
-                <Label htmlFor="question-count" className="min-w-[180px]">
-                  Number of Questions to Explore:
-                </Label>
-                <div className="flex-1 max-w-[120px]">
-                  <NumberSelector
-                    value={questionCount}
-                    onChange={setQuestionCount}
-                    min={1}
-                    max={10}
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                More questions will provide deeper insights but will take longer to process.
-              </p>
-            </div>
-          )}
+    //       {generateReport && (
+    //         <div className="pl-6 space-y-2">
+    //           <div className="flex items-center space-x-2">
+    //             <Label htmlFor="question-count" className="min-w-[180px]">
+    //               Number of Questions to Explore:
+    //             </Label>
+    //             <div className="flex-1 max-w-[120px]">
+    //               <NumberSelector
+    //                 value={questionCount}
+    //                 onChange={setQuestionCount}
+    //                 min={1}
+    //                 max={10}
+    //               />
+    //             </div>
+    //           </div>
+    //           <p className="text-xs text-muted-foreground">
+    //             More questions will provide deeper insights but will take longer to process.
+    //           </p>
+    //         </div>
+    //       )}
 
-          {/* Diagram Generation Option - NEW */}
-          <div className="flex items-center space-x-2 mt-2 pt-2 border-t">
-            <Checkbox
-              id="enable-diagram"
-              checked={diagramEnabled}
-              onCheckedChange={(checked) => setDiagramEnabled(checked === true)}
-            />
-            <label
-              htmlFor="enable-diagram"
-              className="text-sm font-medium leading-none cursor-pointer"
-            >
-              Generate Flow Diagram
-            </label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="h-4 w-4 text-muted-foreground ml-1 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p>Creates a Mermaid diagram visualizing the analysis flow</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          {diagramEnabled && (
-            <div className="pl-6">
-              <p className="text-xs text-muted-foreground">
-                A visual flow diagram will be generated showing the analysis process.
-              </p>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+    //       {/* Diagram Generation Option - NEW */}
+    //       <div className="flex items-center space-x-2 mt-2 pt-2 border-t">
+    //         <Checkbox
+    //           id="enable-diagram"
+    //           checked={diagramEnabled}
+    //           onCheckedChange={(checked) => setDiagramEnabled(checked === true)}
+    //         />
+    //         <label
+    //           htmlFor="enable-diagram"
+    //           className="text-sm font-medium leading-none cursor-pointer"
+    //         >
+    //           Generate Flow Diagram
+    //         </label>
+    //         <TooltipProvider>
+    //           <Tooltip>
+    //             <TooltipTrigger asChild>
+    //               <Info className="h-4 w-4 text-muted-foreground ml-1 cursor-help" />
+    //             </TooltipTrigger>
+    //             <TooltipContent className="max-w-xs">
+    //               <p>Creates a Mermaid diagram visualizing the analysis flow</p>
+    //             </TooltipContent>
+    //           </Tooltip>
+    //         </TooltipProvider>
+    //       </div>
+    //       {diagramEnabled && (
+    //         <div className="pl-6">
+    //           <p className="text-xs text-muted-foreground">
+    //             A visual flow diagram will be generated showing the analysis process.
+    //           </p>
+    //         </div>
+    //       )}
+    //     </div>
+    //   </CardContent>
+    // </Card>
   );
 };
 
@@ -2801,12 +2803,12 @@ const AnalysisPanel: React.FC<{
               <CardContent>
                 <div className="space-y-4">
                   {/* Expert Selector */}
-                  {/* {sortedSections.filter(section =>
+                   {sortedSections.filter(section =>
                     section.agentName === "Expert Selector" ||
                     section.agentName === "Expert Selector Response"
                   ).map((section, index) => (
                     <AgentBox key={`expert-${index}`} section={section} />
-                  ))} */}
+                  ))} 
 
                   {/* Analyst Selector */}
                   {/* {sortedSections.filter(section =>
@@ -2838,12 +2840,12 @@ const AnalysisPanel: React.FC<{
                   ))} */}
 
                   {/* Code Generator */}
-                  {/* {sortedSections.filter(section =>
+                  {sortedSections.filter(section =>
                     section.agentName === "Code Generator" ||
                     section.agentName === "Planner"
                   ).map((section, index) => (
                     <AgentBox key={`code-gen-${index}`} section={section} />
-                  ))} */}
+                  ))} 
 
                   {/* ML Model Suggester - New for Data Cleaning */}
                   {/* {sortedSections.filter(section =>

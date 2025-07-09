@@ -15,9 +15,11 @@ warnings.filterwarnings('ignore')
 try:
     # Attempt package-relative import
     from . import models, prompts, func_calls, reg_ex, log_manager, output_manager, utils
+    from .DataMapper import DataMapper
 except ImportError:
     # Fall back to script-style import
     import models, prompts, func_calls, reg_ex, log_manager, output_manager, utils
+    from DataMapper import DataMapper
 
 class InsightAI:
     def __init__(self, df: pd.DataFrame = None,
@@ -372,7 +374,69 @@ class InsightAI:
     #####################
     ### Main Function ###
     #####################
+    def datamapper(self, question):
+        """
+        Enhanced datamapper method using instructor for structured JSON output
+        Returns data in the exact JSON schemas specified by the user
+        """
+        if self.df is None:
+            return None, None
 
+        try:
+            # Initialize DataMapper with instructor
+            mapper = DataMapper(self.df.head(1))
+
+            column_descriptions = mapper.get_column_descriptions_structured()
+
+            structured_mappings = mapper.get_structured_mappings(question)
+
+            filtered_df = mapper.get_filtered_dataframe(question)
+
+            relevant_columns = [match["matched_column"] for match in structured_mappings["matches"] 
+                              if match["matched_column"] != "Nothing Compatible"]
+            print(f"Relevant columns identified: {relevant_columns}")
+
+            target_fields = [match["target_field"] for match in structured_mappings["matches"]
+                            if match["matched_column"] != "Nothing Compatible"]
+            print(f"Target fields for analysis: {target_fields}")
+
+            # Create comprehensive mapping result
+            mapping_result = {
+                'query': question,
+                'column_descriptions': column_descriptions,
+                'structured_mappings': structured_mappings,
+                'relevant_columns': relevant_columns,
+                'target_fields': target_fields,
+                'simple_format': mapper.get_column_mappings(question, format_type="simple")
+            }
+
+            print(f"\n Column Mappings (Simple): {mapping_result['simple_format']}")
+
+            return mapping_result, filtered_df
+        
+        except Exception as e:
+            print(f"❌ Error in datamapper with instructor: {e}")
+            import traceback
+            traceback.print_exc()
+
+            # Fallback: return basic info if datamapper fails
+            print("🔄 Falling back to basic column information...")
+            try:
+                fallback_result = {
+                    'query': question,
+                    'error': str(e),
+                    'fallback_columns': self.df.columns.tolist(),
+                    'dataframe_shape': self.df.shape
+                }
+                return fallback_result, self.df
+            except:
+                return None, None
+
+        
+
+    #####################
+    ### Conversation Function ###
+    #####################
     def pd_agent_converse(self, question=None):
         if question is not None:
             loop = False
@@ -382,80 +446,88 @@ class InsightAI:
         chain_id = int(time.time())
         self.chain_id = chain_id
         self.reset_messages_and_logs()
-        
-        # if self.report_enabled:  # IMPORTANT: Use report_enabled, not generate_report
-        #         self.output_manager.display_system_messages("Report generation enabled - starting comprehensive analysis")
-        #         # Generate report with 5 auto-generated questions
-        #         self.generate_data_report(num_questions=self.report_question_count)
-        #         # If no specific question was asked, return after generating the report
-        #         if question is None:
-        #             return
-        # # Check if diagram generation is enabled
-        # if self.diagram_enabled:
-        #     self.output_manager.display_system_messages("Diagram generation enabled - a Mermaid flowchart will be created")
-        while True:
-            if loop:
-                question = self.output_manager.display_user_input_prompt()
-                if question.strip().lower() == 'exit':
-                    self.log_and_call_manager.consolidate_logs()    
-                    break
+        print("QUESTION", question)
 
-            # Check file type to determine path
-            file_type = '.db' if hasattr(self, 'conn') else '.csv'
-            
-            if self.exploratory:
-                if file_type == '.db':
-                    schema = self.get_db_schema()
-                    analyst = 'SQL Analyst'
-                    example_code = self.default_example_output_sql
-                    plan = self.taskmaster(question, schema)
+        try:
+            # Use enhanced datamapper with instructor
+            mappings, filtered_df = self.datamapper(question)
+
+            if mappings is None or filtered_df is None:
+                print("❌ DataMapper failed, proceeding without column mapping")
+                enhanced_query = question
+            else:
+                # Use the structured mappings to enhance the query
+                relevant_columns = mappings.get('relevant_columns', [])
+                target_fields = mappings.get('target_fields', [])
+
+                # Create enhanced query with structured information
+                enhanced_query = f"""
+                Query: {question}
+
+                Relevant columns:
+                {mappings.get('detailed_format', 'General analysis')}
+                """
+
+            print("ENHANCED QUERY:", enhanced_query)
+            question = enhanced_query
+            while True:
+                if loop:
+                    question = self.output_manager.display_user_input_prompt()
+
+                    if question.strip().lower() == 'exit':
+                        self.log_and_call_manager.consolidate_logs()    
+                        break
+
+                # Check file type to determine path
+                file_type = '.db' if hasattr(self, 'conn') else '.csv'
+
+                if self.exploratory:
+                    if file_type == '.db':
+                        schema = self.get_db_schema()
+                        analyst = 'SQL Analyst'
+                        example_code = self.default_example_output_sql
+                        plan = self.taskmaster(question, schema)
+                    else:
+                        analyst, plan, query_unknown, query_condition, requires_dataset, confidence = self.taskmaster(
+                            question, '' if self.df is None else self.df.columns.tolist()
+                        )
+                        example_code = self.default_example_output_df if analyst == 'Data Analyst DF' else self.default_example_output_gen
+
+                    if not loop and not analyst:
+                        self.log_and_call_manager.consolidate_logs()
+                        return
+                    elif not analyst:
+                        continue
                 else:
-                    analyst, plan, query_unknown, query_condition, requires_dataset, confidence = self.taskmaster(
-                        question, '' if self.df is None else self.df.columns.tolist()
-                    )
-                    example_code = self.default_example_output_df if analyst == 'Data Analyst DF' else self.default_example_output_gen
-                    
-                if not loop and not analyst:
+                    analyst = 'SQL Analyst' if file_type == '.db' else 'Data Analyst DF'
+                    plan = question
+                    example_code = self.default_example_output_sql if file_type == '.db' else self.default_example_output_df
+
+                # Generate and execute code
+                code = self.generate_code(analyst, question, plan, self.code_messages, example_code)
+
+
+                if file_type == '.db':
+                    answer, results = self.execute_sql(code, plan, question)
+                else:
+                    answer, results, code = self.execute_code(analyst, code, plan, question, self.code_messages)
+
+                # Display results
+                self.output_manager.display_results(
+                    self.df if file_type == '.csv' else None,
+                    answer, code, None, False
+                )
+
+                self.log_and_call_manager.print_summary_to_terminal()
+
+                if not loop:
                     self.log_and_call_manager.consolidate_logs()
-                    return
-                elif not analyst:
-                    continue
-            else:
-                analyst = 'SQL Analyst' if file_type == '.db' else 'Data Analyst DF'
-                plan = question
-                example_code = self.default_example_output_sql if file_type == '.db' else self.default_example_output_df
-
-            # Generate and execute code
-            code = self.generate_code(analyst, question, plan, self.code_messages, example_code)
-           
-
-            if file_type == '.db':
-                answer, results = self.execute_sql(code, plan, question)
-            else:
-                answer, results, code = self.execute_code(analyst, code, plan, question, self.code_messages)
-
-            # Display results
-            self.output_manager.display_results(
-                self.df if file_type == '.csv' else None,
-                answer, code, None, False
-            )
-            # print("CONVERSE:")
-            # print("SElf.df:", self.df.head(4))
-            # if isinstance(self.output_plot, dict):
-            #     print("Output Plot (dict):", self.output_plot)
-            #     print("x:", self.output_plot.get("data", {}).get("x", None))
-            #     print("y:", self.output_plot.get("y"))
-            # elif isinstance(self.output_plot, str):
-            #     print("Output Plot (string):", self.output_plot)
-
-            # else:
-            #     print(type(self.output_plot))
-            self.log_and_call_manager.print_summary_to_terminal()
-            
-            if not loop:
-                self.log_and_call_manager.consolidate_logs()
-                return 
-            # return self.output_plot
+                    return 
+        except Exception as e:
+            print(f"❌ Error in pd_agent_converse: {e}")
+            traceback.print_exc()
+            return
+        
     ######################
     ### Code Functions ###
     ######################

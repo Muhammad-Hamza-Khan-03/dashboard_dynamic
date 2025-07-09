@@ -540,8 +540,8 @@ def configure_llm_settings():
     if not openai_key or not groq_key:
         print("Warning: API keys not found in environment variables")
         # For development only - replace with your keys
-        os.environ['OPENAI_API_KEY'] = 'sk-your-openai-key'
-        os.environ['GROQ_API_KEY'] = 'gsk-your-groq-key'
+        # os.environ['OPENAI_API_KEY'] = 'sk-your-openai-key'
+        # os.environ['GROQ_API_KEY'] = 'gsk-your-groq-key'
     
     # Set the LLM_CONFIG
     os.environ['LLM_CONFIG'] = '''[
