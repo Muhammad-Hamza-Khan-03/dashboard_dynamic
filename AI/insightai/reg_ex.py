@@ -83,19 +83,73 @@ def _extract_code(response: str, analyst: str, provider: str, extract_dict: bool
     if extract_dict:
         return code.strip(), output_plot_match
     return code.strip()
+# def _extract_sql_query(response: str) -> str:
+#     """Extract SQL queries from LLM response.
+#     Only extracts content within SQL code blocks and cleans it up.
+#     """
+#     query_matches = re.findall(r'```sql\s*(.*?)\s*```', response, re.DOTALL)
+#     if query_matches:
+#         # Get last SQL block and clean it
+#         query = query_matches[-1]
+#         # Remove comments and extra whitespace
+#         query = re.sub(r'--.*$', '', query, flags=re.MULTILINE)
+#         # Remove empty lines
+#         query = '\n'.join(line for line in query.split('\n') if line.strip())
+#         return query.strip()
+#     return None
+
 def _extract_sql_query(response: str) -> str:
-    """Extract SQL queries from LLM response.
-    Only extracts content within SQL code blocks and cleans it up.
-    """
-    query_matches = re.findall(r'```sql\s*(.*?)\s*```', response, re.DOTALL)
-    if query_matches:
-        # Get last SQL block and clean it
-        query = query_matches[-1]
-        # Remove comments and extra whitespace
+    """Extract SQL queries from LLM response with improved handling."""
+    # First try to find SQL code blocks
+    sql_blocks = re.findall(r'```sql\s*(.*?)\s*```', response, re.DOTALL | re.IGNORECASE)
+    
+    if sql_blocks:
+        # Get the last SQL block and clean it
+        query = sql_blocks[-1].strip()
+    else:
+        # If no SQL blocks found, try to extract SQL from the entire response
+        # Look for common SQL keywords at the start of lines
+        lines = response.split('\n')
+        sql_lines = []
+        in_sql = False
+        
+        for line in lines:
+            line = line.strip()
+            # Check if line starts with SQL keywords
+            if re.match(r'^\s*(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|ALTER|DROP|PRAGMA)', line, re.IGNORECASE):
+                in_sql = True
+                sql_lines.append(line)
+            elif in_sql:
+                # Continue collecting SQL lines until we hit a non-SQL line
+                if line and not line.startswith('--') and not line.startswith('/*'):
+                    if any(keyword in line.upper() for keyword in ['SELECT', 'FROM', 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'JOIN', 'UNION', 'LIMIT', 'OFFSET', 'AND', 'OR', 'NOT', 'IN', 'LIKE', 'BETWEEN', 'IS', 'NULL', 'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'DISTINCT', 'AS', 'ON', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'OUTER', 'CROSS', 'EXISTS', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'CAST', 'CONVERT', 'SUBSTRING', 'TRIM', 'UPPER', 'LOWER', 'COALESCE', 'ISNULL', 'YEAR', 'MONTH', 'DAY', 'GETDATE', 'NOW', 'CURRENT_TIMESTAMP', 'DATETIME', 'DATE', 'TIME', 'VARCHAR', 'INT', 'INTEGER', 'FLOAT', 'DECIMAL', 'NUMERIC', 'BOOLEAN', 'BOOL', 'TEXT', 'CHAR', 'NVARCHAR', 'BIGINT', 'SMALLINT', 'TINYINT', 'REAL', 'DOUBLE', 'PRECISION', 'MONEY', 'SMALLMONEY', 'BINARY', 'VARBINARY', 'IMAGE', 'TIMESTAMP', 'UNIQUEIDENTIFIER', 'XML', 'JSON', 'ARRAY', 'STRUCT', 'MAP', 'UNION', 'EXCEPT', 'INTERSECT', 'WINDOW', 'OVER', 'PARTITION', 'ROWS', 'RANGE', 'UNBOUNDED', 'PRECEDING', 'FOLLOWING', 'CURRENT', 'ROW', 'RANK', 'DENSE_RANK', 'ROW_NUMBER', 'LEAD', 'LAG', 'FIRST_VALUE', 'LAST_VALUE', 'NTH_VALUE', 'PERCENT_RANK', 'CUME_DIST', 'NTILE', 'PERCENTILE_CONT', 'PERCENTILE_DISC', 'MEDIAN', 'MODE', 'STDDEV', 'VAR_POP', 'VAR_SAMP', 'CORR', 'COVAR_POP', 'COVAR_SAMP', 'REGR_SLOPE', 'REGR_INTERCEPT', 'REGR_R2', 'REGR_COUNT', 'REGR_AVGX', 'REGR_AVGY', 'REGR_SXX', 'REGR_SYY', 'REGR_SXY']) or line.endswith(';') or line.endswith(','):
+                        sql_lines.append(line)
+                    else:
+                        break
+                else:
+                    sql_lines.append(line)
+        
+        if sql_lines:
+            query = '\n'.join(sql_lines)
+        else:
+            # Last resort: clean the entire response
+            query = response.strip()
+    
+    if query:
+        # Clean the query
+        # Remove comments
         query = re.sub(r'--.*$', '', query, flags=re.MULTILINE)
-        # Remove empty lines
-        query = '\n'.join(line for line in query.split('\n') if line.strip())
-        return query.strip()
+        query = re.sub(r'/\*.*?\*/', '', query, flags=re.DOTALL)
+        
+        # Remove extra whitespace and empty lines
+        lines = [line.strip() for line in query.split('\n') if line.strip()]
+        query = '\n'.join(lines)
+        
+        # Remove common prefixes that might be added by the LLM
+        query = re.sub(r'^(Here\'s|Here is|The query is|Query:|SQL:|```sql|```)', '', query, flags=re.IGNORECASE).strip()
+        
+        return query
+    
     return None
 
 def _extract_rank(response: str) -> str:

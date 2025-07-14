@@ -15,11 +15,11 @@ warnings.filterwarnings('ignore')
 try:
     # Attempt package-relative import
     from . import models, prompts, func_calls, reg_ex, log_manager, output_manager, utils
-    from .DataMapper import DataMapper
+    from . import DataMapper
 except ImportError:
     # Fall back to script-style import
     import models, prompts, func_calls, reg_ex, log_manager, output_manager, utils
-    from DataMapper import DataMapper
+    import DataMapper
 
 class InsightAI:
     def __init__(self, df: pd.DataFrame = None,
@@ -33,9 +33,8 @@ class InsightAI:
              diagram: bool = False):  # Add new parameter
         
         if db_path:
-            import sqlite3
-            self.conn = sqlite3.connect(db_path)
-            self.cur = self.conn.cursor()
+            if not self.initialize_database(db_path):
+                raise ValueError(f"Failed to initialize database connection to {db_path}")
         self.df = df if df is not None else None
 
         self.output_plot = None  # Initialize plot output variable
@@ -206,6 +205,24 @@ class InsightAI:
     ### Util Functions ###
     ######################
 
+    def initialize_database(self, db_path):
+        """Initialize database connection with proper error handling."""
+        try:
+            import sqlite3
+            self.conn = sqlite3.connect(db_path)
+            self.cur = self.conn.cursor()
+
+            # Test the connection
+            self.cur.execute("SELECT 1")
+            self.cur.fetchone()
+
+            self.output_manager.display_system_messages(f"Database connection established: {db_path}")
+            return True
+
+        except Exception as e:
+            self.output_manager.display_error(f"Failed to initialize database: {str(e)}")
+            return False
+
     def reset_messages_and_logs(self):
         self.pre_eval_messages = [{"role": "system", "content": self.expert_selector_system}]
         self.select_analyst_messages = [{"role": "system", "content": self.analyst_selector_system}]
@@ -320,8 +337,29 @@ class InsightAI:
         if expert == 'SQL Analyst':
             agent = 'SQL Generator'
             schema = self.get_db_schema()
-            if schema:
-                self.eval_messages.append({"role": "user", "content": f"Database Schema:\n{schema}\n\nQuery: {question}"})
+            # if schema:
+            #     self.eval_messages.append({"role": "user", "content": f"Database Schema:\n{schema}\n\nQuery: {question}"})
+            if not schema:
+                return None, "Could not retrieve database schema", None, None, True, 0
+            
+            # Prepare messages for SQL generation
+            self.code_messages = [{"role": "system", "content": self.code_generator_system_sql.format(schema=schema)}]
+            self.code_messages.append({
+                "role": "user", 
+                "content": self.code_generator_user_sql.format(
+                    question=question,
+                    schema=schema,
+                    results=self.code_exec_results or "No previous results"
+                )
+            })
+            
+            # Generate SQL query
+            code = self.generate_code('SQL Analyst', question, None, self.code_messages, self.default_example_output_sql)
+            
+            # Execute SQL query
+            answer, results = self.execute_sql(code, None, question)
+            return 'SQL Analyst', answer, None, None, True, 9
+        
 
         elif expert == 'Data Cleaning Expert':
             agent = 'Data Cleaning Expert'
@@ -433,22 +471,7 @@ class InsightAI:
                 return None, None
 
         
-
-    #####################
-    ### Conversation Function ###
-    #####################
-    def pd_agent_converse(self, question=None):
-        if question is not None:
-            loop = False
-        else:
-            loop = True
-
-        chain_id = int(time.time())
-        self.chain_id = chain_id
-        self.reset_messages_and_logs()
-        print("QUESTION", question)
-
-        try:
+    def enhance_query(self,question):
             # Use enhanced datamapper with instructor
             mappings, filtered_df = self.datamapper(question)
 
@@ -465,11 +488,32 @@ class InsightAI:
                 Query: {question}
 
                 Relevant columns:
+                {relevant_columns}
+                Target Fields:
+                {target_fields}
+                Format:
                 {mappings.get('detailed_format', 'General analysis')}
                 """
 
             print("ENHANCED QUERY:", enhanced_query)
             question = enhanced_query
+            return question
+    #####################
+    ### Conversation Function ###
+    #####################
+    def pd_agent_converse(self, question=None):
+        if question is not None:
+            loop = False
+            question = self.enhance_query(question=question)
+        else:
+            loop = True
+
+        chain_id = int(time.time())
+        self.chain_id = chain_id
+        self.reset_messages_and_logs()
+        print("QUESTION", question)
+
+        try:
             while True:
                 if loop:
                     question = self.output_manager.display_user_input_prompt()
@@ -477,7 +521,7 @@ class InsightAI:
                     if question.strip().lower() == 'exit':
                         self.log_and_call_manager.consolidate_logs()    
                         break
-
+                    question = self.enhance_query(question)
                 # Check file type to determine path
                 file_type = '.db' if hasattr(self, 'conn') else '.csv'
 
@@ -812,56 +856,183 @@ class InsightAI:
         self.conn = sqlite3.connect(db_path)
         self.cur = self.conn.cursor()
         
-    def execute_sql(self, query: str, plan: str, question: str):
-        """Execute SQL queries and format results with proper schema handling.
+    # def execute_sql(self, query: str, plan: str, question: str):
+    #     """Execute SQL queries and format results with proper schema handling.
         
-        Args:
-            query (str): SQL query to be executed
-            plan (str): Task plan or context
-            question (str): Original user question
+    #     Args:
+    #         query (str): SQL query to be executed
+    #         plan (str): Task plan or context
+    #         question (str): Original user question
             
-        Returns:
-            tuple: A summary of results and the executed query
-        """
+    #     Returns:
+    #         tuple: A summary of results and the executed query
+    #     """
+    #     try:
+    #         if not query:
+    #             return None, "No valid SQL query provided."
+            
+    #         results = []
+    #         # Split and clean queries (ignore comments and empty lines)
+    #         queries = [q.strip() for q in query.split(';') if q.strip()]
+            
+    #         for q in queries:
+    #             try:
+    #                 # Execute query
+    #                 self.cur.execute(q)
+    #                 result = self.cur.fetchall()
+                    
+    #                 if "pragma" in q.lower():
+    #                     # Format PRAGMA schema results
+    #                     columns = [desc[0] for desc in self.cur.description]
+    #                     df = pd.DataFrame(result, columns=columns)
+    #                     results.append(f"\nSchema for {q.split('(')[-1].split(')')[0]} table:\n{df.to_string()}")
+    #                 elif result:
+    #                     # Format normal query results
+    #                     columns = [desc[0] for desc in self.cur.description]
+    #                     df = pd.DataFrame(result, columns=columns)
+    #                     results.append(f"\nResults for query: {q}\n{df.to_string()}")
+    #                 else:
+    #                     results.append(f"Query executed successfully but returned no results: {q}")
+    #             except Exception as e:
+    #                 results.append(f"Error executing query: {q}\n{str(e)}")
+            
+    #         # Combine all results
+    #         summary = "\n".join(results)
+
+    #         # Generate Mermaid diagram if enabled
+            
+    #         return summary, query
+
+    #     except Exception as e:
+    #         self.output_manager.display_error(f"SQL Execution Error: {str(e)}")
+    #         return None, None
+
+    def execute_sql(self, query: str, plan: str, question: str):
+        """Execute SQL queries with improved error handling and result formatting."""
         try:
             if not query:
-                return None, "No valid SQL query provided."
-            
-            results = []
-            # Split and clean queries (ignore comments and empty lines)
-            queries = [q.strip() for q in query.split(';') if q.strip()]
-            
-            for q in queries:
-                try:
-                    # Execute query
-                    self.cur.execute(q)
-                    result = self.cur.fetchall()
-                    
-                    if "pragma" in q.lower():
-                        # Format PRAGMA schema results
-                        columns = [desc[0] for desc in self.cur.description]
-                        df = pd.DataFrame(result, columns=columns)
-                        results.append(f"\nSchema for {q.split('(')[-1].split(')')[0]} table:\n{df.to_string()}")
-                    elif result:
-                        # Format normal query results
-                        columns = [desc[0] for desc in self.cur.description]
-                        df = pd.DataFrame(result, columns=columns)
-                        results.append(f"\nResults for query: {q}\n{df.to_string()}")
-                    else:
-                        results.append(f"Query executed successfully but returned no results: {q}")
-                except Exception as e:
-                    results.append(f"Error executing query: {q}\n{str(e)}")
-            
-            # Combine all results
-            summary = "\n".join(results)
+                return "No valid SQL query provided.", None
 
-            # Generate Mermaid diagram if enabled
-            
-            return summary, query
+            # Ensure we have a valid database connection
+            if not hasattr(self, 'conn') or not hasattr(self, 'cur'):
+                return "Database connection not properly initialized.", None
+
+            # Test the connection
+            try:
+                self.cur.execute("SELECT 1")
+            except Exception as e:
+                return f"Database connection error: {str(e)}", None
+
+            results = []
+            errors = []
+
+            # Clean and prepare the query
+            query = query.strip()
+
+            # Handle single query or multiple queries
+            if ';' in query:
+                # Multiple queries - split carefully
+                queries = []
+                current_query = ""
+                in_quotes = False
+                quote_char = None
+
+                for char in query:
+                    if char in ['"', "'"] and not in_quotes:
+                        in_quotes = True
+                        quote_char = char
+                    elif char == quote_char and in_quotes:
+                        in_quotes = False
+                        quote_char = None
+                    elif char == ';' and not in_quotes:
+                        if current_query.strip():
+                            queries.append(current_query.strip())
+                        current_query = ""
+                        continue
+                    current_query += char
+
+                # Add the last query if it exists
+                if current_query.strip():
+                    queries.append(current_query.strip())
+            else:
+                queries = [query]
+
+            # Execute each query
+            for i, q in enumerate(queries):
+                if not q.strip():
+                    continue
+
+                try:
+                    # Execute the query
+                    self.cur.execute(q)
+
+                    # Get results
+                    result = self.cur.fetchall()
+                    column_names = [desc[0] for desc in self.cur.description] if self.cur.description else []
+
+                    # Format results based on query type
+                    if q.strip().upper().startswith('PRAGMA'):
+                        # Handle PRAGMA queries (schema information)
+                        if result and column_names:
+                            df = pd.DataFrame(result, columns=column_names)
+                            table_name = q.split('(')[-1].split(')')[0] if '(' in q else "table"
+                            results.append(f"\n=== Schema for {table_name} ===\n{df.to_string(index=False)}")
+                        else:
+                            results.append(f"\n=== Schema Query Result ===\nNo schema information found")
+
+                    elif result:
+                        # Handle regular queries with results
+                        if column_names:
+                            df = pd.DataFrame(result, columns=column_names)
+                            results.append(f"\n=== Query {i+1} Results ===\n{df.to_string(index=False)}")
+
+                            # Add summary statistics for numeric columns
+                            numeric_cols = df.select_dtypes(include=[np.number]).columns
+                            if len(numeric_cols) > 0:
+                                results.append(f"\n=== Summary Statistics ===\n{df[numeric_cols].describe().to_string()}")
+                        else:
+                            results.append(f"\n=== Query {i+1} Results ===\n{len(result)} rows affected")
+                    else:
+                        # Query executed successfully but no results
+                        if q.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP')):
+                            results.append(f"\n=== Query {i+1} ===\nOperation completed successfully")
+                        else:
+                            results.append(f"\n=== Query {i+1} ===\nQuery executed successfully (no results returned)")
+
+                except Exception as e:
+                    error_msg = f"Error in query {i+1}: {str(e)}\nQuery: {q}"
+                    errors.append(error_msg)
+                    self.output_manager.display_error(error_msg)
+
+            # Combine results and errors
+            final_result = []
+
+            if results:
+                final_result.extend(results)
+
+            if errors:
+                final_result.append("\n=== Errors ===")
+                final_result.extend(errors)
+
+            if not results and not errors:
+                final_result.append("No results or errors to display")
+
+            summary = "\n".join(final_result)
+
+            # Generate a summary answer
+            if results and not errors:
+                answer = f"Query executed successfully. {summary}"
+            elif results and errors:
+                answer = f"Query partially executed with some errors. {summary}"
+            else:
+                answer = f"Query failed to execute. {summary}"
+
+            return answer, query
 
         except Exception as e:
-            self.output_manager.display_error(f"SQL Execution Error: {str(e)}")
-            return None, None
+            error_msg = f"Critical SQL execution error: {str(e)}"
+            self.output_manager.display_error(error_msg)
+            return error_msg, None
 
     def get_db_schema(self):
         """Extract and format database schema."""

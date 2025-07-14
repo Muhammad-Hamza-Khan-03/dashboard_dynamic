@@ -56,8 +56,8 @@ from pdf_layout import *
 
 
 # AI libraries
-# from AI.insightai import InsightAI
-from insightai import InsightAI
+from AI.insightai import InsightAI
+# from insightai import InsightAI
 
 
 matplotlib.use('Agg')
@@ -253,9 +253,9 @@ def configure_llm_settings():
     # First try to load API keys
     groq_key = os.getenv('GROQ_API_KEY')
     gemini_key = os.getenv('GEMINI_API_KEY')
-    openai_key = 'key'
-    if not openai_key or not groq_key:
-        print("Warning: API keys not found in environment variables")
+    
+    # if not openai_key or not groq_key:
+    #     print("Warning: API keys not found in environment variables")
         # For development only - replace with your keys
     
     # Set the LLM_CONFIG in environment variable groq
@@ -272,6 +272,22 @@ def configure_llm_settings():
     # ]'''
 
 
+    LLM_CONFIG = [
+    {"agent": "Expert Selector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Theorist", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "SQL Analyst", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    {"agent": "SQL Generator", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    {"agent": "SQL Executor", "details": {"model": "deepseek-r1-distill-llama-70b", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    {"agent": "Dataframe Inspector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+    {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Code Debugger", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Error Corrector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Code Ranker", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Solution Summarizer", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    ]
+    os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
     # os.environ['LLM_CONFIG'] = '''[
     # {"agent": "Expert Selector", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 500, "temperature": 0}},
     # {"agent": "Analyst Selector", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 500, "temperature": 0}},
@@ -285,24 +301,24 @@ def configure_llm_settings():
     # ]'''
     # os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
 
-    LLM_CONFIG = [
-    {"agent": "Expert Selector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Theorist", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "SQL Analyst", "details": {"model": "deepseek-r1-distill-llama-70b", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
-    {"agent": "SQL Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
-    {"agent": "SQL Executor", "details": {"model": "deepseek-r1-distill-llama-70b", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
-    {"agent": "Dataframe Inspector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
-    {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Code Debugger", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Error Corrector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Code Ranker", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Solution Summarizer", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "DataMapper", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 2000, "temperature": 0.1}},
+    # LLM_CONFIG = [
+    # {"agent": "Expert Selector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Theorist", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "SQL Analyst", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    # {"agent": "SQL Generator", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    # {"agent": "SQL Executor", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    # {"agent": "Dataframe Inspector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+    # {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Code Debugger", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Error Corrector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Code Ranker", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Solution Summarizer", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "DataMapper", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 2000, "temperature": 0.1}},
 
-    ]
-    os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
+    # ]
+    # os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
 
 # Update the create_insight_instance function in backend.py
 def create_insight_instance(file_id, user_id, report_enabled=False, report_questions=3, diagram_enabled=False):

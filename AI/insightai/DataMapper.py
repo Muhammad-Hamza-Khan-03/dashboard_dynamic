@@ -164,6 +164,7 @@ class DataMapper:
         - What the column represents in business/domain context
         - Any patterns or characteristics you can infer
         
+        
         Provide descriptions that would help someone understand what each column is used for.
         """
         
@@ -249,6 +250,7 @@ class DataMapper:
         - If no suitable match exists, set 'matched_column' to "Nothing Compatible"
         - Focus on columns that would be most relevant for analysis or filtering
         - Consider synonyms and related concepts when matching
+        - If the user asks general question from the dataset,include all the columns
         """
         
         # Convert column descriptions for the prompt
