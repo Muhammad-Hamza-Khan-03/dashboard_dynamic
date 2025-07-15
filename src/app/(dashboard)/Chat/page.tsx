@@ -1300,7 +1300,7 @@ const FileSelector: React.FC<{
           f.file_type === 'sqlite' || f.file_type === 'sqlite3' || 
           f.file_type === 'json' || f.file_type === 'xml' || f.file_type === 'pdf' || 
           f.file_type=== 'docx' || f.file_type === 'doc' || f.file_type === 'txt' ||
-          f.file_type === 'xlsx' || f.file_type === 'xls' // Include Excel files
+          (!f.filename.includes(':') &&(f.file_type === 'xlsx' || f.file_type === 'xls' ) )
         ));
       } catch (err: any) {
         console.error('Error fetching files:', err);

@@ -6,7 +6,16 @@ from typing import List, Dict, Any
 import instructor
 from pydantic import BaseModel, Field
 
-# Pydantic models for instructor
+try:
+    from .func_calls import mapper_description_schema, matcher_schema
+except ImportError:
+    from func_calls import mapper_description_schema, matcher_schema
+
+try:
+    from . import models
+except ImportError:
+    import models
+
 class ColumnDescription(BaseModel):
     column_name: str = Field(..., description="The name of the column")
     description: str = Field(..., description="A concise explanation of what the column represents")
@@ -28,101 +37,38 @@ class DataMapper:
     Uses instructor with Groq for structured JSON output.
     """
     
-    def __init__(self, df: pd.DataFrame, llm_config: dict = None):
+    def __init__(self, df: pd.DataFrame, insight_ai: 'InsightAI'):
         """
-        Initialize DataMapper with DataFrame and LLM configuration.
+        Initialize DataMapper with DataFrame and InsightAI instance for prompt and model access.
         
         Args:
             df: pandas DataFrame to analyze
-            llm_config: LLM configuration dictionary (optional)
+            insight_ai: InsightAI instance containing prompt templates and model configurations
         """
         self.df = df
-        self.llm_config = llm_config or self._get_default_config()
+        self.insight_ai = insight_ai
         self.client = self._init_instructor_client()
         self.column_descriptions = None
-        self.model = "deepseek-r1-distill-llama-70b"
+        self.messages = [{"role": "system", "content": self.insight_ai.data_mapper_describe_columns_system}]
         
         # Define JSON schemas for reference
-        self.description_schema = {
-            "type": "object",
-            "properties": {
-                "descriptions": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "column_name": {
-                                "type": "string",
-                                "description": "The name of the column"
-                            },
-                            "description": {
-                                "type": "string",
-                                "description": "A concise explanation of what the column represents"
-                            }
-                        },
-                        "required": ["column_name", "description"]
-                    }
-                }
-            },
-            "required": ["descriptions"]
-        }
-        
-        self.match_schema = {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The original user query."
-                },
-                "matches": {
-                    "type": "array",
-                    "description": "List of target fields with matched dataset column names.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "target_field": {
-                                "type": "string",
-                                "description": "The inferred field user is asking for."
-                            },
-                            "matched_column": {
-                                "type": "string",
-                                "description": "Best matching column from the actual dataset."
-                            }
-                        },
-                        "required": ["target_field", "matched_column"]
-                    }
-                }
-            },
-            "required": ["query", "matches"]
-        }
-        
-    def _get_default_config(self):
-        """Get default LLM configuration for DataMapper"""
-        return {
-            "agent": "DataMapper",
-            "details": {
-                "model": "deepseek-r1-distill-llama-70b",
-                "provider": "groq",
-                "max_tokens": 2000,
-                "temperature": 0.1
-            }
-        }
+        self.description_schema = mapper_description_schema
+        self.match_schema = matcher_schema
         
     def _init_instructor_client(self):
-        """Initialize Groq client with instructor patching"""
+        """Initialize Groq client with instructor patching using models.py configuration."""
         try:
-            # Get API key
-            api_key = os.getenv('GROQ_API_KEY')
-            if not api_key:
-                try:
-                    api_key = os.getenv('GROQ_API_KEY')
-                except ImportError:
-                    pass
+            # Get model configuration from models.py
+            model, provider, max_tokens, temperature = models.get_agent_details("DataMapper", models.load_llm_config())
             
+            if provider != "groq":
+                raise ValueError(f"Unsupported provider for DataMapper: {provider}")
+            
+            # Initialize Groq client
+            api_key = os.getenv('GROQ_API_KEY')
             if not api_key:
                 raise ValueError("GROQ_API_KEY not found in environment variables")
                 
-            # Create Groq client and patch with instructor
             groq_client = Groq(api_key=api_key)
             instructor_client = instructor.from_groq(groq_client)
             
@@ -155,38 +101,23 @@ class DataMapper:
         # Sample a few rows for better analysis
         sample_data = self.df.head(3).to_dict('records') if len(self.df) > 0 else []
         
-        system_prompt = """
-        You are a data analysis expert. When given a pandas DataFrame's column information,
-        carefully analyze each column and provide a comprehensive yet concise description.
+        # Use prompt from InsightAI
+        user_prompt = self.insight_ai.data_mapper_describe_columns_user.format(
+            column_names=column_names,
+            dtypes_info=dtypes_info,
+            sample_data=sample_data,
+            shape=self.df.shape
+        )
         
-        Focus on:
-        - What type of data the column contains
-        - What the column represents in business/domain context
-        - Any patterns or characteristics you can infer
-        
-        
-        Provide descriptions that would help someone understand what each column is used for.
-        """
-        
-        user_prompt = f"""
-        Analyze this DataFrame:
-        Column names: {column_names}
-        Data types: {dtypes_info}
-        Sample data (first few rows): {sample_data}
-        DataFrame shape: {self.df.shape}
-        
-        Provide a description for each column.
-        """
+        # Append user message to history
+        self.messages.append({"role": "user", "content": user_prompt})
         
         try:
             # Use instructor to get structured response
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=models.get_model_name("DataMapper")[0],
                 response_model=ColumnDescriptionsResponse,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=self.messages,
                 temperature=0.1,
                 max_tokens=2000,
             )
@@ -204,10 +135,12 @@ class DataMapper:
             
             print("✅ Column Descriptions Generated with Instructor")
             self.column_descriptions = result_dict["descriptions"]
+            self.messages.append({"role": "assistant", "content": json.dumps(result_dict)})
             return result_dict
             
         except Exception as e:
             print(f"❌ Error generating column descriptions with instructor: {e}")
+            self.messages.append({"role": "assistant", "content": f"Error: {str(e)}"})
             return {"descriptions": []}
     
     def match_columns(self, user_query: str, col_descs: List[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -236,22 +169,8 @@ class DataMapper:
                 
         if not col_descs:
             print("❌ No column descriptions available")
+            self.messages.append({"role": "assistant", "content": "No column descriptions available"})
             return {"query": user_query, "matches": []}
-        
-        system_prompt = """
-        You are a dataset matching expert.
-        You will be given:
-              - A user query
-              - A set of dataset column descriptions
-
-        Your task:
-        - Infer the fields needed to answer the query
-        - Match those to the best actual dataset column(s)
-        - If no suitable match exists, set 'matched_column' to "Nothing Compatible"
-        - Focus on columns that would be most relevant for analysis or filtering
-        - Consider synonyms and related concepts when matching
-        - If the user asks general question from the dataset,include all the columns
-        """
         
         # Convert column descriptions for the prompt
         description_text = "\n".join([
@@ -259,24 +178,21 @@ class DataMapper:
             for d in col_descs
         ])
         
-        user_prompt = f"""
-        User Query: "{user_query}"
+        # Use prompt from InsightAI
+        user_prompt = self.insight_ai.data_mapper_match_columns_user.format(
+            query=user_query,
+            column_descriptions=description_text
+        )
         
-        Available Dataset Columns:
-        {description_text}
-        
-        Find the best matching columns for this query.
-        """
+        # Append user message to history
+        self.messages.append({"role": "user", "content": user_prompt})
         
         try:
             # Use instructor to get structured response
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=models.get_model_name("DataMapper")[0],
                 response_model=QueryMatches,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=self.messages,
                 temperature=0.0,
                 max_tokens=1500,
             )
@@ -294,10 +210,12 @@ class DataMapper:
             }
             
             print("✅ Column Matches Generated with Instructor")
+            self.messages.append({"role": "assistant", "content": json.dumps(result_dict)})
             return result_dict
             
         except Exception as e:
             print(f"❌ Error generating column matches with instructor: {e}")
+            self.messages.append({"role": "assistant", "content": f"Error: {str(e)}"})
             return {"query": user_query, "matches": []}
     
     def get_column_mappings(self, user_query: str, format_type: str = "simple") -> str:
@@ -319,12 +237,14 @@ class DataMapper:
         match_result = self.match_columns(user_query, self.column_descriptions)
         
         if not match_result or not match_result.get("matches"):
+            self.messages.append({"role": "assistant", "content": "No column mappings found"})
             return "No column mappings found"
         
         # Filter out non-compatible matches
         valid_matches = [m for m in match_result["matches"] if m["matched_column"] != "Nothing Compatible"]
         
         if not valid_matches:
+            self.messages.append({"role": "assistant", "content": "No compatible columns found for the query"})
             return "No compatible columns found for the query"
         
         # Format mappings based on requested format
@@ -366,27 +286,31 @@ class DataMapper:
         
         if isinstance(column_list, str):
             print(f"❌ Could not get column mappings: {column_list}")
+            self.messages.append({"role": "assistant", "content": f"Could not get column mappings: {column_list}"})
             return self.df
         
         try:
-            return self.df[column_list]
+            filtered_df = self.df[column_list]
+            self.messages.append({"role": "assistant", "content": f"Filtered DataFrame to columns: {column_list}"})
+            return filtered_df
         except KeyError as e:
             print(f"❌ Error filtering DataFrame: {e}")
             print("Available columns:", self.df.columns.tolist())
+            self.messages.append({"role": "assistant", "content": f"Error filtering DataFrame: {str(e)}"})
             return self.df
 
     def get_structured_mappings(self, user_query: str) -> Dict[str, Any]:
-        """
-        Get structured column mappings with full metadata.
-        
-        Args:
-            user_query: The user's question or query
-            
-        Returns:
-            Dictionary containing structured mapping results
-        """
-        return self.get_column_mappings(user_query, format_type="structured")
+            """
+            Get structured column mappings with full metadata.
 
+            Args:
+                user_query: The user's question or query
+
+            Returns:
+                Dictionary containing structured mapping results
+            """
+            return self.get_column_mappings(user_query, format_type="structured")
+    
     def get_column_descriptions_structured(self) -> Dict[str, Any]:
         """
         Get structured column descriptions.
@@ -398,21 +322,3 @@ class DataMapper:
             return self.describe_columns()
         else:
             return {"descriptions": self.column_descriptions}
-
-
-# Updated LLM Configuration - Add this to your existing llm_config
-def get_updated_llm_config():
-    """
-    Returns updated LLM configuration with DataMapper agent added.
-    Add this configuration to your existing llm_config list.
-    """
-    datamapper_config = {
-        "agent": "DataMapper", 
-        "details": {
-            "model": "deepseek-r1-distill-llama-70b", 
-            "provider": "groq", 
-            "max_tokens": 2000, 
-            "temperature": 0.1
-        }
-    }
-    return datamapper_config

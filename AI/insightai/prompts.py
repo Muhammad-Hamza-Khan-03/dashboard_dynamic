@@ -751,7 +751,7 @@ Always include print statements to output the results of your code.
 Always make the visualizations as png inside the [visualization] folder as well.
 Always save the cleaned dataframe as a cleaned_data.csv file
 """
-# Add to prompts.py
+
 ml_model_suggester_system = """
 You are an ML Strategy Advisor recommending appropriate machine learning models based on cleaned datasets and problem types.
 
@@ -789,7 +789,7 @@ implementation_notes:
 
 Keep your recommendations focused on the dataset characteristics mentioned. Don't hallucinate features that weren't described.
 """
-# Update in prompts.py
+
 solution_summarizer_system_cleaning = """
 The user presented you with a data cleaning and ML suggestion task.
 Question: {}
@@ -811,7 +811,7 @@ Please provide a comprehensive summary that includes:
 Make sure to highlight key insights in a clear, non-technical manner while still including technical details where relevant.
 """
 
-# Add to prompts.py
+
 data_cleaning_planner_system = """
 You are a Data Cleaning Expert who creates effective cleaning plans based on the provided data quality analysis.
 
@@ -846,7 +846,7 @@ data_validation:
 Keep your plan concise, practical, and directly related to the issues identified in the quality analysis. Avoid hallucinating problems not evident in the data.
 """
 
-# Add this to prompts.py
+
 data_quality_analyzer_system = """
 You are a Data Quality Analyzer. You examine the provided dataset information and identify key quality issues that need addressing.
 
@@ -899,7 +899,7 @@ data_mapper_describe_columns_user = """
         Column names: {column_names}
         Data types: {dtypes_info}
         Sample data (first few rows): {sample_data}
-        DataFrame shape: {self.df.shape}
+        DataFrame shape: {shape}
         
         Provide a description for each column.
         """
@@ -918,4 +918,13 @@ Your task:
 - Focus on columns that would be most relevant for analysis or filtering
 - Consider synonyms and related concepts when matching
 - If the user asks general question from the dataset,include all the columns
+"""
+
+data_mapper_match_columns_user = """
+User Query: {query}
+
+Available Dataset Columns:
+{column_descriptions}
+
+Find the best matching columns for this query.
 """

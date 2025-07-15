@@ -15,11 +15,11 @@ warnings.filterwarnings('ignore')
 try:
     # Attempt package-relative import
     from . import models, prompts, func_calls, reg_ex, log_manager, output_manager, utils
-    from . import DataMapper
+    from .DataMapper import DataMapper
 except ImportError:
     # Fall back to script-style import
     import models, prompts, func_calls, reg_ex, log_manager, output_manager, utils
-    import DataMapper
+    from DataMapper import DataMapper
 
 class InsightAI:
     def __init__(self, df: pd.DataFrame = None,
@@ -111,6 +111,10 @@ class InsightAI:
             "solution_summarizer_system_cleaning",
             "data_cleaning_planner_system",
             "data_quality_analyzer_system",
+            "data_mapper_describe_columns_system",
+            "data_mapper_describe_columns_user",
+            "data_mapper_match_columns_system",
+            "data_mapper_match_columns_user",
         ]
 
         prompt_data = {}
@@ -201,6 +205,9 @@ class InsightAI:
         self.select_analyst_messages = [{"role": "system", "content": self.analyst_selector_system}]
         self.eval_messages = [{"role": "system", "content": self.planner_system.format(utils.get_readable_date())}]
         self.code_messages = [{"role": "system", "content": self.code_generator_system_df}]
+
+        self.datamapper_messages = [{"role": "system", "content": self.data_mapper_describe_columns_system}]
+
     ######################
     ### Util Functions ###
     ######################
@@ -422,7 +429,7 @@ class InsightAI:
 
         try:
             # Initialize DataMapper with instructor
-            mapper = DataMapper(self.df.head(1))
+            mapper = DataMapper(self.df.head(1),self)
 
             column_descriptions = mapper.get_column_descriptions_structured()
 
@@ -449,6 +456,7 @@ class InsightAI:
             }
 
             print(f"\n Column Mappings (Simple): {mapping_result['simple_format']}")
+            self.datamapper_messages.append({"role": "assistant", "content": json.dumps(mapping_result)})
 
             return mapping_result, filtered_df
         
@@ -466,8 +474,10 @@ class InsightAI:
                     'fallback_columns': self.df.columns.tolist(),
                     'dataframe_shape': self.df.shape
                 }
+                self.datamapper_messages.append({"role": "assistant", "content": json.dumps(fallback_result)})
                 return fallback_result, self.df
             except:
+                self.datamapper_messages.append({"role": "assistant", "content": "Nothing returned"})
                 return None, None
 
         
