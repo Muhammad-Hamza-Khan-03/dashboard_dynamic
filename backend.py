@@ -285,7 +285,7 @@ def configure_llm_settings():
     {"agent": "Code Debugger", "details": {"model": "moonshotai/kimi-k2-instruct", "provider":"groq","max_tokens": 4000, "temperature": 0}},
     {"agent": "Error Corrector", "details": {"model": "moonshotai/kimi-k2-instruct", "provider":"groq","max_tokens": 4000, "temperature": 0}},
     {"agent": "Code Ranker", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Solution Summarizer", "details": {"model": "moonshotai/kimi-k2-instruct", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Solution Summarizer", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
     ]
     os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
     # os.environ['LLM_CONFIG'] = '''[

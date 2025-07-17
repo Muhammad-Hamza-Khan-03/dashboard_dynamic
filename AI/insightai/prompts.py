@@ -603,82 +603,7 @@ Present this information in a manner that is both clear and easy to understand.
 Ensure that all results from the computations are included in your summary,dont include basic preparation or setup results.
 If the user asked for a particular information that is not included in the code execution results, and you know the answer please incorporate the answer to your summary.
 """
-# Google Search Query Generator Agent Prompts
-google_search_query_generator_system = """
-You are an AI internet research specialist and your job is to formulate a user's question as a search query.
-Reframe the user's question into a search query as per the below examples.
 
-Example input: Can you please find out what is the popularity of Python programming language in 2023?
-Example output: Popularity of Python programming language in 2023
-
-The user asked the following question: '{}'.
-"""
-# Google Search Summarizer Agent Prompts
-google_search_summarizer_system = """
-Read the following text carefully to understand its content. 
-  
-Text:
-
-{}
-
-Based on your understanding, provide a clear and comprehensible answer to the question below by extracting relevant information from the text.
-Be certain to incorporate all relevant facts and insights.
-Fill in any information that user has asked for, and that is missing from the text.
-
-Question: {}
-"""
-google_search_react_system = """
-You are an Internet Research Specialist, and run in a loop of Thought, Action, Observation. This Thought, Action, Observation loop is repeated until you output an Answer.
-At the end of the loop you output an Answer.
-Use Thought to describe your thoughts about the question you have been asked.
-Use Action to run one of the actions available to you.
-Observation will be the result of running those actions.
-
-Your available actions are:
-
-calculate:
-e.g. calculate: 4 * 7 / 3
-Runs a calculation and returns the number - uses Python so be sure to use floating point syntax if necessary
-
-google_search:
-e.g. google_search: Popularity of the Python programming language in 2022
-Returns a summary of a Google Search
-Today's Date is: {}
-
-Use Google Search ONLY if you dont know the answer to the question!
-
-Example session:
-
-Question: What is Leonardo di Caprio's girlfriends age raised to the power of 2?\n
-Thought: I need to search for Leonardo DiCaprio's girlfriend's name.\n
-Action: google_search: Leonardo DiCaprio's girlfriend's name\n
-
-You will be called again with this:
-
-Observation: Leonardo DiCaprio has had a string of high-profile relationships over the years, including with models Gisele Bündchen, Bar Refaeli, and Nina Agdal. As of 2023, he is currently dating actress and model Camila Morrone.
-
-You then output:
-
-Thought: Camila Morrone's age.
-Action: google_search: Camila Morrone's age
-
-You will be called again with this:
-
-Observation: Camila Morrone is 23 years old.
-
-You then output:
-
-Thought: Camila Morrone is 23 years old. I need to raise 23 to the power of 2.
-Action: calculate: 23**2
-
-You will be called again with this:
-
-Observation: 529
-
-You then output the finall answer:
-
-Answer: Leonardo's current girlfriend is Camila Morrone, who is 23 years old. 23 raised to the power of 2 is 529.
-"""
 
 dataset_categorizer_system = """
 You are a dataset classification expert. Your task is to analyze the structure and content of a dataset and identify its real-world category and domain.
@@ -717,27 +642,6 @@ Format your response as a JSON array of questions:
 ]
 
 Any question based on visualization must be saved as png in the [visualization] folder.
-"""
-
-report_generator_system = """
-You are a professional report writer for data analysis. Create a comprehensive, executive-level report based on the dataset analysis questions and answers provided.
-
-The report should:
-1. Begin with an executive summary
-2. Include a brief description of the dataset and its category
-3. Present each question and its corresponding answer in a well-structured format
-4. Incorporate all visualizations at the exact locations they belong in the analysis
-5. End with key insights and recommendations
-
-VISUALIZATION GUIDELINES:
-- When a visualization_path is provided, you MUST include it using the exact path provided
-- Use the markdown syntax: ![Description](visualization/)
-- Do not use placeholder text like "path_to_image"
-- Include a sentence referencing the visualization, such as "As shown in the visualization below..."
-
-Format the report in professional Markdown that can be converted to a PDF. Use appropriate headers, bullet points, and formatting to make the report visually appealing and easy to navigate.
-
-The report should be presented as if it's being delivered to senior management, highlighting the business value and insights from the analysis.
 """
 
 code_generator_system_cleaning = """
@@ -806,7 +710,6 @@ Please provide a comprehensive summary that includes:
 3. Before/after metrics showing improvement (e.g., "Missing values reduced from 15% to 0%")
 4. Machine learning model recommendations based on the cleaned data
 5. Next steps the user could take for their ML project
-6. Any limitations or assumptions made during the cleaning process
 
 Make sure to highlight key insights in a clear, non-technical manner while still including technical details where relevant.
 """
@@ -823,7 +726,6 @@ Focus on these essential cleaning tasks in order of importance:
 3. Handling outliers appropriately based on context
 4. Preparing categorical variables (encoding)
 5. Scaling/normalizing numeric features
-6. Feature engineering if beneficial for ML
 
 Format your response as a YAML plan with ordered steps:
 
@@ -888,7 +790,7 @@ data_mapper_describe_columns_system = """You are a data analysis expert. When gi
 carefully analyze each column and provide a comprehensive yet concise description.
 Focus on:
 - What type of data the column contains
-- What the column represents in business/domain context
+- What the column represents in traffic/domain context
 - Any patterns or characteristics you can infer
 
 
