@@ -61,7 +61,7 @@ class DataMapper:
             # Get model configuration from models.py
             model, provider, max_tokens, temperature = models.get_agent_details("DataMapper", models.load_llm_config())
             
-            if provider != "groq":
+            if not provider:
                 raise ValueError(f"Unsupported provider for DataMapper: {provider}")
             
             # Initialize Groq client
@@ -93,7 +93,7 @@ class DataMapper:
             
         # Get column names and sample data for analysis
         column_names = self.df.columns.tolist()
-        first_row_data = self.df.iloc[0].tolist() if len(self.df) > 0 else []
+        # first_row_data = self.df.iloc[0].tolist() if len(self.df) > 0 else []
         
         # Get data types
         dtypes_info = {col: str(dtype) for col, dtype in self.df.dtypes.items()}

@@ -178,59 +178,59 @@ Example Queries and Outputs:
 """
 
 # Add SQL Analyst selector
-sql_analyst_selector_system = """
-You are a SQL expert. Analyze the database schema and query requirements.
+# sql_analyst_selector_system = """
+# You are a SQL expert. Analyze the database schema and query requirements.
 
-1. Determine the appropriate SQL operations needed:
-   - Basic querying (SELECT, WHERE, etc.)
-   - Aggregations (GROUP BY, HAVING)
-   - Joins
-   - Subqueries
-   - Window functions
+# 1. Determine the appropriate SQL operations needed:
+#    - Basic querying (SELECT, WHERE, etc.)
+#    - Aggregations (GROUP BY, HAVING)
+#    - Joins
+#    - Subqueries
+#    - Window functions
 
-2. Format the query requirements as:
-   WHAT IS THE UNKNOWN: <fill in>
-   WHICH TABLES: <fill in>
-   WHAT CONDITIONS: <fill in>
+# 2. Format the query requirements as:
+#    WHAT IS THE UNKNOWN: <fill in>
+#    WHICH TABLES: <fill in>
+#    WHAT CONDITIONS: <fill in>
 
-Output as JSON with fields {query_type, tables, conditions}.
+# Output as JSON with fields {query_type, tables, conditions}.
 
-Example:
-```json
-{
-  "query_type": "aggregation",
-  "tables": ["orders", "customers"],
-  "conditions": "group by customer_id having count(*) > 5"
-}
-```
-"""
+# Example:
+# ```json
+# {
+#   "query_type": "aggregation",
+#   "tables": ["orders", "customers"],
+#   "conditions": "group by customer_id having count(*) > 5"
+# }
+# ```
+# """
 
-# Add SQL Generator template
-sql_generator_system = """
-You are a SQL expert. Generate an SQL query based on the provided database schema and requirements.
+# # Add SQL Generator template
+# sql_generator_system = """
+# You are a SQL expert. Generate an SQL query based on the provided database schema and requirements.
 
-Schema:
-{schema}
+# Schema:
+# {schema}
 
-The schema above is complete and cannot be modified. Do not assume the existence of additional fields or tables. If the query cannot be answered using the schema, indicate this explicitly.
+# The schema above is complete and cannot be modified. Do not assume the existence of additional fields or tables. If the query cannot be answered using the schema, indicate this explicitly.
 
-Query:
-{question}
-"""
+# Query:
+# {question}
+# """
 
-# Add SQL Executor template
-sql_executor_system = """
-Execute and validate SQL queries safely.
+# # Add SQL Executor template
+# sql_executor_system = """
+# Execute and validate SQL queries safely.
 
-Guidelines:
-- Validate query syntax
-- Check for injection risks
-- Handle null values appropriately
-- Format results clearly
-- Provide error context if needed
+# Guidelines:
+# - Validate query syntax
+# - Check for injection risks
+# - Handle null values appropriately
+# - Format results clearly
+# - Provide error context if needed
 
-Connection 'conn' and cursor 'cur' are already initialized.
-"""
+# Connection 'conn' and cursor 'cur' are already initialized.
+# """
 
 expert_selector_user = """
 The user asked the following question: '{}'.
