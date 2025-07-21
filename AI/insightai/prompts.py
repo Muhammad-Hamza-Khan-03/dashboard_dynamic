@@ -412,6 +412,7 @@ You are an AI assistant capable of assisting users with various tasks related to
 Generate the code in such a way that it is always verified.
 
 Remember:
+        - DateTime column is in this format '2025-02-06T18:23:56' Year-Month-DateTHour:Min:Sec
         - violation types column,there are two values: ['Speeding','Seatbelt']
         - 'Evidence' column has only image links
         - 'direction' column has values ['approaching','receding']
@@ -481,6 +482,7 @@ Think on the plan and Use if and else conditions where required.
 Always include the import statements at the top of the code.
 Always include print statements to output the results of your code.
 Always make the visualizations as png inside the [visualization] folder as well.
+Never make any other file for anything,just print the results.
 """
 code_generator_system_gen = """
 You are an AI data analyst and your job is to assist users with data analysis, or any other tasks related to coding. 
@@ -503,6 +505,8 @@ PLAN:
 DATAFRAME:
 {df_info}
 
+Remember:
+- DateTime column is in this format '2025-02-06T18:23:56' Year-Month-DateTHour:Min:Sec
 CODE EXECUTION OF THE PREVIOUS TASK RESULTED IN:
 {results}
 

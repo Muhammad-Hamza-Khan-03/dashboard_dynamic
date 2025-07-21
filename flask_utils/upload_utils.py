@@ -557,7 +557,7 @@ def configure_llm_settings():
     ]'''
     # Set as environment variable
     # os.environ['LLM_CONFIG'] = json.dumps(llm_config)
-def create_insight_instance(file_id, user_id, report_enabled=False, report_questions=3, diagram_enabled=False):
+def create_insight_instance(file_id, user_id):
     """
     Create an InsightAI instance based on file type (CSV or DB)
     """
@@ -601,10 +601,7 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
                 insight = InsightAI(
                     df=df,
                     debug=True,
-                    exploratory=True,
-                    generate_report=report_enabled,
-                    report_questions=report_questions,
-                    diagram=diagram_enabled
+                    exploratory=True
                 )
                 
                 return insight, None
@@ -648,15 +645,13 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
             if not os.path.exists(db_path):
                 return None, f"Database file not found at {db_path}"
             
-            # Create InsightAI instance with the original db_path and include diagram_enabled
             try:
                 insight = InsightAI(
                     db_path=db_path,
                     debug=True,
-                    exploratory=True,
-                    generate_report=report_enabled,
-                    report_questions=report_questions,
-                    diagram=diagram_enabled
+                    exploratory=True
+                  
+                  
                 )
                 
                 return insight, None

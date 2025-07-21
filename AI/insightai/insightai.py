@@ -28,9 +28,7 @@ class InsightAI:
              debug: bool = False, 
              exploratory: bool = True,
              df_ontology: bool = False,
-             generate_report: bool = False,
-             report_questions: int = 5,
-             diagram: bool = False):  # Add new parameter
+             ):  
         
         if db_path:
             if not self.initialize_database(db_path):
@@ -42,12 +40,8 @@ class InsightAI:
         # Output
         self.output_manager = output_manager.OutputManager()
         
-        self.report_enabled = generate_report  # IMPORTANT: Use report_enabled, not generate_report
-        self.report_question_count = report_questions  # Store question count
         self.dataset_category = None
-        self.report_questions = []
-        self.report_answers = []
-        self.diagram_enabled = diagram
+
 
         # Check if the OPENAI_API_KEY environment variable is set
         # if not os.getenv('OPENAI_API_KEY'):
@@ -658,7 +652,6 @@ class InsightAI:
 
         summary = self.summarise_solution(original_question, plan, results)
 
-        # Generate Mermaid diagram if enabled
        
         # Reset the StringIO buffer
         output.truncate(0)
@@ -865,57 +858,7 @@ class InsightAI:
         import sqlite3
         self.conn = sqlite3.connect(db_path)
         self.cur = self.conn.cursor()
-        
-    # def execute_sql(self, query: str, plan: str, question: str):
-    #     """Execute SQL queries and format results with proper schema handling.
-        
-    #     Args:
-    #         query (str): SQL query to be executed
-    #         plan (str): Task plan or context
-    #         question (str): Original user question
-            
-    #     Returns:
-    #         tuple: A summary of results and the executed query
-    #     """
-    #     try:
-    #         if not query:
-    #             return None, "No valid SQL query provided."
-            
-    #         results = []
-    #         # Split and clean queries (ignore comments and empty lines)
-    #         queries = [q.strip() for q in query.split(';') if q.strip()]
-            
-    #         for q in queries:
-    #             try:
-    #                 # Execute query
-    #                 self.cur.execute(q)
-    #                 result = self.cur.fetchall()
-                    
-    #                 if "pragma" in q.lower():
-    #                     # Format PRAGMA schema results
-    #                     columns = [desc[0] for desc in self.cur.description]
-    #                     df = pd.DataFrame(result, columns=columns)
-    #                     results.append(f"\nSchema for {q.split('(')[-1].split(')')[0]} table:\n{df.to_string()}")
-    #                 elif result:
-    #                     # Format normal query results
-    #                     columns = [desc[0] for desc in self.cur.description]
-    #                     df = pd.DataFrame(result, columns=columns)
-    #                     results.append(f"\nResults for query: {q}\n{df.to_string()}")
-    #                 else:
-    #                     results.append(f"Query executed successfully but returned no results: {q}")
-    #             except Exception as e:
-    #                 results.append(f"Error executing query: {q}\n{str(e)}")
-            
-    #         # Combine all results
-    #         summary = "\n".join(results)
-
-    #         # Generate Mermaid diagram if enabled
-            
-    #         return summary, query
-
-    #     except Exception as e:
-    #         self.output_manager.display_error(f"SQL Execution Error: {str(e)}")
-    #         return None, None
+      
 
     def execute_sql(self, query: str, plan: str, question: str):
         """Execute SQL queries with improved error handling and result formatting."""
@@ -1126,163 +1069,12 @@ class InsightAI:
         if json_match:
             try:
                 questions = json.loads(json_match.group())
-                self.report_questions = questions
                 return questions
             except json.JSONDecodeError:
                 return [f"Could not generate questions: {response}"]
         
         return [f"Could not generate questions: {response}"]
-
-    def process_report_questions(self):
-        """
-        Process each generated question, execute the analysis, and store answers.
-        Automatically captures and saves any visualizations created during analysis.
-        """
-        import time
-        
-        if not self.report_questions:
-            self.report_questions = self.generate_questions()
-        
-        answers = []
-        
-        for i, question in enumerate(self.report_questions):
-            self.output_manager.display_system_messages(f"Processing question: {question}")
-            
-            # Save original chain ID to restore after processing each question
-            original_chain_id = self.chain_id
-            
-            # Create a new chain ID for each question to keep logs separate
-            self.chain_id = int(time.time())
-            self.reset_messages_and_logs()
-            
-            # Use existing pipeline to process each question
-            file_type = '.db' if hasattr(self, 'conn') else '.csv'
-            
-            if file_type == '.db':
-                schema = self.get_db_schema()
-                analyst = 'SQL Analyst'
-                plan = None
-                
-                # Generate SQL code
-                # code = self.generate_code(analyst, question, plan, self.code_messages, self.default_example_output_sql)
-                code = self.generate_code(analyst, question, plan, self.code_messages, self.default_example_output_sql)
-                
-                # Execute SQL
-                answer, results = self.execute_sql(code, plan, question)
-            else:
-                analyst, plan, query_unknown, query_condition, requires_dataset, confidence = self.taskmaster(
-                    question, '' if self.df is None else self.df.columns.tolist()
-                )
-                
-                example_code = self.default_example_output_df if analyst == 'Data Analyst DF' else self.default_example_output_gen
-                
-                # Generate code in a child thread
-                code = self.generate_code(analyst, question, plan, self.code_messages, example_code)
-           
-                # Execute code
-                print("Executing code for question:", question)
-                answer, results, code = self.execute_code(analyst, code, plan, question, self.code_messages)
-                print("HERE IS THE PLOTT",self.output_plot)
-            answers.append({
-                "question": question,
-                "answer": answer,
-                "code": code,
-                "results": results
-            })
-            
-            # Restore original chain ID
-            self.chain_id = original_chain_id
-        
-        self.report_answers = answers
-        return answers
-
-    def compile_report(self):
-        """Compile questions and answers into a professional markdown report."""
-        import json
-        
-        agent = 'Report Generator'
-        # using_model, provider = models.get_model_name(agent)
-        
-        # self.output_manager.display_tool_start(agent, using_model)
-        
-        # if not self.report_answers:
-        #     self.process_report_questions()
-        
-        # # Prepare input for the report generator
-        # category_info = json.dumps(self.dataset_category, indent=2)
-        
-        # # Format answers for the report including visualization paths
-        # answers_formatted = []
-        # for item in self.report_answers:
-        #     answers_formatted.append({
-        #         "question": item["question"],
-        #         "answer": item["answer"],
-        #         # Only include code if debugging is enabled
-        #         "code": item["code"] if self.debug else None
-        #     })
-        
-        # answers_info = json.dumps(answers_formatted, indent=2)
-        
-        # messages = [{"role": "system", "content": self.report_generator_system},
-        #             {"role": "user", "content": f"Generate a professional report based on this dataset analysis:\n\nDataset Category:\n{category_info}\n\nQuestions and Answers:\n{answers_info}"}]
-        
-        # report_markdown = self.llm_call(self.log_and_call_manager, messages, agent=agent, chain_id=self.chain_id)
-        
-        # # Save the report to a markdown file - with UTF-8 encoding
-        # report_filename = f"data_analysis_report_{self.chain_id}.md"
-        # with open(report_filename, 'w', encoding='utf-8') as f:
-        #     f.write(report_markdown)
-        
-        # self.output_manager.display_system_messages(f"Report saved to {report_filename}")
-        
-        # # Try to convert to PDF if required libraries are available
-        # try:
-        #     from weasyprint import HTML
-        #     import markdown
-            
-        #     html = markdown.markdown(report_markdown, extensions=['tables', 'fenced_code'])
-        #     pdf_filename = f"data_analysis_report_{self.chain_id}.pdf"
-        #     HTML(string=html).write_pdf(pdf_filename)
-        #     self.output_manager.display_system_messages(f"PDF report saved to {pdf_filename}")
-        # except ImportError:
-        #     self.output_manager.display_system_messages("PDF conversion requires markdown and weasyprint libraries. Install them with: pip install markdown weasyprint")
-        # except Exception as e:
-        #     self.output_manager.display_system_messages(f"Error converting to PDF: {str(e)}")
-        
-        # return report_markdown
-        pass
-
-    def generate_data_report(self, num_questions=5):
-        """Generate a comprehensive data analysis report with the specified number of questions."""
-        import time
-        
-        # Initialize the process
-        chain_id = int(time.time())
-        self.chain_id = chain_id
-        self.reset_messages_and_logs()
-        
-        self.output_manager.display_system_messages("Starting comprehensive data report generation...")
-        
-        # Step 1: Categorize the dataset
-        self.output_manager.display_system_messages("Step 1/4: Categorizing dataset...")
-        self.dataset_category = self.categorize_dataset()
-        
-        # Step 2: Generate insightful questions
-        self.output_manager.display_system_messages(f"Step 2/4: Generating {num_questions} insightful questions...")
-        self.report_questions = self.generate_questions(num_questions)
-        
-        # Step 3: Process each question and collect answers
-        self.output_manager.display_system_messages("Step 3/4: Processing questions and generating answers...")
-        self.report_answers = self.process_report_questions()
-        
-        # Step 4: Compile the report
-        self.output_manager.display_system_messages("Step 4/4: Compiling professional report...")
-        report = self.compile_report()  # IMPORTANT: Use compile_report, not generate_report
-        
-        self.output_manager.display_system_messages("Report generation complete!")
-        self.log_and_call_manager.consolidate_logs()
-        
-        return report
+   
         
 # Add to insightai.py class
     def process_data_cleaning(self, question, df_columns):
@@ -1463,48 +1255,4 @@ class InsightAI:
         )
 
         return summary
-    def generate_mermaid_diagram(self, summary, question, file_type):
-        """
-        Generate a Mermaid flowchart diagram based on the analysis flow and results.
-        
-        Args:
-            summary (str): The solution summary generated by the solution summarizer
-            question (str): The original question asked by the user
-            file_type (str): The type of file analyzed (.csv or .db)
-            
-        Returns:
-            str: Mermaid diagram code
-        """
-        agent = 'Diagram Generator'
-        # using_model, provider = models.get_model_name('Solution Summarizer')  # Reuse Solution Summarizer's model
-        
-        # self.output_manager.display_tool_start(agent, using_model)
-        
-        # # Call the LLM to generate the diagram
-        # messages = [{"role": "system", "content": self.diagram_generator_system},
-        #             {"role": "user", "content": f"Original Question: {question}\n\nAnalysis Summary: {summary}\n\nFile Type: {file_type}"}]
-        
-        # mermaid_code = self.llm_call(self.log_and_call_manager, messages, agent=agent, chain_id=self.chain_id)
-        
-        # # Clean up the response to ensure it's valid Mermaid code
-        # # Remove any potential markdown backticks
-        # mermaid_code = mermaid_code.replace("```mermaid", "").replace("```", "").strip()
-        
-        # # Ensure the diagram starts with flowchart TD
-        # if not mermaid_code.startswith("flowchart TD") and not mermaid_code.startswith("graph TD"):
-        #     mermaid_code = "flowchart TD\n" + mermaid_code
-        
-        # # Save the diagram to a file in the visualization directory
-        # visualization_dir = os.getenv('VISUALIZATION_DIR', 'visualization')
-        # os.makedirs(visualization_dir, exist_ok=True)
-        
-        # diagram_filename = f"analysis_flow_{self.chain_id}.mmd"
-        # diagram_path = os.path.join(visualization_dir, diagram_filename)
-        
-        # with open(diagram_path, 'w', encoding='utf-8') as f:
-        #     f.write(mermaid_code)
-        
-        # self.output_manager.display_system_messages(f"Mermaid diagram saved to {diagram_path}")
-        
-        # return mermaid_code 
-        pass
+    

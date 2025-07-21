@@ -2292,7 +2292,6 @@ const AnalysisPanel: React.FC<{
           {
             question: config.generateReport ? '' : question,
             generate_report: config.generateReport,
-            report_questions: config.questionCount,
             diagram_enabled: config.diagram_enabled // Pass diagram parameter
           }
         );

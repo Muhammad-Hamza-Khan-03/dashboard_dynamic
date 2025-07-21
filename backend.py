@@ -97,7 +97,6 @@ os.environ['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY')
 class QuestionRequest(BaseModel):
     question: str = ""
     generate_report: bool = False
-    report_questions: int = 3
     diagram_enabled: bool = False
 
 class ColumnSplitRequest(BaseModel):
@@ -253,7 +252,7 @@ def configure_llm_settings():
     # First try to load API keys
     groq_key = os.getenv('GROQ_API_KEY')
     gemini_key = os.getenv('GEMINI_API_KEY')
-    
+    openai_key = os.getenv('OPENAI_API_KEY')
     # if not openai_key or not groq_key:
     #     print("Warning: API keys not found in environment variables")
         # For development only - replace with your keys
@@ -271,23 +270,38 @@ def configure_llm_settings():
     # {"agent": "Solution Summarizer", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}}
     # ]'''
 
-
     LLM_CONFIG = [
-    {"agent": "Expert Selector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Theorist", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Expert Selector", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Analyst Selector", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Theorist", "details": {"model": "gpt-4o-mini", "provider":"groq","max_tokens": 4000, "temperature": 0}},
     {"agent": "SQL Analyst", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
     {"agent": "SQL Generator", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
     {"agent": "SQL Executor", "details": {"model": "deepseek-r1-distill-llama-70b", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
-    {"agent": "Dataframe Inspector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
-    {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Code Debugger", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Error Corrector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Code Ranker", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Solution Summarizer", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Dataframe Inspector", "details": {"model": "gpt-4o-mini", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Planner", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+    {"agent": "Code Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Code Debugger", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Error Corrector", "details": {"model": "gpt-4o-mini", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Code Ranker", "details": {"model": "gpt-4o-mini", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Solution Summarizer", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
     ]
-    os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
+
+    # LLM_CONFIG = [
+    # {"agent": "Expert Selector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Theorist", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "SQL Analyst", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    # {"agent": "SQL Generator", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    # {"agent": "SQL Executor", "details": {"model": "deepseek-r1-distill-llama-70b", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    # {"agent": "Dataframe Inspector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+    # {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Code Debugger", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Error Corrector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Code Ranker", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Solution Summarizer", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # ]
+    
     # os.environ['LLM_CONFIG'] = '''[
     # {"agent": "Expert Selector", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 500, "temperature": 0}},
     # {"agent": "Analyst Selector", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 500, "temperature": 0}},
@@ -318,10 +332,11 @@ def configure_llm_settings():
     # {"agent": "DataMapper", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 2000, "temperature": 0.1}},
 
     # ]
-    # os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
+    
+    os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
 
 # Update the create_insight_instance function in backend.py
-def create_insight_instance(file_id, user_id, report_enabled=False, report_questions=3, diagram_enabled=False):
+def create_insight_instance(file_id, user_id, report_enabled=False, diagram_enabled=False):
     """
     Create an InsightAI instance based on file type (CSV or DB)
     Enhanced to handle Excel sheet selection properly
@@ -388,9 +403,6 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
                     df=df,
                     debug=True,
                     exploratory=True,
-                    generate_report=report_enabled,
-                    report_questions=report_questions,
-                    diagram=diagram_enabled
                 )
                 
                 return insight, None
@@ -440,9 +452,6 @@ def create_insight_instance(file_id, user_id, report_enabled=False, report_quest
                     db_path=db_path,
                     debug=True,
                     exploratory=True,
-                    generate_report=report_enabled,
-                    report_questions=report_questions,
-                    diagram=diagram_enabled
                 )
                 
                 return insight, None
@@ -467,19 +476,9 @@ async def index():
 @app.post("/process_question/{user_id}/{file_id}")
 async def process_question(user_id: str, file_id: str, request_data: QuestionRequest):
     try:
-        # data = request.json
-        # question = data.get('question', '')
-        # generate_report = data.get('generate_report', False)
-        # report_questions = data.get('report_questions', 3)
-        # diagram_enabled = data.get('diagram_enabled', False)  # Get diagram parameter
 
         question = request_data.question
-        generate_report = request_data.generate_report
-        report_questions = request_data.report_questions
-        diagram_enabled = request_data.diagram_enabled
 
-        if not question and not generate_report:
-            return HTTPException(status_code=400, detail='Question or report generation required')
         
         question += "wait firstly read all the columns clearly and then "
         # Set matplotlib backend explicitly
@@ -497,9 +496,7 @@ async def process_question(user_id: str, file_id: str, request_data: QuestionReq
         insight, error = create_insight_instance(
             file_id,
             user_id,
-            report_enabled=generate_report,
-            report_questions=report_questions,
-            diagram_enabled=diagram_enabled
+         
         )
 
         if error:
@@ -508,204 +505,117 @@ async def process_question(user_id: str, file_id: str, request_data: QuestionReq
         if not insight:
             return HTTPException(status_code=500, detail='Failed to create InsightAI instance')
 
-        # Handle report generation and question answering separately
-        if generate_report:
-            # Generate a report - use a separate output buffer
-            report_buffer = io.StringIO()
-            with redirect_stdout(report_buffer):
-                insight.pd_agent_converse()
-
-            # Find all generated visualizations
-            viz_files = []
-            mermaid_files = []  # New array for Mermaid diagrams
-
-            if os.path.exists(viz_dir):
-                # Get only the most recent .png files based on modification time
-                all_files = [
-                    (f, os.path.getmtime(os.path.join(viz_dir, f)))
-                    for f in os.listdir(viz_dir) if f.endswith(('.png', '.mmd'))
-                ]  # Include .mmd files
-
-                # Sort by modification time, newest first
-                all_files.sort(key=lambda x: x[1], reverse=True)
-
-                # Separate PNG and MMD files
-                for f, _ in all_files[:20]:  # Increase limit to capture more files
-                    if f.endswith('.png'):
-                        viz_files.append(f)
-                    elif f.endswith('.mmd'):
-                        mermaid_files.append(f)
-
-            # Check for report file
-            report_file = None
-            report_files = [
-                f for f in os.listdir()
-                if f.startswith('data_analysis_report_') and f.endswith('.md')
+        
+        # Process a single question - use a separate output buffer
+        question_buffer = io.StringIO()
+        with redirect_stdout(question_buffer):
+            insight.pd_agent_converse(question)
+        result = question_buffer.getvalue()
+        viz_files = []
+        mermaid_files = []  # Array for Mermaid diagrams
+        # Check the regular visualization directory first
+        if os.path.exists(viz_dir):
+            # Get files with .png and .mmd extensions
+            current_time = time.time()
+            recent_files = [
+                (f, os.path.getmtime(os.path.join(viz_dir, f)))
+                for f in os.listdir(viz_dir) if f.endswith(('.png', '.mmd'))
             ]
-
-            # Check for cleaned data file (for Data Cleaning agent)
-            cleaned_data_file = None
-            if os.path.exists('cleaned_data.csv'):
-                cleaned_data_file = 'cleaned_data.csv'
-
-            if report_files:
-                # Sort by modification time to get the most recent
-                report_files.sort(
-                    key=lambda f: os.path.getmtime(f),
-                    reverse=True
+            # Filter for recent files
+            one_minute_ago = current_time - 60
+            recent_files = [
+                (f, t) for f, t in recent_files if t > one_minute_ago
+            ]
+            # Sort by modification time, newest first
+            recent_files.sort(key=lambda x: x[1], reverse=True)
+            # Separate PNG and MMD files
+            for f, _ in recent_files[:20]:
+                if f.endswith('.png'):
+                    viz_files.append(f)
+                elif f.endswith('.mmd'):
+                    mermaid_files.append(f)
+        static_viz_dir = os.path.join('static', 'visualization')
+        if os.path.exists(static_viz_dir):
+            # Get only .mmd files from this directory
+            current_time = time.time()
+            static_recent_files = [
+                (f, os.path.getmtime(os.path.join(static_viz_dir, f)))
+                for f in os.listdir(static_viz_dir) if f.endswith('.mmd')
+            ]
+            # Filter for recent files
+            one_minute_ago = current_time - 60
+            static_recent_files = [
+                (f, t) for f, t in static_recent_files if t > one_minute_ago
+            ]
+            # Sort by modification time, newest first
+            static_recent_files.sort(key=lambda x: x[1], reverse=True)
+            # Add .mmd files to mermaid_files list with adjusted paths
+            for f, _ in static_recent_files[:10]:
+                # Check if we already found this file in the other directory
+                if f not in mermaid_files:
+                    mermaid_files.append(f)
+        print("Found visualization files:", viz_files)
+        print("Found mermaid files:", mermaid_files)
+        # Create visualization paths with proper format for frontend
+        visualization_paths = [
+            os.path.join('visualization', f) for f in viz_files
+        ]
+        mermaid_paths = [
+            os.path.join('visualization', f) for f in mermaid_files
+        ]
+        # Check for cleaned data file (for Data Cleaning agent)
+        cleaned_data_file = None
+        if os.path.exists('cleaned_data.csv'):
+            cleaned_data_file = 'cleaned_data.csv'
+        # Create visualization paths
+        # visualization_paths = [
+        #     os.path.join('visualization', f) for f in viz_files
+        # ]
+        # mermaid_paths = [f for f in mermaid_files]
+        try:
+            # determine chain_id
+            chain_id = None
+            if hasattr(insight, 'chain_id'):
+                chain_id = insight.chain_id
+            else:
+                match = re.search(r'chain_id:\s*(\d+)', result)
+                if match:
+                    chain_id = int(match.group(1))
+            if chain_id:
+                conn_hist = sqlite3.connect('user_files.db')
+                c_hist = conn_hist.cursor()
+                # fetch filename
+                c_hist.execute(
+                    "SELECT filename FROM user_files WHERE file_id = ? AND user_id = ?",
+                    (file_id, user_id)
                 )
-                report_file = report_files[0]
-
-                # Copy report to visualization directory for easier access
-                source_path = report_file
-                dest_path = os.path.join(viz_dir, report_file)
-                import shutil
-                shutil.copy2(source_path, dest_path)
-
-            # Create visualization paths with proper format for frontend
-            visualization_paths = [
-                os.path.join('visualization', f) for f in viz_files
-            ]
-            mermaid_paths = [
-                os.path.join('visualization', f) for f in mermaid_files
-            ]
-
-            return {
-                'success': True,
-                'output': "Report generated successfully",
-                'visualizations': visualization_paths,
-                'mermaid_diagrams': mermaid_paths,  # Include Mermaid diagrams
-                'report_file': report_file,
-                'cleaned_data_file': cleaned_data_file,  # Include cleaned data file
-                'is_report': True  # Flag to indicate this is a report response
-            }
-        else:
-            # Process a single question - use a separate output buffer
-            question_buffer = io.StringIO()
-            with redirect_stdout(question_buffer):
-                insight.pd_agent_converse(question)
-
-            result = question_buffer.getvalue()
-
-            viz_files = []
-            mermaid_files = []  # Array for Mermaid diagrams
-
-            # Check the regular visualization directory first
-            if os.path.exists(viz_dir):
-                # Get files with .png and .mmd extensions
-                current_time = time.time()
-                recent_files = [
-                    (f, os.path.getmtime(os.path.join(viz_dir, f)))
-                    for f in os.listdir(viz_dir) if f.endswith(('.png', '.mmd'))
-                ]
-
-                # Filter for recent files
-                one_minute_ago = current_time - 60
-                recent_files = [
-                    (f, t) for f, t in recent_files if t > one_minute_ago
-                ]
-
-                # Sort by modification time, newest first
-                recent_files.sort(key=lambda x: x[1], reverse=True)
-
-                # Separate PNG and MMD files
-                for f, _ in recent_files[:20]:
-                    if f.endswith('.png'):
-                        viz_files.append(f)
-                    elif f.endswith('.mmd'):
-                        mermaid_files.append(f)
-
-            static_viz_dir = os.path.join('static', 'visualization')
-            if os.path.exists(static_viz_dir):
-                # Get only .mmd files from this directory
-                current_time = time.time()
-                static_recent_files = [
-                    (f, os.path.getmtime(os.path.join(static_viz_dir, f)))
-                    for f in os.listdir(static_viz_dir) if f.endswith('.mmd')
-                ]
-
-                # Filter for recent files
-                one_minute_ago = current_time - 60
-                static_recent_files = [
-                    (f, t) for f, t in static_recent_files if t > one_minute_ago
-                ]
-
-                # Sort by modification time, newest first
-                static_recent_files.sort(key=lambda x: x[1], reverse=True)
-
-                # Add .mmd files to mermaid_files list with adjusted paths
-                for f, _ in static_recent_files[:10]:
-                    # Check if we already found this file in the other directory
-                    if f not in mermaid_files:
-                        mermaid_files.append(f)
-
-            print("Found visualization files:", viz_files)
-            print("Found mermaid files:", mermaid_files)
-
-            # Create visualization paths with proper format for frontend
-            visualization_paths = [
-                os.path.join('visualization', f) for f in viz_files
-            ]
-            mermaid_paths = [
-                os.path.join('visualization', f) for f in mermaid_files
-            ]
-            # Check for cleaned data file (for Data Cleaning agent)
-            cleaned_data_file = None
-            if os.path.exists('cleaned_data.csv'):
-                cleaned_data_file = 'cleaned_data.csv'
-
-            # Create visualization paths
-            # visualization_paths = [
-            #     os.path.join('visualization', f) for f in viz_files
-            # ]
-            # mermaid_paths = [f for f in mermaid_files]
-
-            try:
-                # determine chain_id
-                chain_id = None
-                if hasattr(insight, 'chain_id'):
-                    chain_id = insight.chain_id
-                else:
-                    match = re.search(r'chain_id:\s*(\d+)', result)
-                    if match:
-                        chain_id = int(match.group(1))
-                if chain_id:
-                    conn_hist = sqlite3.connect('user_files.db')
-                    c_hist = conn_hist.cursor()
-                    # fetch filename
-                    c_hist.execute(
-                        "SELECT filename FROM user_files WHERE file_id = ? AND user_id = ?",
-                        (file_id, user_id)
-                    )
-                    row = c_hist.fetchone()
-                    filename = row[0] if row else None
-                    c_hist.execute("""
-                        INSERT INTO user_query_history
-                        (user_id, chain_id, query_text, filename, file_id)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (
-                        user_id,
-                        chain_id,
-                        question,
-                        filename,
-                        file_id
-                    ))
-                    conn_hist.commit()
-                    conn_hist.close()
-            except Exception as history_err:
-                logger.error(f"Error saving query to history: {history_err}")
-
-            
-            plt.close('all')
-
-            return {
-                'success': True,
-                'output': result,
-                'visualizations': visualization_paths,
-                'mermaid_diagrams': mermaid_paths,
-                'cleaned_data_file': cleaned_data_file,
-                'is_report': False
-            }
+                row = c_hist.fetchone()
+                filename = row[0] if row else None
+                c_hist.execute("""
+                    INSERT INTO user_query_history
+                    (user_id, chain_id, query_text, filename, file_id)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    user_id,
+                    chain_id,
+                    question,
+                    filename,
+                    file_id
+                ))
+                conn_hist.commit()
+                conn_hist.close()
+        except Exception as history_err:
+            logger.error(f"Error saving query to history: {history_err}")
+        
+        plt.close('all')
+        return {
+            'success': True,
+            'output': result,
+            'visualizations': visualization_paths,
+            'mermaid_diagrams': mermaid_paths,
+            'cleaned_data_file': cleaned_data_file,
+            'is_report': False
+        }
     except Exception as e:
         logger.error(f"Error processing question: {str(e)}")
         logger.error(traceback.format_exc())
@@ -754,57 +664,6 @@ async def get_user_history(user_id: str):
     finally:
         if 'conn' in locals():
             conn.close()
-
-
-# @app.route('/get_history_result/<chain_id>', methods=['GET'])
-# async def get_history_result(chain_id):
-#     """Get the detailed results for a specific chain_id"""
-#     try:
-#         # Read the consolidated log file
-#         with open('insightai_consolidated_log.json', 'r') as f:
-#             log_data = json.load(f)
-        
-#         # Look for the chain_id in the log
-#         if str(chain_id) in log_data:
-#             chain_data = log_data[str(chain_id)]
-#             chain_details = chain_data.get('chain_details', [])
-            
-#             # Process the chain details
-#             sections = []
-#             visualizations = []
-            
-#             for agent_data in chain_details:
-#                 agent_name = agent_data.get('agent', 'Unknown')
-#                 model_name = agent_data.get('model', 'Unknown')
-#                 content = agent_data.get('content', '')
-                
-#                 sections.append({
-#                     'agent': agent_name,
-#                     'model': model_name,
-#                     'content': content,
-#                     'timestamp': agent_data.get('timestamp', '')
-#                 })
-                
-#                 # Look for visualizations in the content
-#                 viz_match = re.findall(r'Visualization saved as \'([^\']+)\'', content)
-#                 visualizations.extend(viz_match)
-            
-#             return {
-#                 'success': True,
-#                 'chain_id': chain_id,
-#                 'sections': sections,
-#                 'visualizations': visualizations,
-#                 'chain_summary': chain_data.get('chain_summary', {})
-#             }
-#         else:
-#             return HTTPException(status_code=404, detail={
-#                 'error': f'Chain ID {chain_id} not found in logs',
-#                 'available_chains': list(log_data.keys())
-#             })
-            
-#     except Exception as e:
-#         logger.error(f"Error retrieving history result: {str(e)}")
-#         return HTTPException(status_code=500, detail=str(e))
 
 @app.get("/get_history_result/{chain_id}")
 async def get_history_result(chain_id: str):
