@@ -25,7 +25,6 @@ except ImportError:
    
 class InsightAI:
     def __init__(self, df: pd.DataFrame = None,
-             db_path: str = None,
              max_conversations: int = 4,
              debug: bool = False, 
              exploratory: bool = True,
@@ -35,11 +34,8 @@ class InsightAI:
         
 
         self.output_manager = output_manager.OutputManager()
-        print("OUTPUT MANAGER",output_manager)
+        
 
-        if db_path:
-            if not self.initialize_database(db_path):
-                raise ValueError(f"Failed to initialize database connection to {db_path}")
         self.df = df if df is not None else None
 
         self.output_plot = None  # Initialize plot output variable
@@ -83,12 +79,6 @@ class InsightAI:
         templates = [
             "default_example_output_df",
             "default_example_output_gen",
-            "default_example_output_sql",
-            "default_example_plan_sql",
-            "sql_generator_system",
-            "sql_generator_user_sql",
-            "code_generator_system_sql", 
-            "code_generator_user_sql",
             "default_example_plan_df",
             "default_example_plan_gen",
             "expert_selector_system",
@@ -116,7 +106,6 @@ class InsightAI:
             "data_cleaning_planner_system",
             "data_quality_analyzer_system",
             "data_mapper_describe_columns_system",
-            "data_mapper_describe_columns_user",
             "data_mapper_match_columns_system",
             "data_mapper_match_columns_user",
         ]
@@ -253,28 +242,7 @@ class InsightAI:
             print(f"❌ Error in datamapper: {e}")
             return None, None
             
-    def initialize_database(self, db_path):
-        """Initialize database connection with proper error handling."""
-        try:
-            import sqlite3
-            self.conn = sqlite3.connect(db_path)
-            self.cur = self.conn.cursor()
-
-            # Test the connection
-            self.cur.execute("SELECT 1")
-            self.cur.fetchone()
-
-            if self.output_manager:
-                self.output_manager.display_system_messages(f"Database connection established: {db_path}")
-            else:
-                print(f"SYSTEM: Database connection established: {db_path}")
-            return True
-        except Exception as e:
-            if self.output_manager:
-                self.output_manager.display_error(f"Failed to initialize database: {str(e)}")
-            else:
-                print(f"ERROR: Failed to initialize database: {str(e)}")
-            return False
+    
 
     def reset_messages_and_logs(self):
         self.pre_eval_messages = [{"role": "system", "content": self.expert_selector_system}]
@@ -313,27 +281,7 @@ class InsightAI:
         expert, requires_dataset, confidence = self._extract_expert(llm_response)
         return expert, requires_dataset, confidence
     
-    def _extract_sql_query(self, response: str) -> str:
-        """Extract and clean SQL queries from the LLM response.
-        
-        Args:
-            response (str): The LLM response containing SQL code blocks
-            
-        Returns:
-            str: Extracted SQL query with comments and whitespace cleaned
-        """
-        # Match any standalone SQL code without markdown tags
-        sql_pattern = re.compile(r'^[^`]+$', re.MULTILINE)
-        query_matches = sql_pattern.findall(response)
-        
-        if query_matches:
-            # Concatenate and clean queries
-            query = " ".join(query_matches)
-            query = re.sub(r'--.*$', '', query, flags=re.MULTILINE)  # Remove comments
-            query = '\n'.join(line for line in query.split('\n') if line.strip())  # Remove empty lines
-            return query.strip()
-        return None
-
+    
     def select_analyst(self, select_analyst_messages):
         agent = 'Analyst Selector'
         llm_response = self.llm_stream(self.log_and_call_manager, select_analyst_messages, agent=agent, chain_id=self.chain_id)
@@ -360,43 +308,13 @@ class InsightAI:
         print(f"Detected file type: {file_type}")
 
         # Modify expert selection for .db files
-        if file_type == '.db':
-            expert = 'SQL Analyst'
-            requires_dataset = True
-            confidence = 9
-        else:
-            self.pre_eval_messages.append({"role": "user", "content": self.expert_selector_user.format(question)})
-            expert, requires_dataset, confidence = self.select_expert(self.pre_eval_messages, file_type)
-            self.pre_eval_messages.append({"role": "assistant", "content": f"expert:{expert},requires_dataset:{requires_dataset},confidence:{confidence}"})
-
-        if expert == 'SQL Analyst':
-            agent = 'SQL Generator'
-            schema = self.get_db_schema()
-            # if schema:
-            #     self.eval_messages.append({"role": "user", "content": f"Database Schema:\n{schema}\n\nQuery: {question}"})
-            if not schema:
-                return None, "Could not retrieve database schema", None, None, True, 0
-            
-            # Prepare messages for SQL generation
-            self.code_messages = [{"role": "system", "content": self.code_generator_system_sql.format(schema=schema)}]
-            self.code_messages.append({
-                "role": "user", 
-                "content": self.code_generator_user_sql.format(
-                    question=question,
-                    schema=schema,
-                    results=self.code_exec_results or "No previous results"
-                )
-            })
-            
-            # Generate SQL query
-            code = self.generate_code('SQL Analyst', question, None, self.code_messages, self.default_example_output_sql)
-            
-            # Execute SQL query
-            answer, results = self.execute_sql(code, None, question)
-            return 'SQL Analyst', answer, None, None, True, 9
         
+        self.pre_eval_messages.append({"role": "user", "content": self.expert_selector_user.format(question)})
+        expert, requires_dataset, confidence = self.select_expert(self.pre_eval_messages, file_type)
+        self.pre_eval_messages.append({"role": "assistant", "content": f"expert:{expert},requires_dataset:{requires_dataset},confidence:{confidence}"})
 
-        elif expert == 'Data Cleaning Expert':
+
+        if expert == 'Data Cleaning Expert':
             agent = 'Data Cleaning Expert'
             # Use our specialized flow for data cleaning
             answer, results, code = self.process_data_cleaning(question, df_columns)
@@ -454,7 +372,7 @@ class InsightAI:
         self.eval_messages.append({"role": "assistant", "content": task_eval})
         self.messages_maintenace(self.eval_messages)
 
-        if expert in ['Research Specialist', 'SQL Analyst']:
+        if expert in ['Research Specialist']:
             self.log_and_call_manager.print_summary_to_terminal()
         elif expert == 'Data Analyst':
             plan = task_eval
@@ -463,95 +381,7 @@ class InsightAI:
     #####################
     ### Main Function ###
     #####################
-    # def datamapper(self, question):
-        """
-        Enhanced datamapper method using instructor for structured JSON output
-        Returns data in the exact JSON schemas specified by the user
-        """
-        if self.df is None:
-            return None, None
-
-        try:
-            # Initialize DataMapper with instructor
-            mapper = DataMapper(self.df.head(1),self)
-
-            column_descriptions = mapper.get_column_descriptions_structured()
-
-            structured_mappings = mapper.get_structured_mappings(question)
-
-            filtered_df = mapper.get_filtered_dataframe(question)
-
-            relevant_columns = [match["matched_column"] for match in structured_mappings["matches"] 
-                              if match["matched_column"] != "Nothing Compatible"]
-            print(f"Relevant columns identified: {relevant_columns}")
-
-            target_fields = [match["target_field"] for match in structured_mappings["matches"]
-                            if match["matched_column"] != "Nothing Compatible"]
-            print(f"Target fields for analysis: {target_fields}")
-
-            # Create comprehensive mapping result
-            mapping_result = {
-                'query': question,
-                'column_descriptions': column_descriptions,
-                'structured_mappings': structured_mappings,
-                'relevant_columns': relevant_columns,
-                'target_fields': target_fields,
-                'simple_format': mapper.get_column_mappings(question, format_type="simple")
-            }
-
-            print(f"\n Column Mappings (Simple): {mapping_result['simple_format']}")
-            self.datamapper_messages.append({"role": "assistant", "content": json.dumps(mapping_result)})
-
-            return mapping_result, filtered_df
         
-        except Exception as e:
-            print(f"❌ Error in datamapper with instructor: {e}")
-            import traceback
-            traceback.print_exc()
-
-            # Fallback: return basic info if datamapper fails
-            print("🔄 Falling back to basic column information...")
-            try:
-                fallback_result = {
-                    'query': question,
-                    'error': str(e),
-                    'fallback_columns': self.df.columns.tolist(),
-                    'dataframe_shape': self.df.shape
-                }
-                self.datamapper_messages.append({"role": "assistant", "content": json.dumps(fallback_result)})
-                return fallback_result, self.df
-            except:
-                self.datamapper_messages.append({"role": "assistant", "content": "Nothing returned"})
-                return None, None
-
-        
-    def enhance_query(self,question):
-            # Use enhanced datamapper with instructor
-            mappings, filtered_df = self.datamapper(question)
-
-            if mappings is None or filtered_df is None:
-                print("❌ DataMapper failed, proceeding without column mapping")
-                enhanced_query = question
-            else:
-                # Use the structured mappings to enhance the query
-                relevant_columns = mappings.get('relevant_columns', [])
-                target_fields = mappings.get('target_fields', [])
-
-                # Create enhanced query with structured information
-                enhanced_query = f"""
-                Query: {question}
-
-                Relevant columns:
-                {relevant_columns}
-                Target Fields:
-                {target_fields}
-                Format:
-                {mappings.get('detailed_format', 'General analysis')}
-                """
-
-            print("ENHANCED QUERY:", enhanced_query)
-            question = enhanced_query
-            return question
     #####################
     ### Conversation Function ###
     #####################
@@ -565,8 +395,8 @@ class InsightAI:
         chain_id = int(time.time())
         self.chain_id = chain_id
         self.reset_messages_and_logs()
-        print("QUESTION", question)
 
+        
         try:
             while True:
                 if loop:
@@ -580,16 +410,10 @@ class InsightAI:
                 file_type = '.db' if hasattr(self, 'conn') else '.csv'
 
                 if self.exploratory:
-                    if file_type == '.db':
-                        schema = self.get_db_schema()
-                        analyst = 'SQL Analyst'
-                        example_code = self.default_example_output_sql
-                        plan = self.taskmaster(question, schema)
-                    else:
-                        analyst, plan, query_unknown, query_condition, requires_dataset, confidence = self.taskmaster(
-                            question, self.df.columns.tolist() if self.df is not None else [], matched_columns
-                        )
-                        example_code = self.default_example_output_df if analyst == 'Data Analyst DF' else self.default_example_output_gen
+                    analyst, plan, query_unknown, query_condition, requires_dataset, confidence = self.taskmaster(
+                        question, self.df.columns.tolist() if self.df is not None else [], matched_columns
+                    )
+                    example_code = self.default_example_output_df if analyst == 'Data Analyst DF' else self.default_example_output_gen
 
                     if not loop and not analyst:
                         self.log_and_call_manager.consolidate_logs()
@@ -597,18 +421,15 @@ class InsightAI:
                     elif not analyst:
                         continue
                 else:
-                    analyst = 'SQL Analyst' if file_type == '.db' else 'Data Analyst DF'
+                    analyst = 'Data Analyst DF'
                     plan = question
-                    example_code = self.default_example_output_sql if file_type == '.db' else self.default_example_output_df
+                    example_code = self.default_example_output_df
 
                 # Generate and execute code
                 code = self.generate_code(analyst, question, plan, self.code_messages, example_code)
 
 
-                if file_type == '.db':
-                    answer, results = self.execute_sql(code, plan, question)
-                else:
-                    answer, results, code = self.execute_code(analyst, code, plan, question, self.code_messages)
+                answer, results, code = self.execute_code(analyst, code, plan, question, self.code_messages)
 
                 # Display results
                 self.output_manager.display_results(
@@ -688,31 +509,7 @@ class InsightAI:
         agent = 'Code Generator'
         using_model, provider = models.get_model_name(agent)
         
-        if analyst == 'SQL Analyst':
-            schema = self.get_db_schema()
-            if hasattr(self, 'code_generator_system_sql'):
-                system_message = self.code_generator_system_sql.format(schema=schema)
-            else:
-                # Fallback to prompt from module if attribute not set
-                system_message = prompts.code_generator_system_sql.format(schema=schema)
-            
-            code_messages[0] = {"role": "system", "content": system_message}
-            
-            # Similarly handle user message
-            if hasattr(self, 'code_generator_user_sql'):
-                user_content = self.code_generator_user_sql
-            else:
-                user_content = prompts.code_generator_user_sql
-                
-            code_messages.append({
-                "role": "user", 
-                "content": user_content.format(
-                    schema=schema,
-                    question=question,
-                    results=self.code_exec_results or "No previous results"
-                )
-            })
-        elif analyst == 'Data Cleaning Expert':
+        if analyst == 'Data Cleaning Expert':
             # Set the system prompt to the specialized cleaning prompt
             if hasattr(self, 'code_generator_system_cleaning'):
                 code_messages[0] = {"role": "system", "content": self.code_generator_system_cleaning}
@@ -799,10 +596,8 @@ class InsightAI:
         code_messages.append({"role": "assistant", "content": llm_response})
         
         # Extract appropriate code from response
-        if analyst == 'SQL Analyst':
-            code = self._extract_sql_query(llm_response)
-        else:
-            code,self.output_plot= self._extract_code(llm_response, analyst, provider, extract_dict=True)
+        
+        code,self.output_plot= self._extract_code(llm_response, analyst, provider, extract_dict=True)
             
                 
             
@@ -864,196 +659,8 @@ class InsightAI:
         summary = self.llm_call(self.log_and_call_manager,insights_messages,agent=agent, chain_id=self.chain_id)
 
         return summary
-    def handle_sql_database(self, db_path):
-        """Initialize SQL connection and extract schema"""
-        import sqlite3
-        self.conn = sqlite3.connect(db_path)
-        self.cur = self.conn.cursor()
-      
-
-    def execute_sql(self, query: str, plan: str, question: str):
-        """Execute SQL queries with improved error handling and result formatting."""
-        try:
-            if not query:
-                return "No valid SQL query provided.", None
-
-            # Ensure we have a valid database connection
-            if not hasattr(self, 'conn') or not hasattr(self, 'cur'):
-                return "Database connection not properly initialized.", None
-
-            # Test the connection
-            try:
-                self.cur.execute("SELECT 1")
-            except Exception as e:
-                return f"Database connection error: {str(e)}", None
-
-            results = []
-            errors = []
-
-            # Clean and prepare the query
-            query = query.strip()
-
-            # Handle single query or multiple queries
-            if ';' in query:
-                # Multiple queries - split carefully
-                queries = []
-                current_query = ""
-                in_quotes = False
-                quote_char = None
-
-                for char in query:
-                    if char in ['"', "'"] and not in_quotes:
-                        in_quotes = True
-                        quote_char = char
-                    elif char == quote_char and in_quotes:
-                        in_quotes = False
-                        quote_char = None
-                    elif char == ';' and not in_quotes:
-                        if current_query.strip():
-                            queries.append(current_query.strip())
-                        current_query = ""
-                        continue
-                    current_query += char
-
-                # Add the last query if it exists
-                if current_query.strip():
-                    queries.append(current_query.strip())
-            else:
-                queries = [query]
-            from builtins import enumerate
-            # queries = [query.strip()]
-            # Execute each query
-            for i, q in enumerate(queries):
-                if not q.strip():
-                    continue
-
-                try:
-                    # Execute the query
-                    self.cur.execute(q)
-
-                    # Get results
-                    result = self.cur.fetchall()
-                    column_names = [desc[0] for desc in self.cur.description] if self.cur.description else []
-
-                    # Format results based on query type
-                    if q.strip().upper().startswith('PRAGMA'):
-                        # Handle PRAGMA queries (schema information)
-                        if result and column_names:
-                            df = pd.DataFrame(result, columns=column_names)
-                            table_name = q.split('(')[-1].split(')')[0] if '(' in q else "table"
-                            results.append(f"\n=== Schema for {table_name} ===\n{df.to_string(index=False)}")
-                        else:
-                            results.append(f"\n=== Schema Query Result ===\nNo schema information found")
-
-                    elif result:
-                        # Handle regular queries with results
-                        if column_names:
-                            df = pd.DataFrame(result, columns=column_names)
-                            results.append(f"\n=== Query {i+1} Results ===\n{df.to_string(index=False)}")
-
-                            # Add summary statistics for numeric columns
-                            numeric_cols = df.select_dtypes(include='number').columns
-                            if len(numeric_cols) > 0:
-                                results.append(f"\n=== Summary Statistics ===\n{df[numeric_cols].describe().to_string()}")
-                        else:
-                            results.append(f"\n=== Query {i+1} Results ===\n{len(result)} rows affected")
-                    else:
-                        # Query executed successfully but no results
-                        if q.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP')):
-                            results.append(f"\n=== Query {i+1} ===\nOperation completed successfully")
-                        else:
-                            results.append(f"\n=== Query {i+1} ===\nQuery executed successfully (no results returned)")
-
-                except Exception as e:
-                    error_msg = f"Error in query {i+1}: {str(e)}\nQuery: {q}"
-                    errors.append(error_msg)
-                    self.output_manager.display_error(error_msg)
-
-            # Combine results and errors
-            final_result = []
-
-            if results:
-                final_result.extend(results)
-
-            if errors:
-                final_result.append("\n=== Errors ===")
-                final_result.extend(errors)
-
-            if not results and not errors:
-                final_result.append("No results or errors to display")
-
-            summary = "\n".join(final_result)
-
-            # Generate a summary answer
-            if results and not errors:
-                answer = f"Query executed successfully. {summary}"
-            elif results and errors:
-                answer = f"Query partially executed with some errors. {summary}"
-            else:
-                answer = f"Query failed to execute. {summary}"
-
-            return answer, query
-
-        except Exception as e:
-            error_msg = f"Critical SQL execution error: {str(e)}"
-            self.output_manager.display_error(error_msg)
-            return error_msg, None
-
-    def get_db_schema(self):
-        """Extract and format database schema."""
-        try:
-            # Get list of tables
-            self.cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = self.cur.fetchall()
-            
-            schema = []
-            for table in tables:
-                table_name = table[0]
-                self.cur.execute(f"PRAGMA table_info({table_name});")
-                columns = self.cur.fetchall()
-                
-                table_schema = [f"Table: {table_name}"]
-                table_schema.extend([f"  - {col[1]} ({col[2]})" for col in columns])
-                schema.append("\n".join(table_schema))
-                
-            return "\n\n".join(schema)
-        except Exception as e:
-            print(f"Error getting schema: {str(e)}")
-            return None
-    def categorize_dataset(self, df_info=None):
-        """Identify the real-world category and domain of the dataset."""
-        import json
-        import re
-        
-        agent = 'Dataset Categorizer'
-        using_model, provider = models.get_model_name(agent)
-        
-        self.output_manager.display_tool_start(agent, using_model)
-        
-        if hasattr(self, 'conn'):  # For SQL databases
-            schema = self.get_db_schema()
-            dataset_info = f"SQL Database Schema:\n{schema}"
-        else:  # For DataFrames
-            dataset_info = df_info if df_info else utils.inspect_dataframe(self.df)
-        
-        messages = [{"role": "system", "content": self.dataset_categorizer_system},
-                    {"role": "user", "content": f"Analyze this dataset and determine its category:\n\n{dataset_info}"}]
-        
-        response = self.llm_call(self.log_and_call_manager, messages, agent=agent, chain_id=self.chain_id)
-        
-        # Extract JSON from response
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if json_match:
-            try:
-                category_info = json.loads(json_match.group())
-                self.dataset_category = category_info
-                return category_info
-            except json.JSONDecodeError:
-                return {"domain": "Unknown", "category": "Unknown", "use_cases": [], "description": "Could not determine dataset category"}
-        
-        return {"domain": "Unknown", "category": "Unknown", "use_cases": [], "description": "Could not determine dataset category"}
-
-     
+    
+   
     def process_data_cleaning(self, question, df_columns):
         """
         Specialized agent flow for data cleaning and ML suggestion tasks

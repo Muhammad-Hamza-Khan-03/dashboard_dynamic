@@ -11,9 +11,6 @@ def load_llm_config():
     {"agent": "Expert Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
     {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
     {"agent": "Theorist", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "SQL Analyst", "details": {"model": "deepseek-r1-distill-llama-70b", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
-    {"agent": "SQL Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
-    {"agent": "SQL Executor", "details": {"model": "deepseek-r1-distill-llama-70b", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
     {"agent": "Dataframe Inspector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
     {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
     {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
@@ -100,11 +97,7 @@ def llm_call(log_and_call_manager, messages: str, agent: str = None, chain_id: s
      completion_tokens_used, total_tokens_used, elapsed_time,
      tokens_per_second) = result
 
-    if agent == 'SQL Generator':
-        # Strip any markdown or explanatory text from SQL
-        content_received = re.sub(r'```sql\s*|\s*```', '', content_received)
-        content_received = re.sub(r'^.*?--', '--', content_received, flags=re.DOTALL)
-
+    
     # Log results
     log_and_call_manager.write_to_log(
         agent, chain_id, timestamp, model, local_llm_messages,

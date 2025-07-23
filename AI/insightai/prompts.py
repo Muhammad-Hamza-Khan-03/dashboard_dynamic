@@ -14,69 +14,6 @@ df_description = df.describe()
 print(df_description)
 ```
 """
-# Add at top level with other prompts
-code_generator_system_sql = """
-You are an expert SQL analyst. Generate clean, executable SQL queries based on the provided schema and question.
-
-IMPORTANT RULES:
-1. Return ONLY the SQL query - no explanations, no markdown formatting
-2. Use proper SQL syntax for SQLite
-3. Use double quotes for table/column names if they contain spaces or special characters
-4. End queries with semicolon only if multiple statements
-5. Use LIMIT clause for large result sets
-6. Handle NULL values appropriately
-7. Use proper aggregation functions (COUNT, SUM, AVG, etc.)
-8. Use JOIN clauses when querying multiple tables
-
-Schema Information:
-{schema}
-
-Generate a SQL query that answers the user's question accurately and efficiently.
-"""
-
-code_generator_user_sql = """
-Question: {question}
-
-Database Schema:
-{schema}
-
-Previous Results (if any):
-{results}
-
-Generate a SQL query to answer this question. Return ONLY the SQL code without any formatting or explanations.
-"""
-
-code_generator_user_sql = """
-Write a SQL query that accomplishes this task:
-{question}
-
-Database Schema:
-{schema}
-
-Requirements:
-- Return ONLY the SQL query
-- No markdown or formatting
-- Must work with provided schema
-- Add comments for clarity
-
-Previous Results:
-{results}
-"""
-
-default_example_output_sql = """
-Example Output:
-
-```sql
--- Get basic statistics about the table
-SELECT 
-    COUNT(*) as total_rows,
-    COUNT(DISTINCT column_name) as unique_values,
-    AVG(numeric_column) as average_value
-FROM table_name
-WHERE condition = 'value'
-GROUP BY category;
-```
-"""
 
 default_example_output_gen = """
 Example Output:
@@ -136,11 +73,10 @@ plan:
 expert_selector_system = """
 You are a classification expert, and your job is to classify the given task, and select the expert best suited to solve the task.
 
-1. Determine whether the solution will require access to a dataset and what type (.csv or .db).
+1. Determine whether the solution will require access to a dataset.
 
 2. Select an expert best suited to solve the task:
-   - A 'SQL Analyst' for database (.db) operations and SQL queries
-   - A 'Data Analyst' for dataframe (.csv) operations with code
+   - A 'Data Analyst' for dataframe (.csv) operations with code requiring querying the dataset.
    - A 'Data Cleaning Expert' for tasks involving data cleaning, preprocessing, handling missing values, outliers, and suggesting ML models
 
 3. State your confidence level (0-10)
@@ -149,16 +85,7 @@ Formulate your response as a JSON string with fields {requires_dataset, expert, 
 
 Example Queries and Outputs:
 
-1. "Show me all users who made purchases in last month"
-```json
-{
-  "requires_dataset": true,
-  "expert": "SQL Analyst",
-  "confidence": 9
-}
-```
-
-2. "Analyze this CSV file for trends"
+1. "Analyze this CSV file for trends"
 ```json
 {
   "requires_dataset": true,
@@ -167,7 +94,7 @@ Example Queries and Outputs:
 }
 ```
 
-3. "Fix missing values in the dataset and suggest which ML model I should use"
+2. "Fix missing values in the dataset and suggest which ML model I should use"
 ```json
 {
   "requires_dataset": true,
@@ -177,60 +104,6 @@ Example Queries and Outputs:
 ```
 """
 
-# Add SQL Analyst selector
-sql_analyst_selector_system = """
-You are a SQL expert. Analyze the database schema and query requirements.
-
-1. Determine the appropriate SQL operations needed:
-   - Basic querying (SELECT, WHERE, etc.)
-   - Aggregations (GROUP BY, HAVING)
-   - Joins
-   - Subqueries
-   - Window functions
-
-2. Format the query requirements as:
-   WHAT IS THE UNKNOWN: <fill in>
-   WHICH TABLES: <fill in>
-   WHAT CONDITIONS: <fill in>
-
-Output as JSON with fields {query_type, tables, conditions}.
-
-Example:
-```json
-{
-  "query_type": "aggregation",
-  "tables": ["orders", "customers"],
-  "conditions": "group by customer_id having count(*) > 5"
-}
-```
-"""
-
-# # Add SQL Generator template
-sql_generator_system = """
-You are a SQL expert. Generate an SQL query based on the provided database schema and requirements.
-
-Schema:
-{schema}
-
-The schema above is complete and cannot be modified. Do not assume the existence of additional fields or tables. If the query cannot be answered using the schema, indicate this explicitly.
-
-Query:
-{question}
-"""
-
-# # Add SQL Executor template
-sql_executor_system = """
-Execute and validate SQL queries safely.
-
-Guidelines:
-- Validate query syntax
-- Check for injection risks
-- Handle null values appropriately
-- Format results clearly
-- Provide error context if needed
-
-Connection 'conn' and cursor 'cur' are already initialized.
-# """
 
 expert_selector_user = """
 The user asked the following question: '{}'.
@@ -246,7 +119,7 @@ You are a classification expert, and your job is to classify the given task.
       Select this expert if user provided a dataframe. The DataFrame 'df' is already defined and populated with necessary data.
 
     - A 'Data Analyst Generic':
-      Select this expert if user did not provide the dataframe.
+      Select this expert if user query is does not relate with dataframe.
 
 2. Rephrase the query, focusing on incorporating previous context and any feedback received from the user.
     - If there is previous context, place the greatest emphasis on the query immediately preceding this one.
@@ -427,11 +300,6 @@ MANDATORY REQUIREMENTS:
 3. DATA-BASED ANALYSIS: Only plan analysis based on columns that actually exist
 4. EXPLICIT CHECKING: Include steps to verify data before analysis
 5. NO INPUTS :Never ask user inputs in the code
-
-Example dataset patterns (do not assume these exist):
-- violations: S.No., Time, Type, Plate#, Vehicle_Type, Speed, Direction, Location, Stage, Status, Evidence
-- ALPR: S.No., Time, Plate#, Category, Vehicle_Type, Make, Model, Color, Speed, Direction, Location
-- freeflow: timestampUnixMs, DateTime, Date, Hour, ALPR, VehicleCategory, Make, Model, Color
 
 ANALYSIS PROCESS:
 1. Verify data types and sample values
@@ -632,7 +500,6 @@ Please make sure that your output contains a FULL, COMPLETE CODE that includes a
 Always include the import statements at the top of the code.
 Always include print statements to output the results of your code.
 Always make the visualizations as png inside the [visualization] folder as well.
-Always save the cleaned dataframe as a cleaned_data.csv file
 """
 
 ml_model_suggester_system = """
@@ -775,15 +642,6 @@ Focus on:
 
 Provide descriptions that would help someone understand what each column is used for.
 """
-data_mapper_describe_columns_user = """
-        Analyze this DataFrame:
-        Column names: {column_names}
-        Data types: {dtypes_info}
-        Sample data (first few rows): {sample_data}
-        DataFrame shape: {shape}
-        
-        Provide a description for each column.
-        """
 
 data_mapper_match_columns_system = """
 You are a dataset matching expert.

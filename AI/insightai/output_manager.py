@@ -64,12 +64,6 @@ class OutputManager:
         color = self.color_tool_header
         if agent == 'Planner':
             msg = 'Drafting a plan to provide a comprehensive answer, please wait...'
-        elif agent == 'SQL Generator':
-            msg = 'Generating SQL query based on requirements, please wait...'
-        elif agent == 'SQL Executor':
-            msg = 'Executing SQL query and formatting results, please wait...'
-        elif agent == 'SQL Analyst':
-            msg = 'Analyzing the SQL query and providing insights, please wait...'
         elif agent == 'Dataframe Inspector':
             msg = 'Inspecting the dataframe schema, please wait...'
         elif agent == 'Theorist':

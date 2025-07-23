@@ -20,31 +20,13 @@ def _extract_code(response: str, analyst: str, provider: str, extract_dict: bool
         if match:
             output_plot_match = match.group(1).strip()
         
-    # Handle SQL analyst differently from other analysts
-    if analyst == 'SQL Analyst':
-        sql_segments = re.findall(r'```sql\s*(.*?)\s*```', response, re.DOTALL)
-        if sql_segments:
-            # Take the last SQL block if multiple exist
-            sql = sql_segments[-1].strip()
-            # Remove SQL comments at start of lines
-            sql = re.sub(r'^\s*--.*$', '', sql, flags=re.MULTILINE)
-            # Remove empty lines
-            sql = '\n'.join(line for line in sql.split('\n') if line.strip())
-            # For SQL analysts, always return consistent format
-            if extract_dict:
-                return sql, output_plot_match
-            return sql
-        # If no SQL found, return consistent format
-        if extract_dict:
-            return None, output_plot_match
-        return None
-
+   
     # Define security blacklist for Python code
     blacklist = [
         'subprocess', 'sys', 'eval', 'exec', 'socket', 'urllib',
         'shutil', 'pickle', 'ctypes', 'multiprocessing', 'tempfile', 
         'glob', 'pty', 'commands', 'cgi', 'cgitb', 
-        'xml.etree.ElementTree', 'builtins'
+        'xml.etree.ElementTree', 'builtins','input'
     ]
     
     # Extract Python code blocks
@@ -83,74 +65,6 @@ def _extract_code(response: str, analyst: str, provider: str, extract_dict: bool
     if extract_dict:
         return code.strip(), output_plot_match
     return code.strip()
-# def _extract_sql_query(response: str) -> str:
-#     """Extract SQL queries from LLM response.
-#     Only extracts content within SQL code blocks and cleans it up.
-#     """
-#     query_matches = re.findall(r'```sql\s*(.*?)\s*```', response, re.DOTALL)
-#     if query_matches:
-#         # Get last SQL block and clean it
-#         query = query_matches[-1]
-#         # Remove comments and extra whitespace
-#         query = re.sub(r'--.*$', '', query, flags=re.MULTILINE)
-#         # Remove empty lines
-#         query = '\n'.join(line for line in query.split('\n') if line.strip())
-#         return query.strip()
-#     return None
-
-def _extract_sql_query(response: str) -> str:
-    """Extract SQL queries from LLM response with improved handling."""
-    # First try to find SQL code blocks
-    sql_blocks = re.findall(r'```sql\s*(.*?)\s*```', response, re.DOTALL | re.IGNORECASE)
-    
-    if sql_blocks:
-        # Get the last SQL block and clean it
-        query = sql_blocks[-1].strip()
-    else:
-        # If no SQL blocks found, try to extract SQL from the entire response
-        # Look for common SQL keywords at the start of lines
-        lines = response.split('\n')
-        sql_lines = []
-        in_sql = False
-        
-        for line in lines:
-            line = line.strip()
-            # Check if line starts with SQL keywords
-            if re.match(r'^\s*(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|ALTER|DROP|PRAGMA)', line, re.IGNORECASE):
-                in_sql = True
-                sql_lines.append(line)
-            elif in_sql:
-                # Continue collecting SQL lines until we hit a non-SQL line
-                if line and not line.startswith('--') and not line.startswith('/*'):
-                    if any(keyword in line.upper() for keyword in ['SELECT', 'FROM', 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'JOIN', 'UNION', 'LIMIT', 'OFFSET', 'AND', 'OR', 'NOT', 'IN', 'LIKE', 'BETWEEN', 'IS', 'NULL', 'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'DISTINCT', 'AS', 'ON', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'OUTER', 'CROSS', 'EXISTS', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'CAST', 'CONVERT', 'SUBSTRING', 'TRIM', 'UPPER', 'LOWER', 'COALESCE', 'ISNULL', 'YEAR', 'MONTH', 'DAY', 'GETDATE', 'NOW', 'CURRENT_TIMESTAMP', 'DATETIME', 'DATE', 'TIME', 'VARCHAR', 'INT', 'INTEGER', 'FLOAT', 'DECIMAL', 'NUMERIC', 'BOOLEAN', 'BOOL', 'TEXT', 'CHAR', 'NVARCHAR', 'BIGINT', 'SMALLINT', 'TINYINT', 'REAL', 'DOUBLE', 'PRECISION', 'MONEY', 'SMALLMONEY', 'BINARY', 'VARBINARY', 'IMAGE', 'TIMESTAMP', 'UNIQUEIDENTIFIER', 'XML', 'JSON', 'ARRAY', 'STRUCT', 'MAP', 'UNION', 'EXCEPT', 'INTERSECT', 'WINDOW', 'OVER', 'PARTITION', 'ROWS', 'RANGE', 'UNBOUNDED', 'PRECEDING', 'FOLLOWING', 'CURRENT', 'ROW', 'RANK', 'DENSE_RANK', 'ROW_NUMBER', 'LEAD', 'LAG', 'FIRST_VALUE', 'LAST_VALUE', 'NTH_VALUE', 'PERCENT_RANK', 'CUME_DIST', 'NTILE', 'PERCENTILE_CONT', 'PERCENTILE_DISC', 'MEDIAN', 'MODE', 'STDDEV', 'VAR_POP', 'VAR_SAMP', 'CORR', 'COVAR_POP', 'COVAR_SAMP', 'REGR_SLOPE', 'REGR_INTERCEPT', 'REGR_R2', 'REGR_COUNT', 'REGR_AVGX', 'REGR_AVGY', 'REGR_SXX', 'REGR_SYY', 'REGR_SXY']) or line.endswith(';') or line.endswith(','):
-                        sql_lines.append(line)
-                    else:
-                        break
-                else:
-                    sql_lines.append(line)
-        
-        if sql_lines:
-            query = '\n'.join(sql_lines)
-        else:
-            # Last resort: clean the entire response
-            query = response.strip()
-    
-    if query:
-        # Clean the query
-        # Remove comments
-        query = re.sub(r'--.*$', '', query, flags=re.MULTILINE)
-        query = re.sub(r'/\*.*?\*/', '', query, flags=re.DOTALL)
-        
-        # Remove extra whitespace and empty lines
-        lines = [line.strip() for line in query.split('\n') if line.strip()]
-        query = '\n'.join(lines)
-        
-        # Remove common prefixes that might be added by the LLM
-        query = re.sub(r'^(Here\'s|Here is|The query is|Query:|SQL:|```sql|```)', '', query, flags=re.IGNORECASE).strip()
-        
-        return query
-    
-    return None
 
 def _extract_rank(response: str) -> str:
     """Extract ranking value from between rank tags."""
@@ -160,7 +74,7 @@ def _extract_rank(response: str) -> str:
 def _extract_expert(response: str) -> str:
     """Extract expert type and metadata from JSON response."""
     # Updated pattern to include SQL Analyst
-    pattern = r'Data Analyst|Research Specialist|SQL Analyst|Data Analyst DF|Data Analyst Generic'
+    pattern = r'Data Analyst|Research Specialist|Data Analyst DF|Data Analyst Generic'
     json_segment = re.findall(r'```(?:json\s*)?(.*?)\s*```', response, re.DOTALL)
 
     if json_segment:
@@ -180,7 +94,7 @@ def _extract_expert(response: str) -> str:
 
 def _extract_analyst(response: str) -> str:
     """Extract analyst type and query details from JSON response."""
-    pattern = r'Data Analyst DF|Data Analyst Generic|SQL Analyst'
+    pattern = r'Data Analyst DF|Data Analyst Generic'
     json_segment = re.findall(r'```(?:json\s*)?(.*?)\s*```', response, re.DOTALL)
 
     if json_segment and json_segment[0].strip():  # Add check for empty string
