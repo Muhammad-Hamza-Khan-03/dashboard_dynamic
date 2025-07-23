@@ -37,158 +37,67 @@ class DataMapper:
     Uses instructor with Groq for structured JSON output.
     """
     
-    def __init__(self, df: pd.DataFrame, insight_ai: 'InsightAI'):
-        """
-        Initialize DataMapper with DataFrame and InsightAI instance for prompt and model access.
-        
-        Args:
-            df: pandas DataFrame to analyze
-            insight_ai: InsightAI instance containing prompt templates and model configurations
-        """
+    def __init__(self, df: pd.DataFrame, insight_ai: 'InsightAI', descriptions: dict):
         self.df = df
         self.insight_ai = insight_ai
         self.client = self._init_instructor_client()
-        self.column_descriptions = None
-        self.messages = [{"role": "system", "content": self.insight_ai.data_mapper_describe_columns_system}]
+        self.column_descriptions = descriptions
+        self.messages = [{"role": "system", "content": self.insight_ai.data_mapper_match_columns_system}]
         
         # Define JSON schemas for reference
         self.description_schema = mapper_description_schema
         self.match_schema = matcher_schema
-        
+
+    
+            
     def _init_instructor_client(self):
-        """Initialize Groq client with instructor patching using models.py configuration."""
+        """Initialize the instructor client based on the provider (Groq or OpenAI)."""
         try:
-            # Get model configuration from models.py
             model, provider, max_tokens, temperature = models.get_agent_details("DataMapper", models.load_llm_config())
             
-            if not provider:
-                raise ValueError(f"Unsupported provider for DataMapper: {provider}")
+            if provider == 'groq':
+                api_key = os.getenv('GROQ_API_KEY')
+                if not api_key:
+                    raise ValueError("GROQ_API_KEY not found in environment variables")
+                groq_client = Groq(api_key=api_key)
+                return instructor.from_groq(groq_client)
             
-            # Initialize Groq client
-            api_key = os.getenv('GROQ_API_KEY')
-            if not api_key:
-                raise ValueError("GROQ_API_KEY not found in environment variables")
+            elif provider == 'openai':
+                api_key = os.getenv('OPENAI_API_KEY')
+                if not api_key:
+                    raise ValueError("OPENAI_API_KEY not found in environment variables")
+                openai_client = OpenAI(api_key=api_key)
+                return instructor.from_openai(openai_client)
+            
+            else:
+                raise ValueError(f"Unsupported provider: {provider}")
                 
-            groq_client = Groq(api_key=api_key)
-            instructor_client = instructor.from_groq(groq_client)
-            
-            print("✅ Instructor client initialized successfully")
-            return instructor_client
-            
         except Exception as e:
             print(f"❌ Error initializing instructor client: {e}")
             return None
     
-    def describe_columns(self) -> Dict[str, Any]:
-        """
-        Analyze DataFrame columns and generate descriptions for each column.
-        Uses instructor to ensure structured output.
-        
-        Returns:
-            Dictionary with column descriptions following the description_schema
-        """
-        if not self.client:
-            print("❌ Instructor client not initialized")
-            return {"descriptions": []}
-            
-        # Get column names and sample data for analysis
-        column_names = self.df.columns.tolist()
-        # first_row_data = self.df.iloc[0].tolist() if len(self.df) > 0 else []
-        
-        # Get data types
-        dtypes_info = {col: str(dtype) for col, dtype in self.df.dtypes.items()}
-        
-        # Sample a few rows for better analysis
-        sample_data = self.df.head(3).to_dict('records') if len(self.df) > 0 else []
-        
-        # Use prompt from InsightAI
-        user_prompt = self.insight_ai.data_mapper_describe_columns_user.format(
-            column_names=column_names,
-            dtypes_info=dtypes_info,
-            sample_data=sample_data,
-            shape=self.df.shape
-        )
-        
-        # Append user message to history
-        self.messages.append({"role": "user", "content": user_prompt})
-        
-        try:
-            # Use instructor to get structured response
-            response = self.client.chat.completions.create(
-                model=models.get_model_name("DataMapper")[0],
-                response_model=ColumnDescriptionsResponse,
-                messages=self.messages,
-                temperature=0.1,
-                max_tokens=2000,
-            )
-            
-            # Convert Pydantic response to dictionary matching schema
-            result_dict = {
-                "descriptions": [
-                    {
-                        "column_name": desc.column_name,
-                        "description": desc.description
-                    }
-                    for desc in response.descriptions
-                ]
-            }
-            
-            print("✅ Column Descriptions Generated with Instructor")
-            self.column_descriptions = result_dict["descriptions"]
-            self.messages.append({"role": "assistant", "content": json.dumps(result_dict)})
-            return result_dict
-            
-        except Exception as e:
-            print(f"❌ Error generating column descriptions with instructor: {e}")
-            self.messages.append({"role": "assistant", "content": f"Error: {str(e)}"})
-            return {"descriptions": []}
-    
-    def match_columns(self, user_query: str, col_descs: List[Dict[str, str]] = None) -> Dict[str, Any]:
-        """
-        Match user query to relevant DataFrame columns.
-        Uses instructor to ensure structured output.
-        
-        Args:
-            user_query: The user's question or query
-            col_descs: List of column descriptions (optional, will generate if not provided)
-            
-        Returns:
-            Dictionary with matched columns following the match_schema
-        """
+  
+    def match_columns(self, filename: str, user_query: str) -> Dict[str, Any]:
+        """Match user query to relevant columns based on the filename."""
         if not self.client:
             print("❌ Instructor client not initialized")
             return {"query": user_query, "matches": []}
-            
-        # Use existing descriptions or generate new ones
-        if col_descs is None:
-            if self.column_descriptions is None:
-                descriptions_result = self.describe_columns()
-                col_descs = descriptions_result.get("descriptions", [])
-            else:
-                col_descs = self.column_descriptions
-                
-        if not col_descs:
-            print("❌ No column descriptions available")
-            self.messages.append({"role": "assistant", "content": "No column descriptions available"})
+        
+        if filename not in self.column_descriptions:
+            print(f"❌ No descriptions found for filename: {filename}")
             return {"query": user_query, "matches": []}
         
-        # Convert column descriptions for the prompt
-        description_text = "\n".join([
-            f"- {d['column_name']}: {d['description']}" 
-            for d in col_descs
-        ])
+        col_descs = self.column_descriptions[filename]
+        description_text = "\n".join([f"- {col}: {desc}" for col, desc in col_descs.items()])
         
-        # Use prompt from InsightAI
         user_prompt = self.insight_ai.data_mapper_match_columns_user.format(
             query=user_query,
             column_descriptions=description_text
         )
         
-        # Append user message to history
         self.messages.append({"role": "user", "content": user_prompt})
         
         try:
-            # Use instructor to get structured response
             response = self.client.chat.completions.create(
                 model=models.get_model_name("DataMapper")[0],
                 response_model=QueryMatches,
@@ -197,7 +106,6 @@ class DataMapper:
                 max_tokens=1500,
             )
             
-            # Convert Pydantic response to dictionary matching schema
             result_dict = {
                 "query": response.query,
                 "matches": [
@@ -217,6 +125,21 @@ class DataMapper:
             print(f"❌ Error generating column matches with instructor: {e}")
             self.messages.append({"role": "assistant", "content": f"Error: {str(e)}"})
             return {"query": user_query, "matches": []}
+
+    def get_matched_columns(self, filename: str, user_query: str) -> Dict[str, str]:
+        """Get matched columns and their descriptions for a given filename and query."""
+        match_result = self.match_columns(filename, user_query)
+        
+        if not match_result or not match_result.get("matches"):
+            return {}
+        
+        matched_columns = {}
+        for match in match_result["matches"]:
+            if match["matched_column"] != "Nothing Compatible":
+                desc = self.column_descriptions[filename].get(match["matched_column"], "No description available")
+                matched_columns[match["matched_column"]] = desc
+        
+        return matched_columns
     
     def get_column_mappings(self, user_query: str, format_type: str = "simple") -> str:
         """
@@ -272,31 +195,19 @@ class DataMapper:
             # Default to simple format
             return ", ".join([m["matched_column"] for m in valid_matches])
     
-    def get_filtered_dataframe(self, user_query: str) -> pd.DataFrame:
-        """
-        Get a DataFrame filtered to only the columns relevant to the user query.
+    def get_filtered_dataframe(self, filename: str, user_query: str) -> pd.DataFrame:
+        """Get a DataFrame filtered to only the columns relevant to the user query."""
+        matched_columns = self.get_matched_columns(filename, user_query)
         
-        Args:
-            user_query: The user's question or query
-            
-        Returns:
-            Filtered DataFrame with only relevant columns
-        """
-        column_list = self.get_column_mappings(user_query, format_type="list")
-        
-        if isinstance(column_list, str):
-            print(f"❌ Could not get column mappings: {column_list}")
-            self.messages.append({"role": "assistant", "content": f"Could not get column mappings: {column_list}"})
+        if not matched_columns:
+            print("❌ No matched columns found")
             return self.df
         
         try:
-            filtered_df = self.df[column_list]
-            self.messages.append({"role": "assistant", "content": f"Filtered DataFrame to columns: {column_list}"})
+            filtered_df = self.df[list(matched_columns.keys())]
             return filtered_df
         except KeyError as e:
             print(f"❌ Error filtering DataFrame: {e}")
-            print("Available columns:", self.df.columns.tolist())
-            self.messages.append({"role": "assistant", "content": f"Error filtering DataFrame: {str(e)}"})
             return self.df
 
     def get_structured_mappings(self, user_query: str) -> Dict[str, Any]:

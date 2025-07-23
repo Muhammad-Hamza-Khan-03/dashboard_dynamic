@@ -15,12 +15,14 @@ warnings.filterwarnings('ignore')
 try:
     # Attempt package-relative import
     from . import models, prompts, func_calls, reg_ex, log_manager, output_manager, utils
+    from .output_manager import OutputManager
     from .DataMapper import DataMapper
 except ImportError:
     # Fall back to script-style import
-    import models, prompts, func_calls, reg_ex, log_manager, output_manager, utils
-    from DataMapper import DataMapper
-
+        import models, prompts, func_calls, reg_ex, log_manager, utils,output_manager
+        from output_manager import OutputManager
+        from DataMapper import DataMapper
+   
 class InsightAI:
     def __init__(self, df: pd.DataFrame = None,
              db_path: str = None,
@@ -28,8 +30,13 @@ class InsightAI:
              debug: bool = False, 
              exploratory: bool = True,
              df_ontology: bool = False,
+             column_descriptions_path: str = 'column_descriptions.json'
              ):  
         
+
+        self.output_manager = output_manager.OutputManager()
+        print("OUTPUT MANAGER",output_manager)
+
         if db_path:
             if not self.initialize_database(db_path):
                 raise ValueError(f"Failed to initialize database connection to {db_path}")
@@ -38,8 +45,6 @@ class InsightAI:
         self.output_plot = None  # Initialize plot output variable
         
         # Output
-        self.output_manager = output_manager.OutputManager()
-        
         self.dataset_category = None
 
 
@@ -67,6 +72,11 @@ class InsightAI:
         # Debug and exploratory modes
         self.debug = debug
         self.exploratory = exploratory
+
+        self.column_descriptions_path = column_descriptions_path
+        self.column_descriptions = self._load_column_descriptions()
+
+        self.inferred_file_key = self._infer_file_key(df) if df is not None else None
         
         # Prompts
         # Define list of templates
@@ -206,6 +216,43 @@ class InsightAI:
     ### Util Functions ###
     ######################
 
+    def _load_column_descriptions(self):
+        """Load column descriptions from the specified JSON file."""
+        try:
+            with open(self.column_descriptions_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"❌ Error loading column descriptions from {self.column_descriptions_path}: {e}")
+            return {}
+
+    def _infer_file_key(self, df: pd.DataFrame):
+        """Infer the file key by matching DataFrame columns with column_descriptions.json."""
+        if not self.column_descriptions or df is None:
+            return None
+        df_columns = set(df.columns)
+        best_match = None
+        max_matching_columns = 0
+        for file_key, desc in self.column_descriptions.items():
+            desc_columns = set(desc.keys())
+            matching_columns = len(df_columns.intersection(desc_columns))
+            if matching_columns > max_matching_columns:
+                max_matching_columns = matching_columns
+                best_match = file_key
+        return best_match if max_matching_columns > 0 else None
+        
+    def datamapper(self, question):
+        """Map user query to DataFrame columns using inferred file key."""
+        if self.df is None:
+            return None, None
+        try:
+            mapper = DataMapper(self.df, self, descriptions=self.column_descriptions)
+            matched_columns = mapper.get_matched_columns(self.inferred_file_key, question)
+            filtered_df = mapper.get_filtered_dataframe(self.inferred_file_key, question) if matched_columns else self.df
+            return matched_columns, filtered_df
+        except Exception as e:
+            print(f"❌ Error in datamapper: {e}")
+            return None, None
+            
     def initialize_database(self, db_path):
         """Initialize database connection with proper error handling."""
         try:
@@ -217,11 +264,16 @@ class InsightAI:
             self.cur.execute("SELECT 1")
             self.cur.fetchone()
 
-            self.output_manager.display_system_messages(f"Database connection established: {db_path}")
+            if self.output_manager:
+                self.output_manager.display_system_messages(f"Database connection established: {db_path}")
+            else:
+                print(f"SYSTEM: Database connection established: {db_path}")
             return True
-
         except Exception as e:
-            self.output_manager.display_error(f"Failed to initialize database: {str(e)}")
+            if self.output_manager:
+                self.output_manager.display_error(f"Failed to initialize database: {str(e)}")
+            else:
+                print(f"ERROR: Failed to initialize database: {str(e)}")
             return False
 
     def reset_messages_and_logs(self):
@@ -250,22 +302,17 @@ class InsightAI:
     ######################
     
     def select_expert(self, pre_eval_messages, file_type):
-        '''Call the Expert Selector'''
         agent = 'Expert Selector'
         using_model, provider = models.get_model_name(agent)
-
         self.output_manager.display_tool_start(agent, using_model)
-
-        # Append file type to last message
         pre_eval_messages[-1]['content'] += f"\nFile type: {file_type}"
-
         llm_response = self.llm_stream(self.log_and_call_manager, 
-                                    pre_eval_messages, 
-                                    agent=agent,
-                                    chain_id=self.chain_id)
-                                    
+                                      pre_eval_messages, 
+                                      agent=agent,
+                                      chain_id=self.chain_id)
         expert, requires_dataset, confidence = self._extract_expert(llm_response)
         return expert, requires_dataset, confidence
+    
     def _extract_sql_query(self, response: str) -> str:
         """Extract and clean SQL queries from the LLM response.
         
@@ -288,33 +335,20 @@ class InsightAI:
         return None
 
     def select_analyst(self, select_analyst_messages):
-        '''Call the Analyst Selector'''
         agent = 'Analyst Selector'
-        # Call OpenAI API to evaluate the task
-        llm_response = self.llm_stream(self.log_and_call_manager,select_analyst_messages, agent=agent, chain_id=self.chain_id)
+        llm_response = self.llm_stream(self.log_and_call_manager, select_analyst_messages, agent=agent, chain_id=self.chain_id)
         analyst, query_unknown, query_condition = self._extract_analyst(llm_response)
-
         return analyst, query_unknown, query_condition
+
     
     def task_eval(self, eval_messages, agent):
-        '''Call the Task Evaluator'''
-        using_model,provider = models.get_model_name(agent)
-
-        self.output_manager.display_tool_start(agent,using_model)
-
-        # Call OpenAI API to evaluate the task
-        llm_response = self.llm_stream(self.log_and_call_manager,eval_messages, agent=agent, chain_id=self.chain_id)
-
+        using_model, provider = models.get_model_name(agent)
+        self.output_manager.display_tool_start(agent, using_model)
+        llm_response = self.llm_stream(self.log_and_call_manager, eval_messages, agent=agent, chain_id=self.chain_id)
         self.output_manager.display_task_eval(llm_response)
-
-        if agent == 'Planner':
-            response = self._extract_plan(llm_response)
-        else:
-            response = llm_response
-            
-        return response
+        return self._extract_plan(llm_response) if agent == 'Planner' else llm_response
     
-    def taskmaster(self, question, df_columns):
+    def taskmaster(self, question, df_columns=None,matched_columns=None):
         plan = None
         analyst = None
         query_unknown = None
@@ -378,16 +412,32 @@ class InsightAI:
                 
             self.select_analyst_messages.append({"role": "assistant", "content": f"analyst:{analyst},unknown:{query_unknown},condition:{query_condition}"})
 
-            if analyst == 'Data Analyst DF' or analyst == 'Data Analyst':  # Added 'Data Analyst'
+            if analyst == 'Data Analyst DF' or analyst == 'Data Analyst':
                 agent = 'Planner'
                 example_plan = self.default_example_plan_df
-                if self.df_ontology:
-                    self.query_metrics = utils.inspect_dataframe(self.df, self.log_and_call_manager, self.chain_id, query_condition)
-                    self.query_metrics = self._extract_plan(self.query_metrics)
-                    dataframe_description = f"{self.df.head(5)}\n\nREQUIRED METRICS AND JOINS:\n```yaml\n{self.query_metrics}\n```"
+                if self.df is not None:
+                        df_info = "Column Name: Type\n"
+                        df_info += self.df.dtypes.to_string() + "\n"
+                        df_info += "\nFirst row:\n"
+                        df_info += self.df.iloc[0].to_string()
+                        if self.df_ontology and self.inferred_file_key in self.column_descriptions:
+                            # Add ontology info if enabled and available
+                            self.query_metrics = utils.inspect_dataframe(self.df, self.log_and_call_manager, self.chain_id, query_condition)
+                            self.query_metrics = self._extract_plan(self.query_metrics)
+                            df_info += f"\n\nREQUIRED METRICS AND JOINS:\n```yaml\n{self.query_metrics}\n```"
                 else:
-                    dataframe_description = utils.inspect_dataframe(self.df)
-                self.eval_messages.append({"role": "user", "content": self.planner_user_df.format(question, None if self.df is None else dataframe_description, example_plan)})
+                    df_info = "No DataFrame provided"
+                    
+                matched_columns_str = "\n".join([f"        - {col}: {desc}" for col, desc in matched_columns.items()]) if matched_columns else "No matched columns"
+                print("MATCHED COLUMNS: ", matched_columns)
+                self.eval_messages.append({
+                    "role": "user",
+                    "content": self.planner_user_df.format(
+                        task=question,
+                        df_info=df_info,
+                        matched_columns=matched_columns_str
+                    )
+                })
                 self.code_messages[0] = {"role": "system", "content": self.code_generator_system_df}
             
             elif analyst == 'Data Analyst Generic':
@@ -413,7 +463,7 @@ class InsightAI:
     #####################
     ### Main Function ###
     #####################
-    def datamapper(self, question):
+    # def datamapper(self, question):
         """
         Enhanced datamapper method using instructor for structured JSON output
         Returns data in the exact JSON schemas specified by the user
@@ -508,7 +558,7 @@ class InsightAI:
     def pd_agent_converse(self, question=None):
         if question is not None:
             loop = False
-            question = self.enhance_query(question=question)
+            matched_columns, _ = self.datamapper(question)
         else:
             loop = True
 
@@ -525,7 +575,7 @@ class InsightAI:
                     if question.strip().lower() == 'exit':
                         self.log_and_call_manager.consolidate_logs()    
                         break
-                    question = self.enhance_query(question)
+                    matched_columns, _ = self.datamapper(question)
                 # Check file type to determine path
                 file_type = '.db' if hasattr(self, 'conn') else '.csv'
 
@@ -537,7 +587,7 @@ class InsightAI:
                         plan = self.taskmaster(question, schema)
                     else:
                         analyst, plan, query_unknown, query_condition, requires_dataset, confidence = self.taskmaster(
-                            question, '' if self.df is None else self.df.columns.tolist()
+                            question, self.df.columns.tolist() if self.df is not None else [], matched_columns
                         )
                         example_code = self.default_example_output_df if analyst == 'Data Analyst DF' else self.default_example_output_gen
 
@@ -601,64 +651,38 @@ class InsightAI:
         self.output_manager.display_tool_end(agent)
 
         return debugged_code
+    
     def execute_code(self, analyst, code, plan, original_question, code_messages):
         agent = 'Code Executor'
         print("Executing code...")
-        # Initialize error correction counter
         error_corrections = 0
-
-        # Create a copy of the original self.df
         if self.df is not None:
             original_df = self.df.copy()
-
-        # Redirect standard output to a StringIO buffer
         with redirect_stdout(io.StringIO()) as output:
-            # Try to execute the code and handle errors
             while error_corrections < self.MAX_ERROR_CORRECTIONS:
                 try:
-                    # Remove the oldest conversation from the messages list
                     self.messages_maintenace(code_messages)
-
-                    # Execute the code
                     if code is not None:
-                        local_vars = {'df': self.df,'output_plot':self.output_plot} # Create a local variable to store the dataframe
-                        exec(code, local_vars) # Execute the code
-                        self.df = local_vars['df'] # Update the dataframe with the local variable
-                        print("HELLO:", self.df.head(4))
-                        # Remove examples from the messages list to minimize the number of tokens used
+                        local_vars = {'df': self.df, 'output_plot': self.output_plot}
+                        exec(code, local_vars)
+                        self.df = local_vars['df']
                         code_messages = self._remove_examples(code_messages)
                     break
                 except Exception as error:
-                    # Capture the full traceback
                     exc_type, exc_value, tb = sys.exc_info()
                     full_traceback = traceback.format_exc()
-                    # Filter the traceback
-                    exec_traceback = self.filter_exec_traceback(full_traceback, exc_type.__name__, str(exc_value)) 
-
-                    # Increment the error corrections counter
+                    exec_traceback = self.filter_exec_traceback(full_traceback, exc_type.__name__, str(exc_value))
                     error_corrections += 1
-
-                    # Reset df to the original state before trying again
                     if self.df is not None:
                         self.df = original_df.copy()
-
                     code, code_messages = self.correct_code_errors(exec_traceback, error_corrections, code_messages, analyst)
-              
-        # Get the output from the executed code
-        results = output.getvalue()
-        
-        # Store the results in a class variable so it can be appended to the subsequent messages list
-        self.code_exec_results = results
-
-        summary = self.summarise_solution(original_question, plan, results)
-
-       
-        # Reset the StringIO buffer
-        output.truncate(0)
-        output.seek(0)
-
+            results = output.getvalue()
+            self.code_exec_results = results
+            summary = self.summarise_solution(original_question, plan, results)
+            output.truncate(0)
+            output.seek(0)
         return summary, results, code
-
+    
     def generate_code(self, analyst, question, plan, code_messages, example_code):
         """Generate code based on analyst type and input parameters."""
         agent = 'Code Generator'
@@ -790,37 +814,24 @@ class InsightAI:
         return code
     
     def filter_exec_traceback(self, full_traceback, exception_type, exception_value):
-        # Split the full traceback into lines and filter those that originate from "<string>"
         filtered_tb_lines = [line for line in full_traceback.split('\n') if '<string>' in line]
-
-        # Combine the filtered lines and append the exception type and message
         filtered_traceback = '\n'.join(filtered_tb_lines)
-        if filtered_traceback:  # Add a newline only if there's a traceback to show
+        if filtered_traceback:
             filtered_traceback += '\n'
         filtered_traceback += f"{exception_type}: {exception_value}"
-
         return filtered_traceback
     
     def correct_code_errors(self, error, error_corrections, code_messages, analyst):
         agent = 'Error Corrector'
-
-        model,provider = models.get_model_name(agent)
-
-        #If error correction is greater than 2 remove the first error correction
+        model, provider = models.get_model_name(agent)
         if error_corrections > 2:
-            del code_messages[-4] 
+            del code_messages[-4]
             del code_messages[-3]
-        
-        # Append the error message to the messages list
         code_messages.append({"role": "user", "content": self.error_corector_system.format(error)})
-
-        # Display the error message
         self.output_manager.display_error(error)
-
-        llm_response = self.llm_call(self.log_and_call_manager,code_messages,agent=agent, chain_id=self.chain_id)
+        llm_response = self.llm_call(self.log_and_call_manager, code_messages, agent=agent, chain_id=self.chain_id)
         code_messages.append({"role": "assistant", "content": llm_response})
-        code = self._extract_code(llm_response,analyst,provider)
-        
+        code = self._extract_code(llm_response, analyst, provider)
         return code, code_messages
 
     def rank_code(self,results, code, question):
@@ -909,7 +920,8 @@ class InsightAI:
                     queries.append(current_query.strip())
             else:
                 queries = [query]
-
+            from builtins import enumerate
+            # queries = [query.strip()]
             # Execute each query
             for i, q in enumerate(queries):
                 if not q.strip():
@@ -940,7 +952,7 @@ class InsightAI:
                             results.append(f"\n=== Query {i+1} Results ===\n{df.to_string(index=False)}")
 
                             # Add summary statistics for numeric columns
-                            numeric_cols = df.select_dtypes(include=[np.number]).columns
+                            numeric_cols = df.select_dtypes(include='number').columns
                             if len(numeric_cols) > 0:
                                 results.append(f"\n=== Summary Statistics ===\n{df[numeric_cols].describe().to_string()}")
                         else:
@@ -1041,42 +1053,7 @@ class InsightAI:
         
         return {"domain": "Unknown", "category": "Unknown", "use_cases": [], "description": "Could not determine dataset category"}
 
-    def generate_questions(self, num_questions=5):
-        """Generate insightful questions based on the dataset category."""
-        import json
-        import re
-        
-        agent = 'Question Generator'
-        using_model, provider = models.get_model_name(agent)
-        
-        self.output_manager.display_tool_start(agent, using_model)
-        
-        if not self.dataset_category:
-            self.dataset_category = self.categorize_dataset()
-        
-        category_info = json.dumps(self.dataset_category, indent=2)
-        
-        # Format the prompt with the requested number of questions
-        prompt = self.question_generator_system.format(num_questions=num_questions)
-        
-        messages = [{"role": "system", "content": prompt},
-                    {"role": "user", "content": f"Generate {num_questions} insightful questions for this dataset:\n\n{category_info}"}]
-        
-        response = self.llm_call(self.log_and_call_manager, messages, agent=agent, chain_id=self.chain_id)
-        
-        # Extract JSON from response
-        json_match = re.search(r'\[.*\]', response, re.DOTALL)
-        if json_match:
-            try:
-                questions = json.loads(json_match.group())
-                return questions
-            except json.JSONDecodeError:
-                return [f"Could not generate questions: {response}"]
-        
-        return [f"Could not generate questions: {response}"]
-   
-        
-# Add to insightai.py class
+     
     def process_data_cleaning(self, question, df_columns):
         """
         Specialized agent flow for data cleaning and ML suggestion tasks
@@ -1215,7 +1192,6 @@ class InsightAI:
         
         return final_summary, execution_output, final_code
     
-# Add to insightai.py class
     def summarise_solution_cleaning(self, original_question, cleaning_plan, execution_output, ml_suggestions):
         """Specialized summarizer for cleaning and ML suggestions"""
         agent = 'Solution Summarizer'
