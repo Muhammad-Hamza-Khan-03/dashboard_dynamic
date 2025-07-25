@@ -1,6 +1,7 @@
 import pandas as pd
 import json
 from groq import Groq
+from openai import OpenAI
 import os
 from typing import List, Dict, Any
 import instructor
@@ -77,19 +78,16 @@ class DataMapper:
             return None
     
   
-    def match_columns(self, filename: str, user_query: str) -> Dict[str, Any]:
-        """Match user query to relevant columns based on the filename."""
+    def match_columns(self, user_query: str) -> Dict[str, Any]:
+        """Match user query to relevant columns using provided descriptions."""
         if not self.client:
             print("❌ Instructor client not initialized")
             return {"query": user_query, "matches": []}
         
-        if filename not in self.column_descriptions:
-            print(f"❌ No descriptions found for filename: {filename}")
-            return {"query": user_query, "matches": []}
+        # Prepare column descriptions as a flat string
+        description_text = "\n".join([f"- {col}: {desc['description']}" for col, desc in self.column_descriptions.items()])
         
-        col_descs = self.column_descriptions[filename]
-        description_text = "\n".join([f"- {col}: {desc}" for col, desc in col_descs.items()])
-        
+        # Ensure the prompt instructs the LLM to match only to provided columns
         user_prompt = self.insight_ai.data_mapper_match_columns_user.format(
             query=user_query,
             column_descriptions=description_text
@@ -109,34 +107,31 @@ class DataMapper:
             result_dict = {
                 "query": response.query,
                 "matches": [
-                    {
-                        "target_field": match.target_field,
-                        "matched_column": match.matched_column
-                    }
+                    {"target_field": match.target_field, "matched_column": match.matched_column}
                     for match in response.matches
+                    if match.matched_column in self.column_descriptions  # Only include valid columns
                 ]
             }
             
             print("✅ Column Matches Generated with Instructor")
             self.messages.append({"role": "assistant", "content": json.dumps(result_dict)})
             return result_dict
-            
         except Exception as e:
-            print(f"❌ Error generating column matches with instructor: {e}")
+            print(f"❌ Error generating column matches: {e}")
             self.messages.append({"role": "assistant", "content": f"Error: {str(e)}"})
             return {"query": user_query, "matches": []}
-
-    def get_matched_columns(self, filename: str, user_query: str) -> Dict[str, str]:
-        """Get matched columns and their descriptions for a given filename and query."""
-        match_result = self.match_columns(filename, user_query)
+        
+    def get_matched_columns(self, user_query: str) -> Dict[str, str]:
+        """Get matched columns and their descriptions."""
+        match_result = self.match_columns(user_query)
         
         if not match_result or not match_result.get("matches"):
             return {}
         
         matched_columns = {}
         for match in match_result["matches"]:
-            if match["matched_column"] != "Nothing Compatible":
-                desc = self.column_descriptions[filename].get(match["matched_column"], "No description available")
+            if match["matched_column"] in self.column_descriptions:
+                desc = self.column_descriptions[match["matched_column"]]["description"]
                 matched_columns[match["matched_column"]] = desc
         
         return matched_columns
@@ -195,9 +190,9 @@ class DataMapper:
             # Default to simple format
             return ", ".join([m["matched_column"] for m in valid_matches])
     
-    def get_filtered_dataframe(self, filename: str, user_query: str) -> pd.DataFrame:
-        """Get a DataFrame filtered to only the columns relevant to the user query."""
-        matched_columns = self.get_matched_columns(filename, user_query)
+    def get_filtered_dataframe(self, user_query: str) -> pd.DataFrame:
+        """Get a DataFrame filtered to relevant columns."""
+        matched_columns = self.get_matched_columns(user_query)
         
         if not matched_columns:
             print("❌ No matched columns found")

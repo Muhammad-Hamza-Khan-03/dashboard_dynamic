@@ -91,8 +91,10 @@ os.makedirs(DB_STORAGE_DIR, exist_ok=True)
 
 # Load environment variables
 load_dotenv()
-os.environ['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY')
-
+if os.getenv('GROQ_API_KEY'):
+    os.environ['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY')
+if os.getenv('OPENAI_API_KEY'):
+    os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
 # Pydantic models for request bodies
 class QuestionRequest(BaseModel):
     question: str = ""
@@ -287,19 +289,32 @@ def configure_llm_settings():
     # {"agent": "Solution Summarizer", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
     # ]
 
+    # LLM_CONFIG = [
+    # {"agent": "Expert Selector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Theorist", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Dataframe Inspector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+    # {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Code Debugger", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Error Corrector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Code Ranker", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Solution Summarizer", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # ]
     LLM_CONFIG = [
-    {"agent": "Expert Selector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Theorist", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Dataframe Inspector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
-    {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Code Debugger", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Error Corrector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Code Ranker", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Solution Summarizer", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Expert Selector", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Analyst Selector", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Theorist", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Dataframe Inspector", "details": {"model": "gpt-4o-mini", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Planner", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+    {"agent": "Code Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Code Debugger", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Error Corrector", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Code Ranker", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Solution Summarizer", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+     {"agent": "DataMapper", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0.1}},
+
     ]
-    
     # os.environ['LLM_CONFIG'] = '''[
     # {"agent": "Expert Selector", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 500, "temperature": 0}},
     # {"agent": "Analyst Selector", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 500, "temperature": 0}},

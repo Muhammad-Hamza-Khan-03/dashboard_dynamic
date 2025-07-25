@@ -70,6 +70,7 @@ class InsightAI:
         self.exploratory = exploratory
 
         self.column_descriptions_path = column_descriptions_path
+        self.column_descriptions = None
         self.column_descriptions = self._load_column_descriptions()
 
         self.inferred_file_key = self._infer_file_key(df) if df is not None else None
@@ -98,7 +99,6 @@ class InsightAI:
             "code_debugger_system",
             "code_ranker_system",
             "solution_summarizer_system",
-            "dataset_categorizer_system",
             "question_generator_system",
             "code_generator_system_cleaning",
             "ml_model_suggester_system",
@@ -207,9 +207,12 @@ class InsightAI:
 
     def _load_column_descriptions(self):
         """Load column descriptions from the specified JSON file."""
+
         try:
-            with open(self.column_descriptions_path, 'r') as f:
-                return json.load(f)
+            if self.column_descriptions is None:
+                with open(self.column_descriptions_path, 'r') as f:
+                    return json.load(f)
+            return self.column_descriptions
         except Exception as e:
             print(f"❌ Error loading column descriptions from {self.column_descriptions_path}: {e}")
             return {}
@@ -235,12 +238,12 @@ class InsightAI:
             return None, None
         try:
             mapper = DataMapper(self.df, self, descriptions=self.column_descriptions)
-            matched_columns = mapper.get_matched_columns(self.inferred_file_key, question)
-            filtered_df = mapper.get_filtered_dataframe(self.inferred_file_key, question) if matched_columns else self.df
-            return matched_columns, filtered_df
+            matched_columns = mapper.get_matched_columns(question)
+            # filtered_df = mapper.get_filtered_dataframe(question) if matched_columns else self.df
+            return matched_columns
         except Exception as e:
             print(f"❌ Error in datamapper: {e}")
-            return None, None
+            return None
             
     
 
@@ -312,7 +315,7 @@ class InsightAI:
         self.pre_eval_messages.append({"role": "user", "content": self.expert_selector_user.format(question)})
         expert, requires_dataset, confidence = self.select_expert(self.pre_eval_messages, file_type)
         self.pre_eval_messages.append({"role": "assistant", "content": f"expert:{expert},requires_dataset:{requires_dataset},confidence:{confidence}"})
-
+        self.result_json['expert_selector'] = {"expert": expert, "requires_dataset": requires_dataset, "confidence": confidence}
 
         if expert == 'Data Cleaning Expert':
             agent = 'Data Cleaning Expert'
@@ -347,7 +350,7 @@ class InsightAI:
                     df_info = "No DataFrame provided"
                     
                 matched_columns_str = "\n".join([f"        - {col}: {desc}" for col, desc in matched_columns.items()]) if matched_columns else "No matched columns"
-                print("MATCHED COLUMNS: ", matched_columns)
+                print("MATCHED COLUMNS: ", matched_columns_str)
                 self.eval_messages.append({
                     "role": "user",
                     "content": self.planner_user_df.format(
@@ -376,6 +379,7 @@ class InsightAI:
             self.log_and_call_manager.print_summary_to_terminal()
         elif expert == 'Data Analyst':
             plan = task_eval
+            self.result_json['planner']['plan'] = plan
 
         return analyst, plan, query_unknown, query_condition, requires_dataset, confidence
     #####################
@@ -388,7 +392,7 @@ class InsightAI:
     def pd_agent_converse(self, question=None):
         if question is not None:
             loop = False
-            matched_columns, _ = self.datamapper(question)
+            matched_columns= self.datamapper(question)
         else:
             loop = True
 
@@ -396,7 +400,15 @@ class InsightAI:
         self.chain_id = chain_id
         self.reset_messages_and_logs()
 
-        
+        self.result_json = {
+            "expert_selector": {},
+            "planner": {"plan": []},
+            "code_generator": {"code": "", "created_new_dataframes": {}, "created_new_lists": {}, "visualization_paths": []},
+            
+            "solution_summarizer": {"summary": ""},
+            "visualizations": {"visualization_paths": []}
+        }
+
         try:
             while True:
                 if loop:
@@ -405,7 +417,7 @@ class InsightAI:
                     if question.strip().lower() == 'exit':
                         self.log_and_call_manager.consolidate_logs()    
                         break
-                    matched_columns, _ = self.datamapper(question)
+                    matched_columns= self.datamapper(question)
                 # Check file type to determine path
                 file_type = '.db' if hasattr(self, 'conn') else '.csv'
 
@@ -428,6 +440,7 @@ class InsightAI:
                 # Generate and execute code
                 code = self.generate_code(analyst, question, plan, self.code_messages, example_code)
 
+                self.result_json['code_generator']['code'] = code
 
                 answer, results, code = self.execute_code(analyst, code, plan, question, self.code_messages)
 
@@ -438,6 +451,8 @@ class InsightAI:
                 )
 
                 self.log_and_call_manager.print_summary_to_terminal()
+
+                print("RESULT: ", json.dumps(self.result_json, indent=3))
 
                 if not loop:
                     self.log_and_call_manager.consolidate_logs()
@@ -484,7 +499,8 @@ class InsightAI:
                 try:
                     self.messages_maintenace(code_messages)
                     if code is not None:
-                        local_vars = {'df': self.df, 'output_plot': self.output_plot}
+                        local_vars = {'df': self.df, 'output_plot': self.output_plot,'pd':pd}
+                    
                         exec(code, local_vars)
                         self.df = local_vars['df']
                         code_messages = self._remove_examples(code_messages)
@@ -500,6 +516,7 @@ class InsightAI:
             results = output.getvalue()
             self.code_exec_results = results
             summary = self.summarise_solution(original_question, plan, results)
+            
             output.truncate(0)
             output.seek(0)
         return summary, results, code
@@ -653,10 +670,49 @@ class InsightAI:
     def summarise_solution(self, original_question, plan, results):
         agent = 'Solution Summarizer'
 
-        # Initialize the messages list with a user message containing the task prompt
-        insights_messages = [{"role": "user", "content": self.solution_summarizer_system.format(original_question, plan, results)}]
-        # Call the OpenAI API
-        summary = self.llm_call(self.log_and_call_manager,insights_messages,agent=agent, chain_id=self.chain_id)
+        # Save code and outputs to result_json
+        if isinstance(self.output_plot, dict):
+            self.result_json['code_generator']['created_new_dataframes'] = self.output_plot.get('created_new_dataframes', {})
+            self.result_json['code_generator']['created_new_lists'] = self.output_plot.get('created_new_lists', {})
+            self.result_json['code_generator']['visualization_paths'] = self.output_plot.get('visualization_paths', [])
+        elif isinstance(self.output_plot, str):
+            # Try to parse string as JSON dict for lists/dataframes/visualizations if possible
+            try:
+                output_plot_dict = json.loads(self.output_plot)
+                self.result_json['code_generator']['code'] = output_plot_dict.get('code', self.output_plot)
+                self.result_json['code_generator']['created_new_dataframes'] = output_plot_dict.get('created_new_dataframes', {})
+                self.result_json['code_generator']['created_new_lists'] = output_plot_dict.get('created_new_lists', {})
+                self.result_json['code_generator']['visualization_paths'] = output_plot_dict.get('visualization_paths', [])
+            except Exception:
+                self.result_json['code_generator']['code'] = self.output_plot
+                self.result_json['code_generator']['created_new_dataframes'] = {}
+                self.result_json['code_generator']['created_new_lists'] = {}
+                self.result_json['code_generator']['visualization_paths'] = []
+        else:
+            self.result_json['code_generator']['code'] = results
+            self.result_json['code_generator']['created_new_dataframes'] = {}
+            self.result_json['code_generator']['created_new_lists'] = {}
+            self.result_json['code_generator']['visualization_paths'] = []
+
+        # self.result_json['code_generator'] = self.output_plot
+
+        output_plot = self.result_json['code_generator']
+        print("Self.output_plot: ", self.output_plot)
+        
+        print("Innner Output Plot: ", output_plot)
+        
+        # samples_str = ""
+        # for name, df_sample in output_plot.get('created_new_dataframes', {}).items():
+        #     samples_str += f"Sample of dataframe '{name}' (first 10 rows):\n{pd.DataFrame(df_sample).to_string()}\n\n"
+        # for name, list_sample in output_plot.get('created_new_lists', {}).items():
+        #     samples_str += f"Sample of list '{name}' (first 10 elements): {list_sample}\n\n"
+        # viz_paths = output_plot.get('visualization_paths', [])
+        # if viz_paths:
+        #     samples_str += "Visualizations generated:\n" + "\n".join([f"- ![Plot]({path})" for path in viz_paths]) + "\n"
+
+        insights_messages = [{"role": "user", "content": self.solution_summarizer_system.format(original_question,results)}]
+        summary = self.llm_call(self.log_and_call_manager, insights_messages, agent=agent, chain_id=self.chain_id)
+        self.result_json['solution_summarizer']['summary'] = summary
 
         return summary
     
