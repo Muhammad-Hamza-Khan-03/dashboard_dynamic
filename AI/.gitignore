@@ -6,3 +6,5 @@ test.py
 *.md
 test.py
 
+test_column_descriptions.py
+*.db-wal

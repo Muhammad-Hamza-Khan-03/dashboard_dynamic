@@ -45,12 +45,12 @@ def get_agent_details(agent, llm_config):
         if item['agent'] == agent:
             details = item.get('details', {})
             return (
-                details.get('model', 'llama-3.1-8b-instant'),  # Default model
+                details.get('model', 'deepseek-r1-distill-llama-70b'),  # Default model
                 details.get('provider', 'groq'),     # Default provider
                 details.get('max_tokens', 200),       # Default max tokens
                 details.get('temperature', 0)          # Default temperature
             )
-    return 'llama-3.1-8b-instant', 'groq', 200, 0
+    return 'deepseek-r1-distill-llama-70b', 'groq', 200, 0
     # Return defaults if agent not found
     # return 'llama-3.1-8b-instant', 'openai', 2000, 0
 

@@ -1,47 +1,30 @@
-default_example_output_df = """
+default_example_output_mongodb = """
 Example Output:
 
 ```python
-import pandas as pd
+from pymongo import MongoClient
+import plotly.express as px
 
-# Identify the dataframe `df`
-# df has already been defined and populated with the required data
+# Note that `collection` is already defined and connected
 
-# Call the `describe()` method on `df`
-df_description = df.describe()
+# Query MongoDB for documents where 'VehicleCategory' is 'Sedan'
+result = list(collection.find({'VehicleCategory': 'Sedan'}))
 
-# Print the output of the `describe()` method
-print(df_description)
+# Print the result
+print('Found vehicles:', result)
+
+# Example visualization
+fig = px.scatter(df, x='DateTime', y='Count', title='Sedan Detections Over Time')
+png_path = os.path.join("visualization", exist_ok=True)
+fig.write_image("visualization/plot1.png")
+output_plot = {
+    'result': {'result': result},
+    'visualization_paths': ['visualization/plot1.png']
+}
 ```
 """
 
-default_example_output_gen = """
-Example Output:
 
-```python
-# Import required libraries
-import yfinance as yf
-import matplotlib.pyplot as plt
-
-# Define the ticker symbol
-tickerSymbol = 'AAPL'
-
-# Get data on this ticker
-tickerData = yf.Ticker(tickerSymbol)
-
-# Get the historical prices for this ticker
-tickerDf = tickerData.history(period='1d', start='2010-1-1', end='2021-1-1')
-
-# Normalize the data
-tickerDf = tickerDf[['Close']]
-tickerDf = tickerDf.reset_index()
-tickerDf = tickerDf.rename(columns={'Date': 'ds', 'Close': 'y'})
-
-# Plot the close prices
-plt.plot(tickerDf.ds, tickerDf.y)
-plt.show()
-```
-"""
 default_example_plan_df = """
 EXAMPLE:
 Reflection on the problem
@@ -52,8 +35,8 @@ plan:
   - "Step 1: Convert the 'datetime(GMT)' ..."
   - "Step 2: Calculate the total..."
   - "Step 3: Calculate the pace..."
-  - ...
 ```
+...
 """
 
 default_example_plan_gen = """
@@ -76,10 +59,15 @@ You are a classification expert, and your job is to classify the given task, and
 1. Determine whether the solution will require access to a dataset.
 
 2. Select an expert best suited to solve the task:
-   - A 'Data Analyst' for dataframe (.csv) operations with code requiring querying the dataset.
+   - A 'Data Analyst' for operations with code requiring querying the dataset.
    - A 'Data Cleaning Expert' for tasks involving data cleaning, preprocessing, handling missing values, outliers,future predictions and ML models.
 
 3. State your confidence level (0-10)
+
+Formulate your response as a JSON string with fields {requires_dataset, expert, confidence}.
+
+Example Queries and Outputs:
+
 
 Formulate your response as a JSON string with fields {requires_dataset, expert, confidence}.
 
@@ -142,7 +130,7 @@ Example Output 1:
 {
   "analyst": "Data Analyst DF",
   "unknown": "Pace and heartrate for each 1-kilometer segment represented visually",
-  "data": "Pandas Dataframe 'df'",
+  "data": "Collection 'collection'",
   "condition": "Divide data into 1-kilometer segments and plot pace on a bar chart with heartrate on the secondary y-axis"
 }
 ```
@@ -155,7 +143,7 @@ Example Output 2:
 {
   "analyst": "Data Analyst DF",
   "unknown": "Pace and heartrate for each 1-kilometer segment represented visually",
-  "data": "Pandas Dataframe 'df'",
+  "data": "Collection 'collection'",
   "condition": "Use speed and datetime recorded in 1-second intervals to calculate distance, divide data into 1-kilometer segments, and plot pace on a bar chart with heartrate on the secondary y-axis"
 }
 ```
@@ -281,35 +269,34 @@ functions:
 # Planner Agent Prompts
 planner_system = """
 You are an AI assistant capable of assisting users with various tasks related to research, coding, and data analysis.Special thing about you is that you always do:
-1. USER REQUEST PRIORITY: If user asks for specific values (like 'civic'), search for those even if data shows different values
-2. DATA-BASED ANALYSIS: Only plan analysis based on columns that actually exist
-3. EXPLICIT CHECKING: Include steps to verify data before analysis
-4. NO INPUTS :Never include inputs from user in the code
+1. DATA-BASED ANALYSIS: Only plan analysis based on columns that actually exist
+2. EXPLICIT CHECKING: Include steps to verify data before analysis
+3. NO INPUTS :Never include inputs from user in the code
 
 Generate the code in such a way that it is always verified.
 Today's Date is: {}
 """
 
-planner_user_df = """
+planner_user_mongodb = """
 TASK: {task}
 
-DATAFRAME: {df_info}
+Collection fields: {df_info}
 
 RELEVANT COLUMNS:
 {matched_columns}
 
 MANDATORY REQUIREMENTS:
-1. NO ASSUMPTIONS: Do not assume any data values or columns exist
-2. USER REQUEST PRIORITY: If user asks for specific values (like 'civic'), search for those even if data shows different values
-3. DATA-BASED ANALYSIS: Only plan analysis based on columns that actually exist
+1. Use only the fields provided in the schema.
+2. Use PyMongo for all data access and queries.
+3. If analysis or visualization is required, use the result of the MongoDB query.
 4. EXPLICIT CHECKING: Include steps to verify data before analysis
-5. NO INPUTS :Never ask user inputs in the code
 
 ANALYSIS PROCESS:
-1. Verify data types and sample values
-2. Plan analysis based on available columns only
+1. Plan the MongoDB query based on the user question and available fields.
 3. Include validation steps for data quality
 4. Handle user requests exactly as specified
+3. Save any visualizations as png.
+4. Print the main result.
 
 Output as YAML:
 ```yaml
@@ -320,6 +307,9 @@ plan:
   - "Step 4: Generate output based on actual findings"
 ```
 """
+
+
+
 
 planner_user_gen = """
 TASK: {}
@@ -339,39 +329,30 @@ plan:
 """
 
 
-# Code Generator Agent Prompts
-code_generator_system_df = """
-You are an AI data analyst and your job is to assist users with analyzing data in the pandas dataframe.
-The user will provide a dataframe named `df`, and the task formulated as a list of steps to be solved using Python.
-The dataframe df has already been defined and populated with the required data!
+code_generator_system_mongodb = """
+You are an AI data analyst and your job is to assist users with analyzing traffic data in the mongodb collection using PyMongo.
+The collection 'collection' has already been defined and populated with the required data!
 
-Please make sure that your output contains a FULL, COMPLETE CODE that includes all steps, and solves the task!
-Think on the plan and Use if and else conditions where required.
-Always include the import statements at the top of the code.
-Always include print statements to output the results of your code.
-If results have any trend or can be shown , Always make the most suitable visualizations as png inside the ['visualization'] folder.
-Never make any other file for anything,just print the results.
-After completing the analysis, create a dictionary called `output_plot` with the following structure with the executed results.
+Instructions:
+1. Please make sure that your output contains a FULL, COMPLETE CODE that includes all steps, and solves the task!
+2. Think on the plan and Use if and else conditions where required.
+3. Always include the import statements at the top of the code.
+4. Do not ask for user input in the code and Never define collection in the code.
+5. **CRITICAL: Only use columns explicitly listed in the 'Fields in collection' section below. Do not assume or invent any other columns, even if they seem logical.**.
+6. Always include print statements to output the results of your code, if the output is long list,print only first 10 rows.
+7. If results have any trend or can be shown , Always make the most suitable visualizations as png inside the ['visualization'] folder.
+8. At the end of the code,ensure the `output_plot` variable contains with the following structure with the executed result.
 ```python
 output_plot = {
-    'created_new_dataframes': { 'df_name': df.head(10).to_dict() for df_name, df in locals().items() if isinstance(df, pd.DataFrame) and df_name != 'df' },
-    'created_new_lists': { 'list_name': lst[:10] for list_name, lst in locals().items() if isinstance(lst, list) },
+    'result': { 'result':result },
     'visualization_paths': [ 'visualization/plot1.png', 'visualization/plot2.png' ]
 }
 ```
-Include this dictionary at the end of your code. Ensure visualizations are saved as PNGs in the 'visualization' folder.
+Ensure visualizations are saved as PNGs in the 'visualization' folder.
 
 """
-code_generator_system_gen = """
-You are an AI data analyst and your job is to assist users with data analysis, or any other tasks related to coding. 
-The user will provide the task formulated as a list of steps to be solved using Python. 
 
-Please make sure that your output contains a FULL, COMPLETE CODE that includes all steps, and solves the task!
-Always include the import statements at the top of the code.
-Always include print statements to output the results of your code with meaningful variables.
-Do not assume columns that are not provided in the dataset.
-"""
-code_generator_user_df = """
+code_generator_user_mongodb = """
 TASK:
 {task}
 
@@ -380,11 +361,8 @@ PLAN:
 {plan}
 ```
 
-DATAFRAME:
+Fields in collection:
 {df_info}
-
-Remember:
-- DateTime column is in this format '2025-02-06T18:23:56' Year-Month-DateTHour:Min:Sec
 
 CODE EXECUTION OF THE PREVIOUS TASK RESULTED IN:
 {results}
@@ -392,6 +370,11 @@ CODE EXECUTION OF THE PREVIOUS TASK RESULTED IN:
 
 {example}
 """
+
+code_generator_system_gen = """
+Your task is to assist the user to get the required result.
+"""
+
 code_generator_user_gen = """
 TASK:
 {}
@@ -411,11 +394,11 @@ CODE EXECUTION OF THE PREVIOUS TASK RESULTED IN:
 # Error Corrector Agent Prompts
 error_corector_system = """
 The execution of the code that you provided in the previous step resulted in an error.
-Return a complete, corrected python code that incorporates the fixes for the error.
+The available columns in the collection are: {df_info}
+Return complete, corrected Python code that incorporates fixes for the error, using ONLY the available columns listed above.
 Always include the import statements at the top of the code, and comments and print statements where necessary.
-Dont assume any dataset or new columns in the data.
 
-The error message is: {}
+The error message is: {error}
 """
 # Code Debugger Prompts
 code_debugger_system = """
@@ -426,7 +409,7 @@ Code:
 Task list:
 {}.
 
-Please follow the below instructions to accomplish your assingment.If provided, the dataframe df has already been defined and populated with the required data.
+Please follow the below instructions to accomplish your assingment mongodb collection 'collection' has already been defined and populated with the required data.
 
 Task Inspection:
 Go through the task list and the given Python code side by side.
@@ -436,7 +419,7 @@ Do not move on to the next task until the current one is completely solved and i
 Code Sectioning and Commenting:
 Based on the task list, divide the Python code into sections. Each task from the list should correspond to a distinct section of code.
 At the beginning of each section, insert a comment or header that clearly identifies the task that section of code addresses. 
-This could look like '# Task 1: Identify the dataframe df' for example.
+This could look like '# Task 1: Query the collection' for example.
 Ensure that the code within each section correctly and efficiently completes the task described in the comment or header for that section.
 
 After necessary modifications, provide the final, updated code, and a brief summary of the changes you made.
@@ -446,30 +429,17 @@ Example Output:
 ```python
 import pandas as pd
 
-# Task 1: Identify the dataframe `df`
-# df has already been defined and populated with the required data
+# Task 1: Query the collection
+#collection has already been defined and populated with the required data no need to define it again
 
-# Task 2: Call the `describe()` method on `df`
-df_description = df.describe()
+# Task 2: Call the `count_documents` method on `collection`
+count_of_doucuments = print(collection.count_documents({}))
 
-# Task 3: Print the output of the `describe()` method
-print(df_description)
+# Task 3: Print the output of the `count_of documents`
+print(count_of_doucuments)
 ```
 """
-# Code Ranker Agent Prompts
-code_ranker_system = """
-As an AI QA Engineer, your role is to evaluate and grade the code: {}, supplied by the AI Data Analyst. You should rank it on a scale of 1 to 10.
 
-In your evaluation, consider factors such as the relevancy and accuracy of the obtained results: {} in relation to the original assignment: {},
-clarity of the code, and the completeness and format of outputs.
-
-For most cases, your ranks should fall within the range of 5 to 7. Only exceptionally well-crafted codes that deliver exactly as per the desired outcome should score higher. 
-
-Please enclose your ranking in <rank></rank> tags.
-
-Example Output:
-<rank>6</rank>
-"""
 # Solution Summarizer Agent Prompts
 solution_summarizer_system = """
 The user presented you with the following question.
@@ -489,12 +459,13 @@ Use markdown formatting for the summary, including:
 """
 
 code_generator_system_cleaning = """
-You are an AI data analyst and your job is to assist users with analyzing data in the pandas dataframe.
-The user will provide a dataframe named `df`, and the task formulated as a list of steps to be solved using Python.
-The dataframe df has already been defined and populated with the required data!
+You are an AI data analyst and your job is to assist users with analyzing data in the collection.
+The user will provide a mongodb collection named `collection`, and the task formulated as a list of steps to be solved using Python.
+The collection 'collection' has already been defined and populated with the required data! 
 
 Please make sure that your output contains a FULL, COMPLETE CODE that includes all steps, and solves the task!
 Always include the import statements at the top of the code.
+Never define collection in the code.
 Always include print statements to output the results of your code.
 Always make the visualizations as png inside the [visualization] folder as well.
 """
@@ -627,17 +598,6 @@ key_issues_summary:
 ```
 
 Don't assume problems not evident in the data. Focus only on issues clearly present in the information provided.
-"""
-
-data_mapper_describe_columns_system = """You are a data analysis expert. When given a pandas DataFrame's column information, 
-carefully analyze each column and provide a comprehensive yet concise description.
-Focus on:
-- What type of data the column contains
-- What the column represents in traffic/domain context
-- Any patterns or characteristics you can infer
-
-
-Provide descriptions that would help someone understand what each column is used for.
 """
 
 data_mapper_match_columns_system = """

@@ -26,7 +26,7 @@ import logging
 import re
 from werkzeug.utils import secure_filename
 from contextlib import redirect_stdout
-
+from pymongo import MongoClient
 
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
@@ -89,12 +89,22 @@ CHUNK_SIZE = 100000
 DB_STORAGE_DIR = os.path.join('static', 'databases')
 os.makedirs(DB_STORAGE_DIR, exist_ok=True)
 
+
+# DB connection:
+mongo_uri = 'mongodb://localhost:27017/'
+client = MongoClient(mongo_uri)
+db = client['myDatabase']
+collection_name = 'ViolationRecords'
+
+collection = db[collection_name] 
+
+
 # Load environment variables
 load_dotenv()
 if os.getenv('GROQ_API_KEY'):
     os.environ['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY')
-if os.getenv('OPENAI_API_KEY'):
-    os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
+# if os.getenv('OPENAI_API_KEY'):
+#     os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
 # Pydantic models for request bodies
 class QuestionRequest(BaseModel):
     question: str = ""
@@ -255,7 +265,7 @@ def configure_llm_settings():
     groq_key = os.getenv('GROQ_API_KEY')
     
     gemini_key = os.getenv('GEMINI_API_KEY')
-    openai_key = os.getenv('OPENAI_API_KEY')
+    # openai_key = os.getenv('OPENAI_API_KEY')
     # if not openai_key or not groq_key:
     #     print("Warning: API keys not found in environment variables")
         # For development only - replace with your keys
@@ -301,20 +311,20 @@ def configure_llm_settings():
     # {"agent": "Code Ranker", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
     # {"agent": "Solution Summarizer", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
     # ]
-    LLM_CONFIG = [
-    {"agent": "Expert Selector", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Analyst Selector", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Theorist", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Dataframe Inspector", "details": {"model": "gpt-4o-mini", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Planner", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
-    {"agent": "Code Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Code Debugger", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Error Corrector", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Code Ranker", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
-    {"agent": "Solution Summarizer", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
-     {"agent": "DataMapper", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0.1}},
+    # LLM_CONFIG = [
+    # {"agent": "Expert Selector", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Analyst Selector", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Theorist", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Dataframe Inspector", "details": {"model": "gpt-4o-mini", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Planner", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0}},
+    # {"agent": "Code Generator", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Code Debugger", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Error Corrector", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Code Ranker", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    # {"agent": "Solution Summarizer", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 4000, "temperature": 0}},
+    #  {"agent": "DataMapper", "details": {"model": "gpt-4o-mini", "provider":"openai","max_tokens": 2000, "temperature": 0.1}},
 
-    ]
+    # ]
     # os.environ['LLM_CONFIG'] = '''[
     # {"agent": "Expert Selector", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 500, "temperature": 0}},
     # {"agent": "Analyst Selector", "details": {"model": "gemini-2.5-flash", "provider":"gemini","max_tokens": 500, "temperature": 0}},
@@ -328,23 +338,23 @@ def configure_llm_settings():
     # ]'''
     # os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
 
-    # LLM_CONFIG = [
-    # {"agent": "Expert Selector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    # {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    # {"agent": "Theorist", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    # {"agent": "SQL Analyst", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
-    # {"agent": "SQL Generator", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
-    # {"agent": "SQL Executor", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
-    # {"agent": "Dataframe Inspector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    # {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
-    # {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    # {"agent": "Code Debugger", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    # {"agent": "Error Corrector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    # {"agent": "Code Ranker", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    # {"agent": "Solution Summarizer", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
-    # {"agent": "DataMapper", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 2000, "temperature": 0.1}},
+    LLM_CONFIG = [
+    {"agent": "Expert Selector", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Analyst Selector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Theorist", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "SQL Analyst", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    {"agent": "SQL Generator", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    {"agent": "SQL Executor", "details": {"model": "llama-3.3-70b-versatile", "provider": "groq", "max_tokens": 2000, "temperature": 0}},
+    {"agent": "Dataframe Inspector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Planner", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 2000, "temperature": 0}},
+    {"agent": "Code Generator", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Code Debugger", "details": {"model": "qwen/qwen3-32b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Error Corrector", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Code Ranker", "details": {"model": "deepseek-r1-distill-llama-70b", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "Solution Summarizer", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 4000, "temperature": 0}},
+    {"agent": "DataMapper", "details": {"model": "llama-3.3-70b-versatile", "provider":"groq","max_tokens": 2000, "temperature": 0.1}},
 
-    # ]
+    ]
     
     os.environ['LLM_CONFIG'] = json.dumps(LLM_CONFIG)
 
@@ -409,14 +419,10 @@ def create_insight_instance(file_id, user_id, report_enabled=False, diagram_enab
             
             # Query all data from the table
             try:
-                df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+                # df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
                 
                 # Create InsightAI instance with DataFrame
-                insight = InsightAI(
-                    df=df,
-                    debug=True,
-                    exploratory=True,
-                )
+                insight = InsightAI(db=db, debug=True, exploratory=False, df_ontology=True, column_descriptions_path='violationRecords_coloumn_descriptions.json', collection_name=collection_name)
                 
                 return insight, None
             except Exception as e:
@@ -461,11 +467,7 @@ def create_insight_instance(file_id, user_id, report_enabled=False, diagram_enab
             
             # Create InsightAI instance with the original db_path
             try:
-                insight = InsightAI(
-                    db_path=db_path,
-                    debug=True,
-                    exploratory=True,
-                )
+                insight = InsightAI(db=db, debug=True, exploratory=False, df_ontology=True, column_descriptions_path='violationRecords_coloumn_descriptions.json', collection_name=collection_name)
                 
                 return insight, None
             except Exception as e:

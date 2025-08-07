@@ -101,3 +101,5 @@ process_pdf
 
 AI/examples
 AI/fine_tune_model
+user_files.db-shm
+user_files.db-wal

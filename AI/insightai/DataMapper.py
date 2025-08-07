@@ -1,11 +1,7 @@
-import pandas as pd
 import json
-from groq import Groq
-from openai import OpenAI
-import os
-from typing import List, Dict, Any
-import instructor
-from pydantic import BaseModel, Field
+import pandas as pd
+import re
+from typing import Dict, Any
 
 try:
     from .func_calls import mapper_description_schema, matcher_schema
@@ -17,125 +13,100 @@ try:
 except ImportError:
     import models
 
-class ColumnDescription(BaseModel):
-    column_name: str = Field(..., description="The name of the column")
-    description: str = Field(..., description="A concise explanation of what the column represents")
-
-class ColumnDescriptionsResponse(BaseModel):
-    descriptions: List[ColumnDescription] = Field(..., description="List of column descriptions")
-
-class Match(BaseModel):
-    target_field: str = Field(..., description="The inferred field user is asking for")
-    matched_column: str = Field(..., description="Best matching column from the actual dataset")
-
-class QueryMatches(BaseModel):
-    query: str = Field(..., description="The original user query")
-    matches: List[Match] = Field(..., description="List of target fields with matched dataset column names")
-
 class DataMapper:
     """
-    A class that analyzes DataFrame columns and maps user queries to relevant columns.
-    Uses instructor with Groq for structured JSON output.
+    A class that analyzes column_descriptions.json and maps user queries to relevant columns using LLM.
     """
-    
-    def __init__(self, df: pd.DataFrame, insight_ai: 'InsightAI', descriptions: dict):
-        self.df = df
+    def __init__(self, insight_ai, descriptions: dict):
         self.insight_ai = insight_ai
-        self.client = self._init_instructor_client()
         self.column_descriptions = descriptions
         self.messages = [{"role": "system", "content": self.insight_ai.data_mapper_match_columns_system}]
-        
-        # Define JSON schemas for reference
-        self.description_schema = mapper_description_schema
-        self.match_schema = matcher_schema
 
-    
-            
-    def _init_instructor_client(self):
-        """Initialize the instructor client based on the provider (Groq or OpenAI)."""
-        try:
-            model, provider, max_tokens, temperature = models.get_agent_details("DataMapper", models.load_llm_config())
-            
-            if provider == 'groq':
-                api_key = os.getenv('GROQ_API_KEY')
-                if not api_key:
-                    raise ValueError("GROQ_API_KEY not found in environment variables")
-                groq_client = Groq(api_key=api_key)
-                return instructor.from_groq(groq_client)
-            
-            elif provider == 'openai':
-                api_key = os.getenv('OPENAI_API_KEY')
-                if not api_key:
-                    raise ValueError("OPENAI_API_KEY not found in environment variables")
-                openai_client = OpenAI(api_key=api_key)
-                return instructor.from_openai(openai_client)
-            
-            else:
-                raise ValueError(f"Unsupported provider: {provider}")
-                
-        except Exception as e:
-            print(f"❌ Error initializing instructor client: {e}")
-            return None
-    
-  
-    def match_columns(self, user_query: str) -> Dict[str, Any]:
-        """Match user query to relevant columns using provided descriptions."""
-        if not self.client:
-            print("❌ Instructor client not initialized")
-            return {"query": user_query, "matches": []}
-        
+    def match_columns(self, user_query: str):
+        """Match user query to relevant columns using provided descriptions and LLM."""
         # Prepare column descriptions as a flat string
-        description_text = "\n".join([f"- {col}: {desc['description']}" for col, desc in self.column_descriptions.items()])
-        
-        # Ensure the prompt instructs the LLM to match only to provided columns
+        description_text = "\n".join([
+            f"- {col}: {desc['description']} (Sample: {desc.get('sample_values', [''])[0]})"
+            for col, desc in self.column_descriptions.items()
+        ])
         user_prompt = self.insight_ai.data_mapper_match_columns_user.format(
             query=user_query,
             column_descriptions=description_text
         )
-        
         self.messages.append({"role": "user", "content": user_prompt})
-        
         try:
-            response = self.client.chat.completions.create(
-                model=models.get_model_name("DataMapper")[0],
-                response_model=QueryMatches,
-                messages=self.messages,
-                temperature=0.0,
-                max_tokens=1500,
+            llm_response = self.insight_ai.llm_call(
+                self.insight_ai.log_and_call_manager,
+                self.messages,
+                agent="DataMapper",
+                chain_id=self.insight_ai.chain_id
             )
-            
-            result_dict = {
-                "query": response.query,
-                "matches": [
-                    {"target_field": match.target_field, "matched_column": match.matched_column}
-                    for match in response.matches
-                    if match.matched_column in self.column_descriptions  # Only include valid columns
-                ]
-            }
-            
-            print("✅ Column Matches Generated with Instructor")
-            self.messages.append({"role": "assistant", "content": json.dumps(result_dict)})
-            return result_dict
+            print("LLM RESPONSE: ", llm_response)
+            # Extract JSON block from LLM response
+            try:
+                if isinstance(llm_response, str):
+                    # Use regex to find JSON block between ```json and ```
+                    json_match = re.search(r'```json\n([\s\S]*?)\n```', llm_response)
+                    if json_match:
+                        json_str = json_match.group(1)
+                        response_json = json.loads(json_str)
+                    else:
+                        print("❌ No JSON block found in LLM response")
+                        return {}
+                else:
+                    response_json = llm_response 
+            except json.JSONDecodeError as e:
+                print(f"❌ JSON parsing error: {e}")
+                return {}
+            except Exception as e:
+                print(f"❌ Error processing LLM response: {e}")
+                return {}
+
+            # Validate response against matcher_schema if available
+            if 'matcher_schema' in globals():
+                try:
+                    matches = response_json.get("matches", [])
+                    if not isinstance(matches, list):
+                        print("❌ LLM response 'matches' is not a list")
+                        return {}
+                    for match in matches:
+                        if not all(key in match for key in ["target_field", "matched_column"]):
+                            print(f"❌ Invalid match structure: {match}")
+                            return {}
+                except Exception as e:
+                    print(f"❌ Schema validation error: {e}")
+                    return {}
+            else:
+                matches = response_json.get("matches", [])
+
+            result = {}
+            # Normalize column names for case-insensitive matching
+            normalized_columns = {col.lower(): col for col in self.column_descriptions}
+            for match in matches:
+                col = match.get("matched_column")
+                if not col:
+                    print(f"❌ Missing matched_column in match: {match}")
+                    continue
+                # Normalize the column name from LLM response
+                col_normalized = col.strip().lower()
+                if col_normalized in normalized_columns:
+                    actual_col = normalized_columns[col_normalized]
+                    result[actual_col] = {
+                        "description": self.column_descriptions[actual_col]["description"],
+                        "sample_values": self.column_descriptions[actual_col].get("sample_values", [])
+                    }
+                else:
+                    print(f"❌ Column {col} not found in column_descriptions")
+            print("MATCHED COLUMNS: ", result)
+            return result
         except Exception as e:
             print(f"❌ Error generating column matches: {e}")
-            self.messages.append({"role": "assistant", "content": f"Error: {str(e)}"})
-            return {"query": user_query, "matches": []}
-        
-    def get_matched_columns(self, user_query: str) -> Dict[str, str]:
-        """Get matched columns and their descriptions."""
-        match_result = self.match_columns(user_query)
-        
-        if not match_result or not match_result.get("matches"):
             return {}
-        
-        matched_columns = {}
-        for match in match_result["matches"]:
-            if match["matched_column"] in self.column_descriptions:
-                desc = self.column_descriptions[match["matched_column"]]["description"]
-                matched_columns[match["matched_column"]] = desc
-        
-        return matched_columns
-    
+
+    def get_matched_columns(self, user_query: str):
+        """Get matched columns and their descriptions and sample values."""
+        return self.match_columns(user_query)
+
     def get_column_mappings(self, user_query: str, format_type: str = "simple") -> str:
         """
         Main method to get column mappings for a user query.
@@ -152,35 +123,33 @@ class DataMapper:
             self.describe_columns()
         
         # Match query to columns
-        match_result = self.match_columns(user_query, self.column_descriptions)
+        match_result = self.match_columns(user_query)
         
-        if not match_result or not match_result.get("matches"):
-            self.messages.append({"role": "assistant", "content": "No column mappings found"})
+        if not match_result:
             return "No column mappings found"
         
         # Filter out non-compatible matches
-        valid_matches = [m for m in match_result["matches"] if m["matched_column"] != "Nothing Compatible"]
+        valid_matches = [m for m in match_result.keys()]
         
         if not valid_matches:
-            self.messages.append({"role": "assistant", "content": "No compatible columns found for the query"})
             return "No compatible columns found for the query"
         
         # Format mappings based on requested format
         if format_type == "simple":
             # Just column names separated by commas
-            return ", ".join([m["matched_column"] for m in valid_matches])
+            return ", ".join(valid_matches)
         
         elif format_type == "detailed":
             # Column names with their target fields
             mappings = []
-            for match in valid_matches:
-                desc = next((d["description"] for d in self.column_descriptions if d["column_name"] == match["matched_column"]), "")
-                mappings.append(f"{match['matched_column']} ({match['target_field']})")
+            for col in valid_matches:
+                desc = match_result[col]["description"]
+                mappings.append(f"{col} (Sample: {match_result[col].get('sample_values', [''])[0]})")
             return ", ".join(mappings)
         
         elif format_type == "list":
             # Return as list of column names
-            return [m["matched_column"] for m in valid_matches]
+            return valid_matches
         
         elif format_type == "structured":
             # Return the full structured result
@@ -188,7 +157,7 @@ class DataMapper:
         
         else:
             # Default to simple format
-            return ", ".join([m["matched_column"] for m in valid_matches])
+            return ", ".join(valid_matches)
     
     def get_filtered_dataframe(self, user_query: str) -> pd.DataFrame:
         """Get a DataFrame filtered to relevant columns."""
@@ -206,16 +175,16 @@ class DataMapper:
             return self.df
 
     def get_structured_mappings(self, user_query: str) -> Dict[str, Any]:
-            """
-            Get structured column mappings with full metadata.
+        """
+        Get structured column mappings with full metadata.
 
-            Args:
-                user_query: The user's question or query
+        Args:
+            user_query: The user's question or query
 
-            Returns:
-                Dictionary containing structured mapping results
-            """
-            return self.get_column_mappings(user_query, format_type="structured")
+        Returns:
+            Dictionary containing structured mapping results
+        """
+        return self.get_column_mappings(user_query, format_type="structured")
     
     def get_column_descriptions_structured(self) -> Dict[str, Any]:
         """
