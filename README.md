@@ -32,3 +32,11 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+## Security maintenance
+
+This repository uses dependency updates to keep the app safe and current.
+
+- Python dependencies are maintained in `requirements.txt`
+- Security advisories should be reviewed and patched with minimal, targeted dependency updates
+- `pdfminer.six` is pinned to a patched safe version after the Dependabot advisory was addressed
