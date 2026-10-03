@@ -1,42 +1,88 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Dashboard Dynamic — Data Analysis & Dashboard Workspace
 
-## Getting Started
+An exploratory application combining a **Next.js / React** interface with a **Flask** data backend. It connects dataset tools, a configurable dashboard canvas, and AI-assisted analysis.
 
-First, run the development server:
+[Case study](https://hamza-khan-portfolio.hamzakhan102003.chatgpt.site/projects/dashboard-dynamic/) · [Author portfolio](https://hamza-khan-portfolio.hamzakhan102003.chatgpt.site/) · [LinkedIn](https://www.linkedin.com/in/muhammadhamzakhan/)
+
+## What the code contains
+
+- Dataset upload and management, with column and row editing routes.
+- Statistics tools and background task handling.
+- A draggable dashboard canvas with chart, table, text, and statistic-card nodes.
+- Dashboard save and retrieval routes.
+- AI-assisted question processing through InsightAI and model providers.
+- Report and visualisation generation paths.
+
+These describe the repository implementation. No live deployment, usability benchmark, or response-time result is asserted.
+
+## Architecture
+
+| Layer | Implementation |
+|---|---|
+| User interface | Next.js, React, TypeScript, Tailwind, and component libraries |
+| Dashboard composition | React Flow / XYFlow, chart nodes, table nodes, and layout controls |
+| Visualisation | Recharts and other charting dependencies |
+| Data processing | Flask, Pandas/NumPy-related processing, statistics utilities |
+| AI integration | InsightAI, OpenAI/Groq configuration, and question-processing routes |
+| Persistence | SQLite-backed datasets, analysis history, and dashboard storage in the backend |
+
+Prisma appears among the frontend development dependencies; it is not used here as evidence that the application's backend storage is Prisma-based.
+
+## Start reading
+
+| Path | Purpose |
+|---|---|
+| `src/app/(dashboard)/upload/` | Dataset upload, editing, and analysis tools |
+| `src/app/(dashboard)/DataWorkspace/` | Data analysis workspace components |
+| `src/app/(dashboard)/board/` | Dashboard nodes, layout, theme, storage, and export interfaces |
+| `src/app/api/ai/dashboard/` | AI dashboard route |
+| `backend.py` | Flask routes and application startup |
+| `flask_utils/` | Upload, statistics, document, and worker utilities |
+| `pdf_layout.py` | Report layout helpers |
+
+## Local development
 
 ```bash
+git clone https://github.com/Muhammad-Hamza-Khan-03/dashboard_dynamic.git
+cd dashboard_dynamic
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The frontend development server runs at http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+For the Python backend, create a separate environment:
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python backend.py
+```
 
-## Learn More
+The backend's main entrypoint uses port 5000. Review frontend API URLs so that requests reach the local backend.
 
-To learn more about Next.js, take a look at the following resources:
+Clerk authentication and AI provider integrations require your own development configuration. The backend reads `OPENAI_API_KEY` and `GROQ_API_KEY`. Keep real keys out of Git, screenshots, and frontend-delivered code.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Document processing may also require external tools such as wkhtmltopdf and NLP resources; the startup routine checks or initialises those dependencies.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+## Validation and project status
 
-## Deploy on Vercel
+```bash
+npm run lint
+npm run build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+These are available project commands, not a claim that this snapshot has just passed them. The codebase is an exploration with multiple integrations; verify dependencies, authentication, and each workflow before deployment.
+
+This repository demonstrates how data processing, AI analysis, and interactive dashboard composition can be connected. Current runtime support and deployment status should be validated separately.
 
 ## Security maintenance
 
-This repository uses dependency updates to keep the app safe and current.
+- Python dependencies are listed in `requirements.txt`.
+- Review advisories and apply targeted dependency updates.
+- The repository's existing maintenance notes identify `pdfminer.six` as updated following an advisory.
 
-- Python dependencies are maintained in `requirements.txt`
-- Security advisories should be reviewed and patched with minimal, targeted dependency updates
-- `pdfminer.six` is pinned to a patched safe version after the Dependabot advisory was addressed
+## Contact
+
+[Portfolio](https://hamza-khan-portfolio.hamzakhan102003.chatgpt.site/) · [LinkedIn](https://www.linkedin.com/in/muhammadhamzakhan/) · [Email](mailto:hamzakhan102003@gmail.com)
